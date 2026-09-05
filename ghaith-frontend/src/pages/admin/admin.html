@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>الرئيسية — غيث</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../../assets/css/base/variables.css" />
+  <link rel="stylesheet" href="../../../assets/css/base/reset.css" />
+  <link rel="stylesheet" href="../../../assets/css/base/typography.css" />
+  <link rel="stylesheet" href="../../../assets/css/components/cards.css" />
+  <link rel="stylesheet" href="../../../assets/css/components/forms.css" />
+  <link rel="stylesheet" href="../../../assets/css/components/table.css" />
+  <link rel="stylesheet" href="../../../assets/css/components/modal.css" />
+  <link rel="stylesheet" href="../../../assets/css/components/theme-toggle.css" />
+  <link rel="stylesheet" href="../../../assets/css/layout/shell.css" />
+  <link rel="stylesheet" href="../../../assets/css/layout/responsive.css" />
+  <link rel="stylesheet" href="admin.css" />
+  <link rel="stylesheet" href="../../components/printing/printing.css" />
+  <link rel="stylesheet" id="adminRouteStyle" />
+</head>
+<body>
+  <div class="app-shell admin-shell">
+    <aside class="sidebar admin-sidebar" id="adminSidebar" aria-label="القائمة الرئيسية">
+      <a class="sidebar__logo admin-sidebar__logo" href="#dashboard" aria-label="غيث - الرئيسية">غيث</a>
+      <nav class="sidebar__nav" id="adminNav">
+        <a class="nav-link" href="#dashboard" data-route="dashboard">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg><span>الرئيسية</span>
+        </a>
+        <a class="nav-link" href="#sales" data-route="sales"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 19h16M5 17h14l-1.5-9h-11L5 17Z"/><path d="M8 8V5h8v3M8 12h8"/></svg><span>المبيعات</span></a>
+        <a class="nav-link" href="#products" data-route="products"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16l-1 14H5L4 7Z"/><path d="M8 7V4h8v3"/></svg><span>المنتجات</span></a>
+        <a class="nav-link" href="#categories" data-route="categories"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16l-1 14H5L4 7Z"/><path d="M9 11h6"/></svg><span>التصنيفات</span></a>
+        <a class="nav-link" href="#inventory" data-route="inventory"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 3h12v18H6z"/><path d="m9 12 2 2 4-4M9 3v3h6V3"/></svg><span>المخزون</span></a>
+        <a class="nav-link" href="#suppliers" data-route="suppliers"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M3 4h2l2.5 10h10l2-7H7"/></svg><span>الموردين</span></a>
+        <a class="nav-link" href="#users" data-route="users"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>المستخدمين</span></a>
+        <a class="nav-link" href="#expenses" data-route="expenses"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M7 9h.01M17 15h.01"/></svg><span>المصروفات</span></a>
+        <a class="nav-link" href="#discounts" data-route="discounts"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="m9 15 6-6M9.5 9h.01M14.5 15h.01"/></svg><span>الخصومات</span></a>
+        <a class="nav-link" href="#reports" data-route="reports"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7"/></svg><span>التقارير</span></a>
+        <a class="nav-link" href="#zakat" data-route="zakat"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20V10h4v10M10 20V4h4v16M16 20v-7h4v7"/></svg><span>الزكاة</span></a>
+      </nav>
+      <footer class="sidebar__footer admin-sidebar__footer">
+        <div class="user-chip admin-user-chip"><span class="user-chip__avatar admin-user-chip__avatar">ع</span><span>عبد الرحمن أحمد</span></div>
+        <button class="logout-link" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></svg><span>تسجيل الخروج</span></button>
+      </footer>
+    </aside>
+
+    <div class="sidebar-overlay" id="adminSidebarOverlay"></div>
+    <main class="content admin-content">
+      <div class="admin-mobile-bar">
+        <button class="sidebar-toggle" id="adminSidebarToggle" type="button" aria-label="فتح القائمة" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <span>غيث</span>
+      </div>
+      <section id="view-root" aria-live="polite">
+        <div class="view-loading"><span class="spinner"></span><span>جاري تحميل الصفحة...</span></div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+<title>المصروفات — غيث</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="../../../../assets/css/base/variables.css" />
+<link rel="stylesheet" href="../../../../assets/css/base/reset.css" />
+<link rel="stylesheet" href="../../../../assets/css/base/typography.css" />
+<link rel="stylesheet" href="../../../../assets/css/components/forms.css" />
+<link rel="stylesheet" href="../../../../assets/css/components/table.css" />
+<link rel="stylesheet" href="../../../../assets/css/components/modal.css" />
+<link rel="stylesheet" href="../../../../assets/css/components/theme-toggle.css" />
+<link rel="stylesheet" href="../../../../assets/css/layout/topbar.css" />
+<link rel="stylesheet" href="../pos/pos.css" />
+<link rel="stylesheet" href="expenses.css" />
+</head>
+<body>
+
+<div class="pos-shell">
+
+  <!-- ============== Topbar ============== -->
+  <header class="pos-topbar">
+    <div class="pos-topbar__brand">
+      <strong>غيث</strong>
+      <span>نقطة البيع</span>
+    </div>
+
+    <nav class="pos-topbar__nav" id="posNav">
+      <a href="../pos/pos.html" class="nav-pill" data-page="pos"><span>نقطة البيع</span></a>
+      <a href="../invoices/invoices.html" class="nav-pill" data-page="invoices"><span>سجل الفواتير</span></a>
+      <a href="../debts/debts.html" class="nav-pill" data-page="debts"><span>المديونيات</span></a>
+      <a href="../shift-close/shift-close.html" class="nav-pill" data-page="shift-close"><span>إغلاق الوردية</span></a>
+      <a href="expenses.html" class="nav-pill is-active" data-page="expenses"><span>المصروفات</span></a>
+    </nav>
+
+    <div class="pos-topbar__actions">
+      <button class="theme-toggle" id="themeToggleBtn" type="button" aria-label="تبديل الثيم">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+
+      <button class="pos-topbar__icon-btn" type="button" aria-label="الإشعارات">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        <span class="dot"></span>
+      </button>
+
+      <button class="pos-topbar__icon-btn" type="button" aria-label="مسح باركود">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      </button>
+
+      <div class="pos-topbar__avatar"><span>AD</span></div>
+
+      <button class="pos-logout" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        <span>Logout</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ============== Body ============== -->
+  <div class="exp-body">
+
+    <!-- Page Header -->
+    <div class="exp-page-header">
+      <div class="exp-page-header__title">
+        <h1>المصروفات</h1>
+        <p>تسجيل ومتابعة المصروفات الخاصة بالوردية الحالية.</p>
+      </div>
+      <button class="exp-new-btn" id="addExpenseBtn" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg>
+        إضافة مصروف
+      </button>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="exp-stats">
+      <!-- إجمالي مصروفات اليوم -->
+      <div class="exp-stat-card">
+        <div class="exp-stat-card__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M7 15h2"/></svg>
+        </div>
+        <div class="exp-stat-card__info">
+          <span class="exp-stat-card__label">إجمالي مصروفات اليوم</span>
+          <span class="exp-stat-card__value" id="statToday">450<small>جنيه</small></span>
+        </div>
+      </div>
+      <!-- عدد المصروفات -->
+      <div class="exp-stat-card">
+        <div class="exp-stat-card__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </div>
+        <div class="exp-stat-card__info">
+          <span class="exp-stat-card__label">عدد المصروفات</span>
+          <span class="exp-stat-card__value" id="statCount">4<small>عمليات</small></span>
+        </div>
+      </div>
+      <!-- مصروفات الوردية الحالية -->
+      <div class="exp-stat-card">
+        <div class="exp-stat-card__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="exp-stat-card__info">
+          <span class="exp-stat-card__label">مصروفات الوردية الحالية</span>
+          <span class="exp-stat-card__value" id="statShift">150<small>جنيه</small></span>
+        </div>
+      </div>
+      <!-- النقدية المتاحة -->
+      <div class="exp-stat-card is-highlight">
+        <div class="exp-stat-card__icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>
+        </div>
+        <div class="exp-stat-card__info">
+          <span class="exp-stat-card__label">النقدية المتاحة</span>
+          <span class="exp-stat-card__value" id="statCash">4,850<small>جنيه</small></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log Section -->
+    <div class="exp-log-section">
+      <!-- Header with search -->
+      <div class="exp-log-header">
+        <h2>سجل المصروفات</h2>
+        <div class="exp-search">
+          <input class="input" type="search" id="expSearchInput" placeholder="بحث في المصروفات..." autocomplete="off" />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-responsive">
+        <table class="exp-table">
+          <thead>
+            <tr>
+              <th>رقم المصروف</th>
+              <th>نوع المصروف</th>
+              <th>الوصف</th>
+              <th>المبلغ</th>
+              <th>التاريخ والوقت</th>
+              <th>الكاشير</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody id="expTableBody">
+            <!-- Dynamic rows -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="exp-pagination">
+        <div class="exp-pagination__info" id="expPaginationInfo">عرض 1 إلى 3 من 3 مدخلات</div>
+        <div class="exp-pagination__pages" id="expPaginationPages"></div>
+      </div>
+    </div>
+
+  </div><!-- end exp-body -->
+</div><!-- end pos-shell -->
+
+<!-- ============== مودال إضافة مصروف ============== -->
+<div class="modal-overlay" id="addExpenseOverlay" style="display:none;">
+  <div class="modal expense-modal">
+    <div class="modal__header">
+      <button class="btn-icon" id="closeAddExpenseBtn" type="button" aria-label="إغلاق">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <div class="modal__title">
+        إضافة مصروف
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/></svg>
+      </div>
+    </div>
+
+    <div class="modal__body">
+      <!-- Row 1: Type + Amount -->
+      <div class="exp-form-row">
+        <div class="exp-form-field">
+          <label>نوع المصروف<span class="required">*</span></label>
+          <select class="input" id="expTypeSelect">
+            <option value="">اختر نوع المصروف...</option>
+            <option value="نظافة">نظافة</option>
+            <option value="ضيافة">ضيافة</option>
+            <option value="صيانة">صيانة</option>
+            <option value="بخور">بخور</option>
+            <option value="مواصلات">مواصلات</option>
+            <option value="أخرى">أخرى</option>
+          </select>
+        </div>
+        <div class="exp-form-field">
+          <label>المبلغ<span class="required">*</span></label>
+          <div class="exp-input-currency">
+            <span class="currency-label">EGP</span>
+            <input type="number" class="input" id="expAmountInput" placeholder="0" min="0" step="0.01" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 2: Description -->
+      <div class="exp-form-field">
+        <label>الوصف<span class="required">*</span></label>
+        <input type="text" class="input" id="expDescInput" placeholder="شراء بخور للمحل" />
+      </div>
+
+      <!-- Row 3: Notes -->
+      <div class="exp-form-field">
+        <label>ملاحظات (اختياري)</label>
+        <textarea class="input" id="expNotesInput" placeholder="أي تفاصيل إضافية..."></textarea>
+      </div>
+
+      <!-- Balance Bar -->
+      <div class="exp-balance-bar">
+        <div class="exp-balance-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg>
+          <span class="balance-label">الرصيد النقدي المتاح</span>
+          <span class="balance-value" id="balanceAvailable">4,850.00 EGP</span>
+        </div>
+        <div class="exp-balance-arrow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </div>
+        <div class="exp-balance-item exp-balance-after">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span class="balance-label">الرصيد بعد المصروف</span>
+          <span class="balance-value" id="balanceAfter">4,850.00 EGP</span>
+        </div>
+      </div>
+
+      <!-- Info Row -->
+      <div class="exp-info-row">
+        <div class="exp-info-item">
+          <span class="exp-info-item__label">التاريخ والوقت</span>
+          <span class="exp-info-item__value" id="infoDate">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            24 Oct 2023, 14:30
+          </span>
+        </div>
+        <div class="exp-info-item">
+          <span class="exp-info-item__label">الكاشير</span>
+          <span class="exp-info-item__value" id="infoCashier">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            أحمد محمد
+          </span>
+        </div>
+        <div class="exp-info-item">
+          <span class="exp-info-item__label">رقم الوردية</span>
+          <span class="exp-info-item__value" id="infoShift"># SHF-1024</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal__actions">
+      <button class="exp-confirm-btn" id="confirmAddExpenseBtn" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        تأكيد المصروف
+      </button>
+      <button class="exp-cancel-link" id="cancelAddExpenseBtn" type="button">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============== مودال نجاح تسجيل المصروف ============== -->
+<div class="modal-overlay" id="expSuccessOverlay" style="display:none;">
+  <div class="modal exp-success-modal">
+    <div class="exp-success-content">
+      <div class="exp-success-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <h2>تم تسجيل المصروف بنجاح</h2>
+      <p>تم حفظ البيانات وإصدار رقم مرجعي للعملية.</p>
+      <div class="exp-success-details">
+        <div class="exp-success-row">
+          <span class="label">رقم المرجع:</span>
+          <span class="value" id="successRefNo">#EXP-105</span>
+        </div>
+        <div class="exp-success-row">
+          <span class="label">النوع:</span>
+          <span class="value" id="successType">بخور</span>
+        </div>
+        <div class="exp-success-row">
+          <span class="label">المبلغ:</span>
+          <span class="value is-amount" id="successAmount">50 جنيه</span>
+        </div>
+        <div class="exp-success-row">
+          <span class="label">الوقت:</span>
+          <span class="value" id="successTime">11:20 ص</span>
+        </div>
+        <div class="exp-success-row">
+          <span class="label">الوردية:</span>
+          <span class="value" id="successShift">وردية #2</span>
+        </div>
+      </div>
+    </div>
+    <div class="exp-success-actions">
+      <button class="exp-success-close-btn" id="closeSuccessBtn" type="button">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<script src="expenses.js"></script>
+</body>
+</html>

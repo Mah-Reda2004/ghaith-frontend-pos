@@ -1,0 +1,11 @@
+{
+  "local_port": 17891,
+  "api_key": "ghaith-local-print-v1",
+  "receipt_all_printers": true,
+  "barcode_printer_names": [],
+  "receipt_width_mm": 80,
+  "barcode_width_mm": 50,
+  "barcode_height_mm": 30,
+  "dpi": 203,
+  "preview_when_no_printer": true
+}

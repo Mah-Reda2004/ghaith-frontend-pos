@@ -1,0 +1,244 @@
+/* ==========================================================================
+   شل الكاشير (نقطة البيع) — نافبار أفقي فوق بدل السايد بار، لأن ده تصميم
+   منفصل عن الأدمن (شاشة تابلت سريعة في المحصل). راجع
+   .claude/skills/ghaith-design-fidelity قبل ما تضيف صفحة كاشير جديدة.
+   ========================================================================== */
+
+.pos-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+/* ---------------- Topbar ---------------- */
+.pos-topbar {
+  height: var(--topbar-height);
+  flex-shrink: 0;
+  background: var(--color-sidebar-bg);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: var(--space-5);
+  gap: var(--space-4);
+}
+
+.pos-topbar__brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.pos-topbar__brand strong {
+  color: var(--color-primary);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+}
+
+.pos-topbar__brand span {
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+
+.pos-topbar__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+.pos-topbar__nav .nav-pill {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.pos-topbar__nav .nav-pill:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.pos-topbar__nav .nav-pill.is-active {
+  color: var(--color-primary);
+  font-weight: var(--fw-bold);
+}
+
+.pos-topbar__avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-primary-fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-sm);
+  flex-shrink: 0;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.pos-topbar__avatar:hover,
+.pos-topbar__avatar[aria-expanded="true"] {
+  transform: translateY(calc(var(--space-1) * -0.5));
+  box-shadow: 0 0 0 var(--space-1) color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.pos-user-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pos-user-menu__dropdown {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-3));
+  inset-inline-end: 0;
+  z-index: var(--z-toast);
+  width: calc(var(--space-7) * 4.5);
+  padding: var(--space-2);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-modal);
+  transform-origin: top right;
+  animation: user-menu-in var(--transition-fast);
+}
+
+.pos-user-menu__dropdown[hidden] { display: none; }
+
+.pos-user-menu__identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pos-user-menu__identity strong {
+  color: var(--color-text);
+  font-size: var(--fs-base);
+}
+
+.pos-user-menu__identity span {
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+
+.pos-user-menu__actions {
+  display: grid;
+  gap: var(--space-1);
+  padding-block-start: var(--space-2);
+}
+
+.pos-user-menu__item {
+  width: 100%;
+  min-height: calc(var(--space-7) - var(--space-1));
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.pos-user-menu__item svg {
+  width: var(--space-5);
+  height: var(--space-5);
+}
+
+.pos-user-menu__item:hover {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.pos-user-menu__item--logout:hover {
+  color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+@keyframes user-menu-in {
+  from { opacity: 0; transform: translateY(calc(var(--space-2) * -1)) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.pos-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.pos-topbar__icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.pos-topbar__icon-btn svg { width: 17px; height: 17px; }
+
+.pos-topbar__icon-btn .dot {
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-danger);
+  border: 1.5px solid var(--color-sidebar-bg);
+}
+
+.pos-logout {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+}
+
+.pos-logout svg {
+  color: var(--color-danger);
+}
+
+.pos-logout:hover {
+  color: var(--color-danger);
+}
+
+/* ---------------- Body: cart + product grid ---------------- */
+.pos-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  flex-direction: row-reverse;
+}
+
+@media (max-width: 1180px) {
+  .pos-topbar__nav .nav-pill span { display: none; }
+  .pos-topbar__nav .nav-pill { padding: var(--space-2); }
+}
+
+@media (max-width: 767px) {
+  .pos-topbar__nav { display: none; }
+}

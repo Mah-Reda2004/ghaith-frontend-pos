@@ -1,0 +1,147 @@
+/* ==========================================================================
+   نقاط التوقف (Breakpoints)
+   - Desktop  : > 1180px   (الأدمن، لوحة التحكم الكاملة)
+   - Tablet   : 768–1180px  (الكاشير على تابلت داخل المحل)
+   - Mobile   : < 768px     (متابعة سريعة من الموبايل)
+   ========================================================================== */
+
+/* ---------- Tablet: السايد بار يتقلّص لأيقونات بس ---------- */
+@media (max-width: 1180px) {
+  .app-shell {
+    grid-template-columns: var(--sidebar-width-collapsed) 1fr;
+  }
+
+  .sidebar {
+    padding-inline: var(--space-2);
+    align-items: center;
+  }
+
+  .sidebar__logo,
+  .nav-link span,
+  .user-chip span,
+  .logout-link span {
+    display: none;
+  }
+
+  .nav-link {
+    justify-content: center;
+    padding: var(--space-3);
+    width: 100%;
+  }
+
+  .user-chip {
+    justify-content: center;
+    padding: var(--space-2);
+  }
+
+  .logout-link {
+    justify-content: center;
+  }
+
+  .content {
+    padding: var(--space-4);
+  }
+
+  /* الكروت تتصف صف صف بدل 4 في السطر */
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ---------- Mobile: سايد بار بيتحول لـ drawer ---------- */
+@media (max-width: 767px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    display: block;
+  }
+
+  .sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset-inline-start: 0;
+    top: 0;
+    height: 100vh;
+    width: 240px;
+    transform: translateX(100%);
+    transition: transform var(--transition-base);
+    z-index: var(--z-sidebar);
+    padding: var(--space-4);
+    align-items: stretch;
+  }
+
+  html[dir="rtl"] .sidebar,
+  body .sidebar {
+    transform: translateX(100%);
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .sidebar__logo,
+  .nav-link span,
+  .user-chip span,
+  .logout-link span {
+    display: inline;
+  }
+
+  .nav-link {
+    justify-content: flex-start;
+  }
+
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: calc(var(--z-sidebar) - 1);
+  }
+
+  .sidebar-overlay.is-open {
+    display: block;
+  }
+
+  .content {
+    padding: var(--space-3);
+  }
+
+  .content__header {
+    align-items: center;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: var(--space-2) !important;
+  }
+
+  .stat-card {
+    padding: var(--space-3) !important;
+  }
+
+  .stat-value {
+    font-size: var(--fs-lg) !important;
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* الجداول: بنحولها لكروت بدل ما تتكسر أفقيًا */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table.data-table {
+    min-width: 640px;
+  }
+}
+
+@media (max-width: 420px) {
+  .stat-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

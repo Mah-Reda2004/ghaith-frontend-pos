@@ -1,0 +1,9 @@
+fastapi==0.116.1
+uvicorn==0.35.0
+pydantic==2.11.7
+Pillow==11.3.0
+pywin32==311
+arabic-reshaper==3.0.0
+python-bidi==0.6.6
+python-barcode==0.16.1
+pyinstaller==6.15.0

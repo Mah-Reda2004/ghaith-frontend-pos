@@ -1,0 +1,283 @@
+.table-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.table-responsive {
+  width: 100%;
+  max-height: min(calc(100dvh - (var(--topbar-height) * 3)), calc(var(--space-7) * 11));
+  overflow-y: auto;
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border)) transparent;
+}
+
+.table-responsive::-webkit-scrollbar {
+  width: var(--space-2);
+  height: var(--space-2);
+}
+
+.table-responsive::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  border: var(--space-1) solid transparent;
+  border-radius: var(--radius-pill);
+  background-clip: padding-box;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-primary) 70%, var(--color-border));
+  background-clip: padding-box;
+}
+
+.table-responsive thead {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: var(--color-surface-alt);
+}
+
+table.data-table {
+  width: 100%;
+  font-size: var(--fs-sm);
+}
+
+table.data-table thead th {
+  text-align: start;
+  color: var(--color-text-muted);
+  font-weight: var(--fw-medium);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+table.data-table tbody td {
+  text-align: start;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+table.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+table.data-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+table.data-table tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Skeleton صف وهمي وقت التحميل */
+.skeleton-row td {
+  padding: var(--space-4);
+}
+.skeleton-bar {
+  height: 14px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--color-surface-alt) 25%, var(--color-surface-hover) 37%, var(--color-surface-alt) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-loading 1.4s ease infinite;
+}
+@keyframes skeleton-loading {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* ---------------- Pagination ---------------- */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.pagination__pages {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.page-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+}
+
+.page-btn:hover { background: var(--color-surface-hover); }
+
+.page-btn.is-active {
+  background: var(--color-primary);
+  color: var(--color-primary-fg);
+}
+
+.pagination__info {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Unified paginated tables: the header stays full width and only rows scroll. */
+.table-card:has(> .pagination) > .table-responsive {
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-gutter: auto;
+}
+
+.table-card:has(> .pagination) > .table-responsive > table.data-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* Some screens place the table directly in the card (for example sales). */
+.table-card:has(> .pagination) > table.data-table {
+  display: block;
+  width: 100%;
+  table-layout: fixed;
+  overflow-x: auto;
+}
+
+.table-card:has(> .pagination) > table.data-table > thead {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+  box-shadow: 0 1px 0 var(--color-border);
+}
+
+.table-card:has(> .pagination) > table.data-table > tbody {
+  display: block;
+  height: clamp(320px, calc(100dvh - 460px), 560px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border)) transparent;
+}
+
+.table-card:has(> .pagination) > table.data-table > tbody > tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.table-card:has(> .pagination) > table.data-table th,
+.table-card:has(> .pagination) > table.data-table td {
+  text-align: start;
+}
+
+.table-card:has(> .pagination) > .table-responsive > table.data-table > thead {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+  position: static;
+  box-shadow: 0 1px 0 var(--color-border);
+}
+
+.table-card:has(> .pagination) > .table-responsive > table.data-table > tbody {
+  display: block;
+  height: clamp(320px, calc(100dvh - 460px), 560px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border)) transparent;
+}
+
+.table-card:has(> .pagination) > .table-responsive > table.data-table > tbody > tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.table-card:has(> .pagination) > .table-responsive > table.data-table th,
+.table-card:has(> .pagination) > .table-responsive > table.data-table td {
+  text-align: start;
+}
+
+.table-card:has(> .pagination) > .table-responsive > table.data-table > tbody::-webkit-scrollbar {
+  width: var(--space-2);
+}
+
+.table-card:has(> .pagination) > .table-responsive > table.data-table > tbody::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-card:has(> .pagination) > .table-responsive > table.data-table > tbody::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  background-clip: padding-box;
+}
+
+.pagination__pages > .page-btn:first-child,
+.pagination__pages > .page-btn:last-child {
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+  color: transparent;
+  font-size: 0;
+}
+
+.pagination__pages > .page-btn:first-child::before,
+.pagination__pages > .page-btn:last-child::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-block-start: 2px solid var(--color-text-muted);
+  border-inline-start: 2px solid var(--color-text-muted);
+}
+
+.pagination__pages > .page-btn:first-child::before {
+  transform: rotate(-45deg);
+}
+
+.pagination__pages > .page-btn:last-child::before {
+  transform: rotate(135deg);
+}
+
+.pagination__pages > .page-btn:first-child:hover,
+.pagination__pages > .page-btn:last-child:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+}
+
+.pagination__pages > .page-btn:first-child:hover::before,
+.pagination__pages > .page-btn:last-child:hover::before {
+  border-color: var(--color-primary);
+}
+
+@media (max-width: 767px) {
+  .table-card:has(> .pagination) > .table-responsive > table.data-table > tbody {
+    height: clamp(300px, calc(100dvh - 390px), 480px);
+  }
+}
+
+@media print {
+  .table-responsive {
+    max-height: none;
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
+}

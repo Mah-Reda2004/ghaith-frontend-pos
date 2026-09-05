@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="تسجيل الدخول إلى نظام غيث لإدارة المبيعات والمخزون" />
+  <title>تسجيل الدخول — غيث</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../../../assets/css/base/variables.css" />
+  <link rel="stylesheet" href="../../../../assets/css/base/reset.css" />
+  <link rel="stylesheet" href="../../../../assets/css/base/typography.css" />
+  <link rel="stylesheet" href="../../../../assets/css/components/forms.css" />
+  <link rel="stylesheet" href="../../../../assets/css/components/theme-toggle.css" />
+  <link rel="stylesheet" href="login.css" />
+</head>
+<body>
+  <main class="login-page">
+    <section class="login-brand" aria-label="نظام غيث">
+      <div class="login-brand__glow login-brand__glow--one"></div>
+      <div class="login-brand__glow login-brand__glow--two"></div>
+      <div class="login-brand__content">
+        <a class="login-logo" href="login.html" aria-label="غيث">
+          <span class="login-logo__mark">غ</span>
+          <span>غيث</span>
+        </a>
+        <div class="login-brand__message">
+          <span class="login-brand__eyebrow">نظام إدارة متكامل</span>
+          <h1>كل تفاصيل متجرك<br /><em>في مكان واحد.</em></h1>
+          <p>إدارة المبيعات والمخزون والفواتير ومتابعة أداء فريقك بسهولة ودقة.</p>
+        </div>
+        <div class="login-brand__status"><i></i> النظام جاهز للعمل</div>
+      </div>
+    </section>
+
+    <section class="login-panel">
+      <header class="login-panel__top">
+        <a class="login-logo login-logo--mobile" href="login.html" aria-label="غيث">
+          <span class="login-logo__mark">غ</span>
+          <span>غيث</span>
+        </a>
+        <button class="theme-toggle" id="loginThemeToggle" type="button" aria-label="التحويل للوضع الفاتح">
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+        </button>
+      </header>
+
+      <div class="login-card">
+        <div class="login-card__heading">
+          <span class="login-card__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+          </span>
+          <div>
+            <h2>مرحباً بعودتك</h2>
+            <p>سجّل الدخول للوصول إلى حسابك</p>
+          </div>
+        </div>
+
+        <div class="login-alert" id="loginAlert" role="alert" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+          <span id="loginAlertText"></span>
+        </div>
+
+        <form id="loginForm" novalidate>
+          <div class="field login-field">
+            <label for="loginUsername">اسم المستخدم</label>
+            <div class="login-input">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+              <input class="input" id="loginUsername" name="username" type="text" autocomplete="username" placeholder="أدخل اسم المستخدم" required aria-describedby="usernameError" />
+            </div>
+            <small class="login-field__error" id="usernameError" hidden>يرجى إدخال اسم المستخدم.</small>
+          </div>
+
+          <div class="field login-field">
+            <label for="loginPassword">كلمة المرور</label>
+            <div class="login-input">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+              <input class="input" id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="أدخل كلمة المرور" required aria-describedby="passwordError" />
+              <button class="login-password-toggle" id="passwordToggle" type="button" aria-label="إظهار كلمة المرور" aria-pressed="false">
+                <svg class="eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+                <svg class="eye-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 3 18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 5.2A10 10 0 0 1 12 5c6.5 0 10 7 10 7a18 18 0 0 1-2.1 3.1M6.6 6.7C3.6 8.5 2 12 2 12s3.5 7 10 7a9.8 9.8 0 0 0 3.2-.5"/></svg>
+              </button>
+            </div>
+            <small class="login-field__error" id="passwordError" hidden>يرجى إدخال كلمة المرور.</small>
+          </div>
+
+          <div class="login-options">
+            <label class="login-remember">
+              <input id="rememberUsername" type="checkbox" />
+              <span aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 8 3 3 7-7"/></svg></span>
+              تذكر اسم المستخدم
+            </label>
+            <button class="login-forgot" id="forgotPassword" type="button">نسيت كلمة المرور؟</button>
+          </div>
+
+          <button class="btn btn-primary login-submit" id="loginSubmit" type="submit">
+            <span class="login-submit__label">تسجيل الدخول</span>
+            <span class="login-submit__spinner" aria-hidden="true"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </form>
+
+        <p class="login-help">تواجه مشكلة في الدخول؟ <button id="supportButton" type="button">تواصل مع مسؤول النظام</button></p>
+      </div>
+
+      <footer class="login-footer">© <span id="currentYear"></span> غيث لإدارة المبيعات. جميع الحقوق محفوظة.</footer>
+    </section>
+  </main>
+  <script type="module" src="login.js"></script>
+</body>
+</html>

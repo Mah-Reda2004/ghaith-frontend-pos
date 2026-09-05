@@ -1,0 +1,769 @@
+/* ==========================================================================
+   المصروفات — الستايلات الخاصة بصفحة المصروفات
+   ========================================================================== */
+
+/* ---------------- Page Content (shared with invoices pattern) ---------------- */
+.exp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ---------------- Page Header ---------------- */
+.exp-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.exp-page-header__title h1 {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.exp-page-header__title p {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.exp-new-btn {
+  height: 44px;
+  padding: 0 var(--space-5);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  background: var(--color-primary);
+  color: var(--color-primary-fg);
+  border: none;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  transition: background var(--transition-fast);
+}
+
+.exp-new-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.exp-new-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---------------- Stats Cards ---------------- */
+.exp-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+
+.exp-stat-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  transition: border-color var(--transition-fast);
+}
+
+.exp-stat-card:hover {
+  border-color: var(--color-text-faint);
+}
+
+.exp-stat-card.is-highlight {
+  background: linear-gradient(135deg, #f2701c63, #d2611a66);
+  border-color: transparent;
+  color: #fff;
+}
+
+.exp-stat-card.is-highlight .exp-stat-card__label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.exp-stat-card.is-highlight .exp-stat-card__value {
+  color: #fff;
+}
+
+.exp-stat-card.is-highlight .exp-stat-card__icon {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.exp-stat-card__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.exp-stat-card__icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.exp-stat-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exp-stat-card__label {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.exp-stat-card__value {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.exp-stat-card__value small {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+  margin-inline-start: var(--space-1);
+}
+
+/* ---------------- Search Bar & Log Title ---------------- */
+.exp-log-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.exp-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5);
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.exp-log-header h2 {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.exp-search {
+  position: relative;
+  min-width: 260px;
+}
+
+.exp-search .input {
+  width: 100%;
+  height: 42px;
+  padding-inline-end: 40px;
+  padding-inline-start: var(--space-4);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--fs-sm);
+}
+
+.exp-search svg {
+  position: absolute;
+  inset-inline-end: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-faint);
+  pointer-events: none;
+}
+
+/* ---------------- Expenses Table ---------------- */
+.exp-table {
+  width: 100%;
+  font-size: var(--fs-sm);
+}
+
+.exp-table thead th {
+  text-align: right;
+  color: var(--color-text-muted);
+  font-weight: var(--fw-medium);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.exp-table tbody td {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.exp-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.exp-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.exp-table tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+/* Type badge */
+.exp-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+/* Status badge */
+.exp-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+}
+
+.exp-status::before {
+  content: "✓";
+  font-size: 10px;
+}
+
+.exp-status.is-registered {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.exp-status.is-pending {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+}
+
+.exp-status.is-pending::before {
+  content: "⏳";
+}
+
+/* Amount */
+.exp-amount {
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  direction: ltr;
+  display: inline-block;
+}
+
+.exp-amount small {
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+  margin-inline-start: 2px;
+}
+
+/* Date cell */
+.exp-date-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exp-date-cell .exp-date {
+  font-size: var(--fs-sm);
+  color: var(--color-text);
+}
+
+.exp-date-cell .exp-time {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+/* Cashier name */
+.exp-cashier {
+  font-size: var(--fs-sm);
+  color: var(--color-text);
+  font-weight: var(--fw-medium);
+}
+
+/* Expense number */
+.exp-no {
+  font-weight: var(--fw-bold);
+  color: var(--color-primary);
+  font-size: var(--fs-sm);
+}
+
+/* Description */
+.exp-desc {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------- Pagination ---------------- */
+.exp-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.exp-pagination__info {
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.exp-pagination__pages {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Empty State */
+.exp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-7) var(--space-5);
+  color: var(--color-text-muted);
+  gap: var(--space-3);
+}
+
+.exp-empty svg {
+  width: 48px;
+  height: 48px;
+  opacity: 0.5;
+}
+
+/* ---------------- Add Expense Modal ---------------- */
+.expense-modal {
+  max-width: 740px;
+  width: 90%;
+  padding: 0;
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - (var(--space-4) * 2));
+  overflow: hidden;
+}
+
+.expense-modal .modal__header {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.expense-modal .modal__body {
+  padding: var(--space-5);
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.exp-form-row {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.exp-form-row .field {
+  flex: 1;
+}
+
+.exp-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.exp-form-field label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.exp-form-field label .required {
+  color: var(--color-danger);
+}
+
+.exp-form-field .input,
+.exp-form-field textarea.input {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.exp-form-field .input:focus,
+.exp-form-field textarea.input:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.exp-form-field textarea.input {
+  height: auto;
+  min-height: 80px;
+  padding: var(--space-3) var(--space-4);
+  resize: vertical;
+}
+
+/* Currency suffix */
+.exp-input-currency {
+  position: relative;
+}
+
+.exp-input-currency .input {
+  width: 100%;
+  padding-inline-start: 50px;
+}
+
+.exp-input-currency .currency-label {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--color-text-muted);
+  background: var(--color-surface-alt);
+  border-inline-end: 1px solid var(--color-border);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  pointer-events: none;
+}
+
+/* Balance info bar */
+.exp-balance-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  gap: var(--space-3);
+}
+
+.exp-balance-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+}
+
+.exp-balance-item svg {
+  width: 18px;
+  height: 18px;
+  color: var(--color-text-muted);
+}
+
+.exp-balance-item .balance-label {
+  color: var(--color-text-muted);
+}
+
+.exp-balance-item .balance-value {
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+}
+
+.exp-balance-after .balance-value {
+  color: var(--color-success);
+}
+
+.exp-balance-arrow {
+  color: var(--color-text-faint);
+  font-size: var(--fs-lg);
+  display: flex;
+  align-items: center;
+}
+
+.exp-balance-arrow svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Info row (Date, Cashier, Shift) */
+.exp-info-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+.exp-info-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.exp-info-item__label {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.exp-info-item__value {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.exp-info-item__value svg {
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-muted);
+}
+
+/* Modal Actions */
+.expense-modal .modal__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+
+.expense-modal .modal__actions .btn {
+  flex: unset;
+}
+
+.exp-confirm-btn {
+  background: var(--color-primary);
+  color: var(--color-primary-fg);
+  border: none;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  padding: 10px 24px;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  transition: background var(--transition-fast);
+}
+
+.exp-confirm-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.exp-cancel-link {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  padding: 10px 16px;
+  transition: color var(--transition-fast);
+}
+
+.exp-cancel-link:hover {
+  color: var(--color-text);
+}
+
+/* ---------------- Success Modal ---------------- */
+.exp-success-modal {
+  max-width: 460px;
+  width: 90%;
+  padding: 0;
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  overflow: hidden;
+}
+
+@media (max-width: 767px) {
+  .expense-modal,
+  .exp-success-modal {
+    width: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+}
+
+.exp-success-content {
+  padding: var(--space-6) var(--space-5);
+}
+
+.exp-success-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--color-success);
+  margin: 0 auto var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 8px var(--color-success-bg);
+}
+
+.exp-success-icon svg {
+  width: 32px;
+  height: 32px;
+  color: #fff;
+}
+
+.exp-success-content h2 {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  margin: 0 0 var(--space-2);
+}
+
+.exp-success-content p {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-5);
+}
+
+.exp-success-details {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin: 0 auto;
+  max-width: 380px;
+}
+
+.exp-success-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--fs-sm);
+}
+
+.exp-success-row:last-child {
+  border-bottom: none;
+}
+
+.exp-success-row .label {
+  color: var(--color-text-muted);
+}
+
+.exp-success-row .value {
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+}
+
+.exp-success-row .value.is-amount {
+  color: var(--color-danger);
+  font-size: var(--fs-md);
+}
+
+.exp-success-actions {
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+.exp-success-close-btn {
+  width: 100%;
+  height: 46px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  transition: all var(--transition-fast);
+}
+
+.exp-success-close-btn:hover {
+  background: var(--color-surface-hover);
+}
+
+/* ---------------- Responsive ---------------- */
+@media (max-width: 1100px) {
+  .exp-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .exp-body {
+    padding: var(--space-4);
+  }
+
+  .exp-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .exp-page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .exp-search {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .exp-log-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .exp-form-row {
+    flex-direction: column;
+  }
+
+  .exp-info-row {
+    grid-template-columns: 1fr;
+  }
+
+  .exp-balance-bar {
+    flex-direction: column;
+  }
+
+  .exp-table {
+    font-size: var(--fs-xs);
+  }
+
+  .exp-table thead th,
+  .exp-table tbody td {
+    padding: var(--space-2) var(--space-3);
+  }
+}

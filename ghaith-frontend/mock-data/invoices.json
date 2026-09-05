@@ -1,0 +1,127 @@
+{
+  "total": 25,
+  "page": 1,
+  "pageSize": 10,
+  "data": [
+    {
+      "id": "INV-98231",
+      "customer": "محمد جاسم العلي",
+      "phone": "050 443 2122",
+      "cashier": "أحمد المحمد",
+      "sales": "محمد أحمد",
+      "date": "2024-05-24T20:45:00",
+      "items_count": 5,
+      "payment_method": "محفظة",
+      "status": "مكتملة",
+      "total": 1250.00
+    },
+    {
+      "id": "INV-98230",
+      "customer": "شركة السرور للتجارة",
+      "phone": "055 112 3344",
+      "cashier": "سارة العتيبي",
+      "sales": "سارة علي",
+      "date": "2024-05-24T19:12:00",
+      "items_count": 12,
+      "payment_method": "نقدي",
+      "status": "قيد الدفع",
+      "total": 4890.50
+    },
+    {
+      "id": "INV-98229",
+      "customer": "عميل نقدي",
+      "phone": null,
+      "cashier": "أحمد المحمد",
+      "sales": "محمود حسن",
+      "date": "2024-05-24T18:30:00",
+      "items_count": 1,
+      "payment_method": "فيزا",
+      "status": "مكتملة",
+      "total": 245.00
+    },
+    {
+      "id": "INV-98228",
+      "customer": "خالد بن منصور",
+      "phone": "053 887 6655",
+      "cashier": "سارة العتيبي",
+      "sales": "أسماء خالد",
+      "date": "2024-05-24T17:45:00",
+      "items_count": 3,
+      "payment_method": "تحويل",
+      "status": "مكتملة",
+      "total": 15.40
+    },
+    {
+      "id": "INV-98227",
+      "customer": "فاطمة القحطاني",
+      "phone": "059 221 8800",
+      "cashier": "أحمد المحمد",
+      "sales": "محمد أحمد",
+      "date": "2024-05-24T16:10:00",
+      "items_count": 7,
+      "payment_method": "نقدي",
+      "status": "مكتملة",
+      "total": 780.00
+    },
+    {
+      "id": "INV-98226",
+      "customer": "ناصر الدوسري",
+      "phone": "056 334 7711",
+      "cashier": "سارة العتيبي",
+      "sales": "سارة علي",
+      "date": "2024-05-24T14:55:00",
+      "items_count": 2,
+      "payment_method": "آجل",
+      "status": "آجل",
+      "total": 320.00
+    },
+    {
+      "id": "INV-98225",
+      "customer": "عميل نقدي",
+      "phone": null,
+      "cashier": "أحمد المحمد",
+      "sales": "محمود حسن",
+      "date": "2024-05-24T13:20:00",
+      "items_count": 4,
+      "payment_method": "نقدي",
+      "status": "ملغاة",
+      "total": 610.00
+    },
+    {
+      "id": "INV-98224",
+      "customer": "هيفاء الشمري",
+      "phone": "050 998 1234",
+      "cashier": "سارة العتيبي",
+      "sales": "أسماء خالد",
+      "date": "2024-05-24T11:05:00",
+      "items_count": 9,
+      "payment_method": "محفظة",
+      "status": "مكتملة",
+      "total": 2100.00
+    },
+    {
+      "id": "INV-98223",
+      "customer": "سعد المطيري",
+      "phone": "055 667 4321",
+      "cashier": "أحمد المحمد",
+      "sales": "محمد أحمد",
+      "date": "2024-05-24T09:30:00",
+      "items_count": 6,
+      "payment_method": "تحويل",
+      "status": "مكتملة",
+      "total": 990.00
+    },
+    {
+      "id": "INV-98222",
+      "customer": "عبدالله الزهراني",
+      "phone": "059 112 5566",
+      "cashier": "سارة العتيبي",
+      "sales": "سارة علي",
+      "date": "2024-05-23T20:00:00",
+      "items_count": 2,
+      "payment_method": "نقدي",
+      "status": "مكتملة",
+      "total": 430.00
+    }
+  ]
+}

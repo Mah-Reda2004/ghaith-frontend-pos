@@ -1,0 +1,48 @@
+.cashier-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cashier-view > .pos-body,
+.cashier-view > .inv-body,
+.cashier-view > .debts-page,
+.cashier-view > .profile-body { flex: 1; }
+
+.cashier-view__loading,
+.cashier-view__error,
+.cashier-view__pending {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-4);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.cashier-view__pending h1 { color: var(--color-text); font-size: var(--fs-xl); }
+.cashier-view__pending p { max-width: calc(var(--sidebar-width) * 2); }
+
+.cashier-shell.is-loading .cashier-view { pointer-events: none; }
+
+@media (max-width: 767px) {
+  .pos-topbar__nav {
+    display: flex;
+    position: fixed;
+    inset-inline: 0;
+    inset-block-end: 0;
+    z-index: var(--z-sidebar);
+    height: var(--topbar-height);
+    padding-inline: var(--space-2);
+    background: var(--color-sidebar-bg);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .pos-topbar__nav .nav-pill span { display: inline; font-size: var(--fs-xs); }
+  .cashier-view { padding-block-end: var(--topbar-height); }
+  .pos-topbar__brand span,
+  .pos-logout span { display: none; }
+}
