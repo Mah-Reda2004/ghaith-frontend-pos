@@ -1,4 +1,5 @@
 import { escapeHtml } from "../../../core/utils.js";
+import { api } from "../../../core/api.js";
 
 const DEFAULT_DASHBOARD_CHARTS = {
   sales: {
@@ -118,6 +119,23 @@ export function initDashboard() {
   currentDashboardCharts = DEFAULT_DASHBOARD_CHARTS;
   let activePeriod = "monthly";
   updateDashboardCharts(window.ghaithDashboardData || DEFAULT_DASHBOARD_CHARTS, activePeriod);
+  let disposed = false;
+  const loadDashboard = async period => {
+    try {
+      const response = await api.get("/api/v1/admin/reports/overview", { query: { period } });
+      if (disposed) return;
+      const data = response?.summary || response;
+      const primary = [data.total_sales ?? data.sales_total, data.sales_count ?? data.invoice_count, data.net_profit ?? data.profit, data.total_expenses ?? data.expenses_total];
+      document.querySelectorAll(".dashboard-stat-card .stat-value").forEach((node, index) => { if (primary[index] !== undefined) node.textContent = Number(primary[index]).toLocaleString("en-US"); });
+      const quick = [data.total_purchases ?? data.purchases_total, data.total_debts ?? data.debts_total, data.inventory_value, data.product_count ?? data.total_products];
+      document.querySelectorAll(".dashboard-quick-card strong").forEach((node, index) => { if (quick[index] !== undefined) node.textContent = Number(quick[index]).toLocaleString("en-US"); });
+      if (response.sales || response.category) updateDashboardCharts(response, activePeriod);
+    } catch (error) {
+      const subtitle = document.querySelector(".dashboard-header .page-subtitle");
+      if (subtitle) subtitle.textContent = error.message;
+    }
+  };
+  loadDashboard("month");
 
   const chartTabs = document.querySelector(".dashboard-chart-tabs");
   const handlePeriod = event => {
@@ -126,12 +144,14 @@ export function initDashboard() {
     chartTabs.querySelectorAll("button").forEach(item => item.classList.toggle("is-active", item === button));
     activePeriod = button.dataset.chartPeriod;
     renderSalesChart(activePeriod, currentDashboardCharts.sales);
+    loadDashboard(activePeriod);
   };
   const handleDataUpdate = event => updateDashboardCharts(event.detail || {}, activePeriod);
   chartTabs?.addEventListener("click", handlePeriod);
   document.addEventListener("ghaith:dashboard-data", handleDataUpdate);
 
   return () => {
+    disposed = true;
     chartTabs?.removeEventListener("click", handlePeriod);
     document.removeEventListener("ghaith:dashboard-data", handleDataUpdate);
   };

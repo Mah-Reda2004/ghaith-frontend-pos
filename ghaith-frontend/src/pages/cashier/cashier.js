@@ -4,12 +4,12 @@ import { initNotificationCenter } from "../../components/notifications/notificat
 import { getCurrentUser, isAuthenticated, logout } from "../../core/auth.js";
 
 const ROUTES = {
-  pos: { html: "pos/pos.html", script: "pos/pos.js", title: "نقطة البيع", selector: ".pos-body", extras: [".pos-cart-fab", "#paymentOverlay", ".toast-stack", "#printArea"] },
-  invoices: { html: "invoices/invoices.html", css: "invoices/invoices.css", script: "invoices/invoices.js", title: "سجل الفواتير", selector: ".inv-body", extras: ["#invoiceDetailOverlay", "#returnFlowOverlay", ".toast-stack", "#printArea"] },
+  pos: { html: "pos/pos.html", script: "pos/pos.js", module: true, title: "نقطة البيع", selector: ".pos-body", extras: [".pos-cart-fab", "#paymentOverlay", ".toast-stack", "#printArea"] },
+  invoices: { html: "invoices/invoices.html", css: "invoices/invoices.css", script: "invoices/invoices.js", module: true, title: "سجل الفواتير", selector: ".inv-body", extras: ["#invoiceDetailOverlay", "#returnFlowOverlay", ".toast-stack", "#printArea"] },
   debts: { html: "debts/debts.html", css: "debts/debts.css", script: "debts/debts.js", module: true, title: "المديونيات", selector: ".debts-page", extras: ["#debtDetailOverlay", "#debtPaymentOverlay", ".toast-stack", "#printArea"] },
-  expenses: { html: "expenses/expenses.html", css: "expenses/expenses.css", script: "expenses/expenses.js", title: "المصروفات", selector: ".exp-body", extras: ["#addExpenseOverlay", "#expSuccessOverlay", ".toast-stack"] },
-  "shift-close": { html: "shift-close/shift-close.html", css: "shift-close/shift-close.css", script: "shift-close/shift-close.js", title: "إغلاق الوردية", selector: ".sc-body", extras: ["#confirmModal", "#successOverlay", ".toast-stack"] },
-  profile: { html: "profile/profile.html", css: "profile/profile.css", script: "profile/profile.js", title: "البروفايل", selector: ".profile-body", extras: [] }
+  expenses: { html: "expenses/expenses.html", css: "expenses/expenses.css", script: "expenses/expenses.js", module: true, title: "المصروفات", selector: ".exp-body", extras: ["#addExpenseOverlay", "#expSuccessOverlay", ".toast-stack"] },
+  "shift-close": { html: "shift-close/shift-close.html", css: "shift-close/shift-close.css", script: "shift-close/shift-close.js", module: true, title: "إغلاق الوردية", selector: ".sc-body", extras: ["#confirmModal", "#successOverlay", ".toast-stack"] },
+  profile: { html: "profile/profile.html", css: "profile/profile.css", script: "profile/profile.js", module: true, title: "البروفايل", selector: ".profile-body", extras: [] }
 };
 
 const view = document.getElementById("cashierView");

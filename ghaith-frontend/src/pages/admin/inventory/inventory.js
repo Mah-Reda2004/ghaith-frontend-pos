@@ -1,4 +1,5 @@
 import { debounce, escapeHtml } from "../../../core/utils.js";
+import { api, listFrom } from "../../../core/api.js";
 
 const DEFAULT_INVENTORY_CHARTS = {
   movement: {
@@ -103,8 +104,8 @@ function bindInventorySearch() {
   const emptyState = document.getElementById("inventoryEmpty");
   if (!searchInput || !tableBody || !emptyState) return () => {};
 
-  const rows = Array.from(tableBody.querySelectorAll("tr"));
   const filterRows = debounce(() => {
+    const rows = Array.from(tableBody.querySelectorAll("tr"));
     const query = searchInput.value.trim().toLocaleLowerCase("ar");
     let visibleRows = 0;
     rows.forEach(row => {
@@ -136,11 +137,37 @@ export function initInventory() {
   window.bindAdminThemeToggle?.(document.getElementById("inventoryThemeToggle"));
   currentInventoryCharts = DEFAULT_INVENTORY_CHARTS;
   updateInventoryCharts(window.ghaithInventoryData || DEFAULT_INVENTORY_CHARTS);
+  let disposed = false;
+  const tableBody = document.getElementById("inventoryTableBody");
+  const empty = document.getElementById("inventoryEmpty");
+  const loadInventory = async () => {
+    try {
+      const [response, summary] = await Promise.all([
+        api.get("/api/v1/admin/products", { query: { page: 1, page_size: 100 } }),
+        api.get("/api/v1/admin/products/summary")
+      ]);
+      if (disposed) return;
+      const rows = listFrom(response).flatMap(product => (product.product_variants || product.variants || [product]).map(variant => ({ product, variant })));
+      tableBody.innerHTML = rows.map(({ product, variant }) => {
+        const stock = Number(variant.stock_qty ?? variant.quantity ?? product.stock_quantity ?? 0), threshold = Number(product.low_stock_threshold ?? 0);
+        const tone = stock <= 0 ? "empty" : stock <= threshold ? "low" : "good";
+        const label = stock <= 0 ? "نفد تماماً" : stock <= threshold ? "منخفض" : "متاح";
+        const name = product.name_ar || product.name || "منتج", sku = variant.sku || product.sku || "—", barcode = variant.barcode || product.barcode || "—", cost = Number(variant.purchase_price ?? product.purchase_price ?? 0);
+        return `<tr data-search="${escapeHtml(`${name} ${sku} ${barcode}`.toLocaleLowerCase("ar"))}"><td><strong>${escapeHtml(name)}</strong></td><td class="num" dir="ltr">${escapeHtml(barcode)}</td><td class="num inventory-sku">${escapeHtml(sku)}</td><td>${escapeHtml(variant.size || "—")}</td><td>${escapeHtml(variant.color || "—")}</td><td>${escapeHtml(product.category?.name || product.category_name || "—")}</td><td class="num">${cost.toLocaleString("en-US")}</td><td class="num">${(cost * stock).toLocaleString("en-US")}</td><td><span class="inventory-level inventory-level--${tone}"><span><b>${stock} قطعة</b><small>${threshold} حد أدنى</small></span></span></td><td><span class="inventory-status inventory-status--${tone}">${label}</span></td><td>${escapeHtml(product.last_supplier_name || "—")}</td></tr>`;
+      }).join("");
+      empty.hidden = rows.length > 0; tableBody.hidden = !rows.length;
+      const stats = [summary.total_units ?? summary.stock_quantity, summary.inventory_cost_value ?? summary.total_stock_value, summary.low_stock_count];
+      document.querySelectorAll(".inventory-stat__body strong").forEach((node, index) => { if (stats[index] !== undefined) node.innerHTML = index === 1 ? `${Number(stats[index]).toLocaleString("en-US")} <small>EGP</small>` : Number(stats[index]).toLocaleString("en-US"); });
+      document.querySelector(".inventory-pagination .pagination__info").textContent = `عرض ${rows.length} من ${response.total ?? rows.length} صنف`;
+    } catch (error) { if (!disposed) { tableBody.innerHTML = ""; empty.hidden = false; empty.querySelector("p").textContent = error.message; } }
+  };
+  loadInventory();
   const cleanupSearch = bindInventorySearch();
   const cleanupPagination = bindPagination();
   const handleDataUpdate = event => updateInventoryCharts(event.detail || {});
   document.addEventListener("ghaith:inventory-data", handleDataUpdate);
   return () => {
+    disposed = true;
     cleanupSearch();
     cleanupPagination();
     document.removeEventListener("ghaith:inventory-data", handleDataUpdate);

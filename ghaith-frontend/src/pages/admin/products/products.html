@@ -20,7 +20,7 @@
       <article class="product-stat product-stat--total"><div class="product-stat__top"><span>إجمالي المنتجات</span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16l-1 14H5L4 7ZM8 7V4h8v3"/></svg></i></div><strong class="num" id="productsTotalStat">1,248</strong></article>
       <article class="product-stat product-stat--low"><div class="product-stat__top"><span>منتجات منخفضة المخزون</span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20L12 3ZM12 9v5M12 18h.01"/></svg></i></div><strong class="num" id="productsLowStat">42</strong></article>
       <article class="product-stat product-stat--empty"><div class="product-stat__top"><span>منتجات نفدت من المخزون</span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></svg></i></div><strong class="num" id="productsEmptyStat">8</strong></article>
-      <article class="product-stat product-stat--value"><div class="product-stat__top"><span>إجمالي قيمة المخزون</span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h3"/></svg></i></div><strong class="num"><span id="productsValueStat">145,000</span><small>ريال</small></strong></article>
+      <article class="product-stat product-stat--value"><div class="product-stat__top"><span>إجمالي قيمة المخزون</span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h6M9 11h6M9 15h3"/></svg></i></div><strong class="num"><span id="productsValueStat">145,000</span><small>EGP</small></strong></article>
     </section>
 
     <section class="toolbar products-toolbar" aria-label="البحث والتصفية">
@@ -32,7 +32,7 @@
     <section class="table-card products-table-card" aria-label="جدول المنتجات">
       <div class="table-responsive products-table-wrap">
         <table class="data-table products-table">
-          <thead><tr><th>المنتج</th><th>رمز</th><th>التصنيف</th><th>السعر</th><th>حالة المخزون</th><th>الإجراءات</th></tr></thead>
+          <thead><tr><th>معرّف المنتج</th><th>المنتج</th><th>الباركود</th><th>SKU</th><th>التصنيف</th><th>المقاس</th><th>اللون</th><th>سعر الشراء</th><th>سعر البيع</th><th>العمولة</th><th>الرصيد</th><th>الحد الأدنى</th><th>حالة المخزون</th><th>حالة المنتج</th><th>الإجراءات</th></tr></thead>
           <tbody id="productsTableBody"></tbody>
         </table>
         <div class="empty-state products-empty" id="productsEmpty" hidden><svg class="empty-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16l-1 14H5L4 7ZM9 11h6"/></svg><h3>لا توجد منتجات مطابقة</h3><p>جرّب تغيير البحث أو فلاتر المنتجات.</p></div>

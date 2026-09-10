@@ -87,12 +87,13 @@ function renderPagination(elements, total) {
 }
 
 function renderUsers(elements) {
+  document.querySelector(".users-table thead").innerHTML = "<tr><th>المعرّف</th><th>المستخدم</th><th>اسم المستخدم</th><th>الهاتف</th><th>الدور</th><th>تاريخ الإنشاء</th><th>الحالة</th><th>الإجراءات</th></tr>";
   const filtered = filteredUsers(elements);
   const start = (currentPage - 1) * UI_PAGE_SIZE;
   const pageUsers = filtered.slice(start, start + UI_PAGE_SIZE);
   elements.tableBody.innerHTML = pageUsers.map(user => `<tr>
-    <td>${escapeHtml(user.displayName)}</td><td class="users-username" style="direction:rtl;text-align:start"><bdi dir="ltr">${escapeHtml(user.username)}</bdi></td><td>${escapeHtml(ROLE_LABELS[user.role] || user.role)}</td>
-    <td><span class="users-status users-status--${user.status}">${user.status === "active" ? "نشط" : "غير نشط"}</span></td>
+    <td class="num" dir="ltr">${escapeHtml(String(user.id))}</td><td>${escapeHtml(user.displayName)}</td><td class="users-username"><bdi dir="ltr">${escapeHtml(user.username)}</bdi></td><td class="num" dir="ltr">${escapeHtml(user.phone || "—")}</td><td>${escapeHtml(ROLE_LABELS[user.role] || user.role)}</td><td>${dateLabel(user.createdAt)}</td>
+    <td><button class="status-toggle status-toggle--table${user.status === "active" ? "" : " is-inactive"}" type="button" role="switch" aria-checked="${user.status === "active"}" data-action="toggle-status" data-id="${escapeHtml(String(user.id))}"><span class="status-toggle__label">${user.status === "active" ? "نشط" : "غير نشط"}</span><span class="status-toggle__track" aria-hidden="true"><span class="status-toggle__thumb"></span></span></button></td>
     <td><div class="users-actions"><button class="users-action users-action--edit" type="button" data-action="edit" data-id="${escapeHtml(String(user.id))}" aria-label="تعديل المستخدم"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="users-action users-action--delete" type="button" data-action="delete" data-id="${escapeHtml(String(user.id))}" aria-label="تعطيل المستخدم"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="7" r="4"/><path d="M2 21a7 7 0 0 1 14 0M17 11h5"/></svg></button></div></td>
   </tr>`).join("");
   elements.empty.hidden = pageUsers.length > 0;
@@ -223,6 +224,12 @@ export function initUsers() {
     const user = users.find(item => String(item.id) === button.dataset.id);
     if (!user) return;
     if (button.dataset.action === "edit") openUserModal(elements, user);
+    if (button.dataset.action === "toggle-status") {
+      button.disabled = true;
+      const active = user.status !== "active";
+      try { await api.patch(`/api/v1/admin/users/${encodeURIComponent(user.id)}`, { is_active: active }); showToast(elements, active ? "تم تفعيل المستخدم" : "تم إيقاف المستخدم"); await loadUsers(elements); }
+      catch (error) { button.disabled = false; showToast(elements, error.message, true); }
+    }
     if (button.dataset.action === "delete" && user.status === "active" && await confirmDeactivation(elements, user)) {
       try { await api.delete(`/api/v1/admin/users/${encodeURIComponent(user.id)}`); showToast(elements, "تم تعطيل المستخدم"); await loadUsers(elements); }
       catch (error) { showToast(elements, error.message, true); }

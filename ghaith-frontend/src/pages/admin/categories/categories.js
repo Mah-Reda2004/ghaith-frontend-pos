@@ -14,7 +14,7 @@ function addFeedbackModals() {
     <div class="modal-overlay categories-feedback-overlay" id="categoryConfirmModal" hidden>
       <section class="modal categories-feedback categories-feedback--warning" role="alertdialog" aria-modal="true" aria-labelledby="categoryConfirmTitle">
         <span class="categories-feedback__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.7 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0Z"/></svg></span>
-        <h2 id="categoryConfirmTitle">حذف الفئة</h2><p>هل أنت متأكد من حذف فئة <strong id="categoryConfirmName">—</strong>؟</p>
+        <h2 id="categoryConfirmTitle">حذف الفئة</h2><p>هل أنت متأكد من حذف فئة <strong id="categoryConfirmName">—</strong>؟</p><div class="field" id="categoryReassignField" hidden><label for="categoryReassignTo">انقل المنتجات إلى</label><select class="select" id="categoryReassignTo"><option value="">اختر فئة بديلة...</option></select><small>الفئة تحتوي على منتجات، لذلك يجب اختيار فئة بديلة قبل حذفها.</small></div>
         <div class="categories-feedback__actions"><button class="btn btn-outline" id="cancelCategoryDelete" type="button">إلغاء</button><button class="btn categories-feedback__danger" id="confirmCategoryDelete" type="button">حذف الفئة</button></div>
       </section>
     </div>
@@ -36,19 +36,19 @@ function getElements() {
     modal: document.getElementById("categoryModal"), modalTitle: document.getElementById("categoryModalTitle"), form: document.getElementById("categoryForm"), id: document.getElementById("categoryId"),
     name: document.getElementById("categoryName"), description: document.getElementById("categoryDescription"), status: document.getElementById("categoryStatus"), nameError: document.getElementById("categoryNameError"),
     saveButton: document.getElementById("saveCategoryBtn"), toastStack: document.getElementById("categoriesToastStack"),
-    confirmModal: document.getElementById("categoryConfirmModal"), confirmName: document.getElementById("categoryConfirmName"), cancelDelete: document.getElementById("cancelCategoryDelete"), confirmDelete: document.getElementById("confirmCategoryDelete"),
+    confirmModal: document.getElementById("categoryConfirmModal"), confirmName: document.getElementById("categoryConfirmName"), reassignField: document.getElementById("categoryReassignField"), reassignTo: document.getElementById("categoryReassignTo"), cancelDelete: document.getElementById("cancelCategoryDelete"), confirmDelete: document.getElementById("confirmCategoryDelete"),
     successModal: document.getElementById("categorySuccessModal"), successTitle: document.getElementById("categorySuccessTitle"), successText: document.getElementById("categorySuccessText"), closeSuccess: document.getElementById("closeCategorySuccess")
   };
 }
 
 function listFrom(response) {
   if (Array.isArray(response)) return response;
-  return response?.items || response?.data || response?.results || [];
+  return response?.items || response?.data?.items || response?.results || (Array.isArray(response?.data) ? response.data : []);
 }
 
 function normalizeCategory(item) {
   return {
-    id: item.id, name: item.name || "—", description: item.description || "",
+    id: item.id, name: item.name || "—", description: item.description || "", createdAt: item.created_at, version: Number(item.version || 1),
     products: Number(item.product_count ?? item.products_count ?? item.products ?? 0),
     status: item.status || (item.is_active === false ? "inactive" : "active")
   };
@@ -69,6 +69,7 @@ function filteredCategories(elements) {
 }
 
 function renderCategories(elements) {
+  document.querySelector(".categories-table thead").innerHTML = "<tr><th>المعرّف</th><th>اسم الفئة</th><th>الوصف</th><th>عدد المنتجات</th><th>تاريخ الإنشاء</th><th>النسخة</th><th>الحالة</th><th>الإجراءات</th></tr>";
   const filtered = filteredCategories(elements);
   const totalPages = Math.max(1, Math.ceil(filtered.length / UI_PAGE_SIZE));
   currentPage = Math.min(currentPage, totalPages);
@@ -76,8 +77,8 @@ function renderCategories(elements) {
   const pageCategories = filtered.slice(start, start + UI_PAGE_SIZE);
   elements.tableBody.innerHTML = pageCategories.map(category => `
     <tr data-category-id="${escapeHtml(String(category.id))}">
-      <td>${escapeHtml(category.name)}</td><td class="num">${category.products.toLocaleString("en-US")}</td>
-      <td><span class="categories-status categories-status--${category.status}">${category.status === "active" ? "نشط" : "غير نشط"}</span></td>
+      <td class="num" dir="ltr">${escapeHtml(String(category.id))}</td><td>${escapeHtml(category.name)}</td><td>${escapeHtml(category.description || "—")}</td><td class="num">${category.products.toLocaleString("en-US")}</td><td>${category.createdAt ? new Date(category.createdAt).toLocaleDateString("ar-EG") : "—"}</td><td class="num">${category.version}</td>
+      <td><button class="status-toggle status-toggle--table${category.status === "active" ? "" : " is-inactive"}" type="button" role="switch" aria-checked="${category.status === "active"}" data-action="toggle-status"><span class="status-toggle__label">${category.status === "active" ? "نشط" : "غير نشط"}</span><span class="status-toggle__track" aria-hidden="true"><span class="status-toggle__thumb"></span></span></button></td>
       <td><div class="categories-actions"><button class="categories-action categories-action--edit" type="button" data-action="edit" aria-label="تعديل ${escapeHtml(category.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="categories-action categories-action--delete" type="button" data-action="delete" aria-label="حذف ${escapeHtml(category.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div></td>
     </tr>`).join("");
   elements.empty.hidden = pageCategories.length > 0;
@@ -115,6 +116,8 @@ function closeSuccess(elements) {
 
 function confirmDelete(elements, category) {
   elements.confirmName.textContent = category.name;
+  elements.reassignField.hidden = category.products === 0;
+  elements.reassignTo.innerHTML = '<option value="">اختر فئة بديلة...</option>' + categories.filter(item => item.id !== category.id && item.status === "active").map(item => `<option value="${escapeHtml(String(item.id))}">${escapeHtml(item.name)}</option>`).join("");
   elements.confirmModal.hidden = false;
   document.body.classList.add("modal-open");
   requestAnimationFrame(() => elements.cancelDelete.focus());
@@ -128,7 +131,7 @@ function confirmDelete(elements, category) {
       resolve(result);
     };
     const cancel = () => finish(false);
-    const approve = () => finish(true);
+    const approve = () => { if (category.products > 0 && !elements.reassignTo.value) { showToast(elements, "اختر فئة بديلة لنقل المنتجات إليها.", true); elements.reassignTo.focus(); return; } finish({ reassignTo: elements.reassignTo.value || null }); };
     const overlay = event => { if (event.target === elements.confirmModal) cancel(); };
     elements.cancelDelete.addEventListener("click", cancel);
     elements.confirmDelete.addEventListener("click", approve);
@@ -141,7 +144,8 @@ async function loadCategories(elements) {
   elements.tableBody.setAttribute("aria-busy", "true");
   elements.paginationInfo.textContent = "جاري تحميل الفئات...";
   try {
-    const query = { page: 1, page_size: API_PAGE_SIZE, search: elements.search.value.trim(), status: elements.statusFilter.value === "all" ? undefined : elements.statusFilter.value, sort: "name" };
+    const search = elements.search.value.trim();
+    const query = { page: 1, page_size: API_PAGE_SIZE, search: search || undefined, status: elements.statusFilter.value === "all" ? undefined : elements.statusFilter.value, sort: "name" };
     const [firstResponse, summaryResponse] = await Promise.all([api.get("/api/v1/admin/categories", { query }), api.get("/api/v1/admin/categories/summary")]);
     const pageCount = Math.ceil(Number(firstResponse?.total || listFrom(firstResponse).length) / API_PAGE_SIZE);
     const remaining = pageCount > 1 ? await Promise.all(Array.from({ length: pageCount - 1 }, (_, index) => api.get("/api/v1/admin/categories", { query: { ...query, page: index + 2 } }))) : [];
@@ -208,13 +212,17 @@ export function initCategories() {
     const category = categories.find(item => String(item.id) === row.dataset.categoryId);
     if (!category) return;
     if (action.dataset.action === "edit") openCategoryModal(elements, category);
-    if (action.dataset.action === "delete" && await confirmDelete(elements, category)) {
-      if (category.products > 0) {
-        showToast(elements, "لا يمكن حذف فئة تحتوي على منتجات. انقل المنتجات إلى فئة أخرى أولًا.", true);
-        return;
-      }
+    if (action.dataset.action === "toggle-status") {
+      action.disabled = true;
+      const status = category.status === "active" ? "inactive" : "active";
+      try { await api.patch(`/api/v1/admin/categories/${encodeURIComponent(category.id)}`, { status }); showToast(elements, status === "active" ? "تم تفعيل الفئة" : "تم إيقاف الفئة"); await loadCategories(elements); }
+      catch (error) { action.disabled = false; showToast(elements, error.message, true); }
+    }
+    if (action.dataset.action === "delete") {
+      const decision = await confirmDelete(elements, category);
+      if (!decision) return;
       try {
-        await api.delete(`/api/v1/admin/categories/${encodeURIComponent(category.id)}`);
+        await api.delete(`/api/v1/admin/categories/${encodeURIComponent(category.id)}`, { query: { reassign_to: decision.reassignTo } });
         await loadCategories(elements);
         showSuccess(elements, "تم حذف الفئة بنجاح", `تم حذف فئة «${category.name}» من النظام.`);
       } catch (error) { showToast(elements, error.message, true); }

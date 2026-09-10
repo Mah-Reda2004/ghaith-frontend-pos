@@ -15,6 +15,10 @@
 .reports-filter-bar { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); border: var(--border-width) solid color-mix(in srgb, var(--color-primary) 16%, var(--color-border)); border-radius: var(--radius-md); background: var(--color-surface); }
 .reports-control { min-width: calc(var(--space-7) * 3.2); min-height: var(--space-7); display: flex; align-items: center; gap: var(--space-2); padding-inline: var(--space-3); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-sidebar-bg); color: var(--color-text-muted); }
 .reports-control select { width: 100%; color: var(--color-text); cursor: pointer; }
+.reports-control[hidden] { display: none; }
+.reports-date { min-width: calc(var(--space-7) * 3.8); }
+.reports-date input { min-width: 0; color: var(--color-text); direction: ltr; }
+.reports-pages button:disabled { opacity: .45; cursor: not-allowed; }
 .reports-filter-apply { margin-inline-start: auto; }
 .reports-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
 .reports-stat-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -54,7 +58,19 @@
 .reports-search { width: min(calc(var(--space-7) * 5.5), 100%); display: flex; align-items: center; gap: var(--space-2); padding-inline: var(--space-3); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-sidebar-bg); }
 .reports-search input { width: 100%; min-height: calc(var(--space-7) - var(--space-2)); color: var(--color-text); }
 .reports-search svg { flex: 0 0 auto; color: var(--color-text-muted); }
-.reports-table-wrap { width: 100%; max-width: 100%; max-height: calc(var(--space-7) * 8); overflow: auto; scrollbar-width: thin; }
+.reports-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  height: min(38vh, 320px);
+  min-height: 210px;
+  overflow: scroll;
+  scrollbar-width: auto;
+  scrollbar-color: color-mix(in srgb, var(--color-primary) 70%, var(--color-text-muted)) var(--color-surface-hover);
+}
+.reports-table-wrap::-webkit-scrollbar { width: 12px; height: 12px; }
+.reports-table-wrap::-webkit-scrollbar-track { background: var(--color-surface-hover); }
+.reports-table-wrap::-webkit-scrollbar-thumb { border: 3px solid var(--color-surface-hover); border-radius: var(--radius-pill); background: color-mix(in srgb, var(--color-primary) 70%, var(--color-text-muted)); }
+.reports-table-wrap::-webkit-scrollbar-corner { background: var(--color-surface-hover); }
 .reports-table { min-width: calc(var(--space-7) * 15); }
 .reports-table thead { position: sticky; inset-block-start: 0; z-index: 2; background: var(--color-surface-hover); }
 .reports-table th, .reports-table td { padding-block: var(--space-4); white-space: nowrap; }
@@ -66,5 +82,5 @@
 .reports-pages { display: flex; gap: var(--space-2); }.reports-pages button { width: var(--space-6); height: var(--space-6); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text-muted); }.reports-pages button.is-active { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-fg); }
 .reports-empty[hidden] { display: none; }
 @media (max-width: 1180px) { .reports-page { padding-inline: var(--space-4); }.reports-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.reports-chart-layout, .reports-debts-layout { grid-template-columns: 1fr; }.reports-side-card { min-height: calc(var(--space-7) * 5); } }
-@media (max-width: 767px) { .admin-content, #view-root { width: 100%; max-width: 100vw; min-width: 0; overflow-x: hidden; }.reports-page { width: 100%; max-width: 100%; padding: var(--space-3); }.reports-page > * { min-width: 0; max-width: 100%; }.reports-header, .reports-section-header, .reports-filter-bar, .reports-table-head { align-items: stretch; flex-direction: column; }.reports-tabs { margin-block-end: var(--space-4); }.reports-actions { width: 100%; }.reports-actions .btn { flex: 1; }.reports-filter-bar { gap: var(--space-2); }.reports-control { width: 100%; min-width: 0; }.reports-filter-apply { width: 100%; margin-inline-start: 0; }.reports-stat-grid { grid-template-columns: 1fr; }.reports-stat { min-height: calc(var(--space-7) * 2.6); }.reports-chart-card, .reports-side-card { padding: var(--space-4); }.reports-chart { height: calc(var(--space-7) * 4.5); }.reports-search { width: 100%; }.reports-table-footer { align-items: flex-start; flex-direction: column; } }
-@media print { .admin-sidebar, .admin-mobile-bar, .reports-header .theme-toggle, .reports-tabs, .reports-actions, .reports-filter-bar, .toast-stack { display: none !important; }.app-shell { display: block; }.admin-content { width: 100%; }.reports-page { padding: 0; }.reports-table-wrap { max-height: none; overflow: visible; } }
+@media (max-width: 767px) { .admin-content, #view-root { width: 100%; max-width: 100vw; min-width: 0; overflow-x: hidden; }.reports-page { width: 100%; max-width: 100%; padding: var(--space-3); }.reports-page > * { min-width: 0; max-width: 100%; }.reports-header, .reports-section-header, .reports-filter-bar, .reports-table-head { align-items: stretch; flex-direction: column; }.reports-tabs { margin-block-end: var(--space-4); }.reports-actions { width: 100%; }.reports-actions .btn { flex: 1; }.reports-filter-bar { gap: var(--space-2); }.reports-control { width: 100%; min-width: 0; }.reports-filter-apply { width: 100%; margin-inline-start: 0; }.reports-stat-grid { grid-template-columns: 1fr; }.reports-stat { min-height: calc(var(--space-7) * 2.6); }.reports-chart-card, .reports-side-card { padding: var(--space-4); }.reports-chart { height: calc(var(--space-7) * 4.5); }.reports-search { width: 100%; }.reports-table-wrap { height: min(42vh, 280px); min-height: 190px; }.reports-table-footer { align-items: flex-start; flex-direction: column; } }
+@media print { .admin-sidebar, .admin-mobile-bar, .reports-header .theme-toggle, .reports-tabs, .reports-actions, .reports-filter-bar, .toast-stack { display: none !important; }.app-shell { display: block; }.admin-content { width: 100%; }.reports-page { padding: 0; }.reports-table-wrap { height: auto; min-height: 0; max-height: none; overflow: visible; } }

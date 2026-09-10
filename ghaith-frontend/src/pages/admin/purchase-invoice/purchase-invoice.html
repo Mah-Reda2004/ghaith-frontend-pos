@@ -1,0 +1,59 @@
+<section class="purchase-page" dir="rtl">
+  <header class="content__header purchase-header">
+    <div><a class="purchase-back" href="#suppliers">→ العودة للموردين</a><h1 class="page-title">إنشاء فاتورة مشتريات</h1><p class="page-subtitle">سجّل مشترياتك وحدد الأصناف وطريقة سداد المورد</p></div>
+    <span class="purchase-badge" id="purchaseStatus">فاتورة جديدة</span>
+  </header>
+  <p class="purchase-notice">يمكنك حفظ الفاتورة كمسودة، ثم مراجعتها واعتمادها لترحيل المخزون وحساب المورد.</p>
+  <div id="purchaseFeedback" role="status" aria-live="polite"></div>
+  <div class="purchase-resume" id="purchaseResume" hidden><span>عندك مسودة محفوظة، تقدر تكملها في أي وقت.</span><button class="btn btn-outline" type="button" id="resumePurchase">استكمال المسودة</button></div>
+  <form id="purchaseEditor" novalidate>
+    <section class="purchase-card" aria-labelledby="purchaseInfoTitle">
+      <div class="purchase-section-heading"><h2 id="purchaseInfoTitle">بيانات الفاتورة</h2><span>01</span></div>
+      <div class="purchase-grid">
+        <div class="field"><label for="piSupplier">المورد <b>*</b></label><div class="purchase-inline"><select class="select" id="piSupplier" name="supplierId"><option value="">اختر المورد</option></select><button class="btn btn-outline" type="button" id="piAddSupplier">+ مورد</button></div><small class="purchase-error" data-error="supplierId"></small></div>
+        <div class="field"><label>رقم الفاتورة</label><p class="purchase-auto-number" id="piInvoiceNumber">يُولّد تلقائيًا من الخادم عند حفظ الفاتورة</p></div>
+        <!-- <div class="field"><label>رقم الفاتورة</label><p class="purchase-auto-number">يُولّد تلقائيًا عند حفظ الفاتورة</p></div> -->
+        <div class="field"><label for="piDate">تاريخ الفاتورة <b>*</b></label><input class="input" id="piDate" name="date" type="date"><small class="purchase-error" data-error="date"></small></div>
+      </div>
+    </section>
+    <section class="purchase-card" aria-labelledby="purchaseItemsTitle">
+      <div class="purchase-section-heading"><h2 id="purchaseItemsTitle">أصناف الفاتورة <span id="piCount">0 أصناف</span></h2><span>02</span></div>
+      <div class="purchase-scan-row">
+        <div class="field"><label for="piBarcode">مسح الباركود</label><input class="input num" id="piBarcode" placeholder="امسح الباركود ثم Enter" autocomplete="off" dir="ltr"></div>
+        <div class="field"><label for="piSearch">البحث عن صنف</label><input class="input" id="piSearch" type="search" placeholder="اسم المنتج أو SKU أو الباركود" autocomplete="off"></div>
+        <button class="btn btn-outline" type="button" id="piAddProduct">+ منتج جديد</button>
+      </div>
+      <div id="piResults" class="purchase-results" aria-live="polite" hidden></div>
+      <small class="purchase-error" data-error="items"></small>
+      <div class="table-responsive"><table class="data-table purchase-items"><thead><tr><th>المنتج / النسخة</th><th>الباركود / SKU</th><th>الكمية</th><th>سعر الشراء</th><th>الخصم (ج.م)</th><th>الإجمالي</th><th>حذف</th></tr></thead><tbody id="piItems"></tbody></table></div>
+      <div class="empty-state" id="piEmpty"><h3>ابدأ بإضافة أول صنف</h3><p>امسح الباركود أو ابحث عن المنتج لإضافته إلى الفاتورة.</p></div>
+    </section>
+    <div class="purchase-bottom">
+      <section class="purchase-card" aria-labelledby="purchasePaymentTitle">
+        <div class="purchase-section-heading"><h2 id="purchasePaymentTitle">تفاصيل السداد</h2><span>03</span></div>
+        <fieldset class="purchase-payment-options"><legend class="purchase-sr-only">حالة الدفع</legend><label><input type="radio" name="paymentState" value="full" checked> مدفوعة بالكامل</label><label><input type="radio" name="paymentState" value="partial"> دفع جزئي</label><label><input type="radio" name="paymentState" value="deferred"> آجلة بالكامل</label></fieldset>
+        <div class="purchase-grid purchase-grid--two">
+          <div class="field" id="piPaidField"><label for="piPaid">المدفوع الآن (ج.م)</label><input class="input num" type="number" min="0" step="0.01" id="piPaid" name="paid" value="0"><small class="purchase-error" data-error="paid"></small></div>
+          <div class="field" id="piMethodField"><label for="piMethod">طريقة الدفع</label><select class="select" id="piMethod" name="method"><option value="cash">نقدي</option><option value="bank">تحويل بنكي</option><option value="wallet">محفظة إلكترونية</option><option value="card">بطاقة</option></select></div>
+          <div class="field" id="piDueField"><label for="piDue">تاريخ الاستحقاق <b>*</b></label><input class="input" id="piDue" type="date" name="dueDate"><small class="purchase-error" data-error="dueDate"></small></div>
+          <div class="field"><label for="piReference">مرجع الدفع (اختياري)</label><input class="input" id="piReference" name="reference" placeholder="رقم التحويل أو الإيصال"></div>
+        </div>
+        <div class="field"><label for="piNotes">ملاحظات الفاتورة</label><textarea class="input" id="piNotes" name="notes" rows="3" placeholder="تفاصيل الشحنة أو شروط التعامل مع المورد"></textarea></div>
+      </section>
+      <section class="purchase-card purchase-summary" aria-labelledby="purchaseTotalsTitle">
+        <h2 id="purchaseTotalsTitle">ملخص الفاتورة</h2>
+        <div class="purchase-total-row"><span>الإجمالي قبل الخصم</span><b class="num" id="piSubtotal">0.00</b></div>
+        <div class="purchase-total-row"><span>خصومات الأصناف</span><b class="num" id="piLineDiscount">0.00</b></div>
+        <div class="purchase-summary-input"><label for="piDiscount">خصم إضافي (ج.م)</label><input class="input num" id="piDiscount" name="discount" type="number" min="0" step="0.01" value="0"></div><small class="purchase-error" data-error="discount"></small>
+        <div class="purchase-summary-input"><label for="piShipping">شحن ومصاريف (ج.م)</label><input class="input num" id="piShipping" name="shipping" type="number" min="0" step="0.01" value="0"></div><small class="purchase-error" data-error="shipping"></small>
+        <div class="purchase-total-row purchase-grand-total"><span>الإجمالي النهائي <small>ج.م</small></span><strong class="num" id="piTotal">0.00</strong></div>
+        <div class="purchase-total-row purchase-paid"><span>المدفوع</span><b class="num" id="piPaidTotal">0.00</b></div>
+        <div class="purchase-total-row purchase-remaining"><span>المتبقي للمورد</span><b class="num" id="piRemaining">0.00</b></div>
+      </section>
+    </div>
+    <footer class="purchase-footer"><span id="piSaveStatus">المسودة لا تؤثر في المخزون أو حساب المورد</span><div><button class="btn btn-outline" type="button" id="piSaveDraft">حفظ كمسودة</button><button class="btn btn-primary" type="submit">مراجعة واعتماد الفاتورة</button></div></footer>
+  </form>
+  <section id="piReceipt" class="purchase-card" hidden></section>
+  <section class="purchase-card purchase-history"><h2>الفواتير المحفوظة على هذا المتصفح</h2><div id="piHistory"></div></section>
+  <div class="modal-overlay" id="piModalOverlay" hidden><section class="modal purchase-modal" role="dialog" aria-modal="true" aria-labelledby="piModalTitle"><header class="modal__header"><h2 class="modal__title" id="piModalTitle"></h2><button class="btn-icon" id="piCloseModal" type="button" aria-label="إغلاق">×</button></header><div id="piModalBody"></div></section></div>
+</section>

@@ -1,4 +1,5 @@
 import { debounce, escapeHtml } from "../../../core/utils.js";
+import { api, listFrom } from "../../../core/api.js";
 
 const REPORTS = {
   sales: {
@@ -74,6 +75,81 @@ const REPORTS = {
   }
 };
 
+const REPORT_ENDPOINTS = { profits: "overview", customers: "debts", suppliers: "purchases", inventory: "inventory-revaluations", returns: "returns-exchanges" };
+REPORTS.discounts = { ...REPORTS.expenses, label: "الخصومات", title: "تقرير الخصومات", subtitle: "تفاصيل الخصومات المطبقة خلال الفترة المحددة", tableTitle: "تفاصيل الخصومات", search: "بحث في الخصومات..." };
+REPORTS.commissions = { ...REPORTS.expenses, label: "العمولات", title: "تقرير العمولات", subtitle: "تفاصيل عمولات موظفي المبيعات خلال الفترة المحددة", tableTitle: "تفاصيل العمولات", search: "بحث في العمولات..." };
+const PERIOD_LABELS = { today: "اليوم", yesterday: "أمس", this_week: "هذا الأسبوع", this_month: "هذا الشهر", last_30_days: "آخر 30 يومًا", custom: "فترة مخصصة" };
+const FIELD_LABELS = {
+  id: "المعرّف", invoice_number: "رقم الفاتورة", reference_number: "رقم المرجع", created_at: "التاريخ", date: "التاريخ",
+  name: "الاسم", name_ar: "الاسم", product_name: "المنتج", customer_name: "العميل", supplier_name: "المورد",
+  cashier_name: "الكاشير", sales_person_name: "موظف المبيعات", category_name: "الفئة", sku: "SKU", status: "الحالة",
+  quantity: "الكمية", qty: "الكمية", invoice_count: "عدد الفواتير", total: "الإجمالي", total_amount: "الإجمالي",
+  sales: "المبيعات", total_sales: "إجمالي المبيعات", net_sales: "صافي المبيعات", paid_amount: "المدفوع",
+  remaining_amount: "المتبقي", discount_amount: "الخصم", discount_percent: "نسبة الخصم", cost: "التكلفة", total_cost: "إجمالي التكلفة",
+  profit: "الربح", gross_profit: "إجمالي الربح", net_profit: "صافي الربح", profit_margin: "هامش الربح", amount: "المبلغ",
+  payment_method: "طريقة الدفع", payment_status: "حالة الدفع", phone: "رقم الهاتف", customer_phone: "هاتف العميل",
+  purchase_price: "سعر الشراء", sale_price: "سعر البيع", unit_price: "سعر الوحدة", stock_qty: "كمية المخزون",
+  stock_quantity: "كمية المخزون", opening_stock: "رصيد أول المدة", closing_stock: "رصيد آخر المدة", inventory_value: "قيمة المخزون",
+  sold_quantity: "الكمية المباعة", returned_quantity: "الكمية المرتجعة", return_amount: "قيمة المرتجع", reason: "السبب",
+  expense_type: "نوع المصروف", expense_type_name: "نوع المصروف", commission_rate: "نسبة العمولة", commission_amount: "قيمة العمولة",
+  user_name: "المستخدم", username: "اسم المستخدم", cashier: "الكاشير", sales_person: "موظف المبيعات",
+  category: "الفئة", product: "المنتج", supplier: "المورد", customer: "العميل", notes: "ملاحظات",
+  updated_at: "آخر تحديث", due_date: "تاريخ الاستحقاق", opened_at: "وقت فتح الوردية", closed_at: "وقت إغلاق الوردية"
+};
+const SUMMARY_LABELS = { ...FIELD_LABELS, total_items: "عدد النتائج", total_products: "عدد المنتجات", total_expenses: "إجمالي المصروفات", total_debts: "إجمالي المديونيات", total_purchases: "إجمالي المشتريات", net_profit: "صافي الربح" };
+const FIELD_WORDS = {
+  total: "إجمالي", net: "صافي", gross: "إجمالي", count: "العدد", number: "رقم", name: "الاسم", date: "التاريخ", time: "الوقت",
+  amount: "المبلغ", price: "السعر", cost: "التكلفة", quantity: "الكمية", qty: "الكمية", status: "الحالة", type: "النوع",
+  invoice: "الفاتورة", product: "المنتج", customer: "العميل", supplier: "المورد", cashier: "الكاشير", sales: "المبيعات",
+  payment: "الدفع", paid: "المدفوع", remaining: "المتبقي", discount: "الخصم", profit: "الربح", commission: "العمولة",
+  purchase: "المشتريات", purchases: "المشتريات", return: "المرتجع", returns: "المرتجعات", expense: "المصروف", expenses: "المصروفات",
+  stock: "المخزون", inventory: "المخزون", opening: "الافتتاحي", closing: "الختامي", method: "الطريقة", rate: "النسبة",
+  percent: "النسبة", margin: "الهامش", phone: "الهاتف", category: "الفئة", user: "المستخدم", created: "الإنشاء", updated: "التحديث",
+  due: "الاستحقاق", reference: "المرجع", reason: "السبب", note: "الملاحظة", notes: "الملاحظات", value: "القيمة"
+};
+
+function fieldLabel(field) {
+  if (FIELD_LABELS[field]) return FIELD_LABELS[field];
+  const translated = String(field).split("_").map(word => FIELD_WORDS[word.toLowerCase()] || "").filter(Boolean).join(" ");
+  return translated || "بيانات إضافية";
+}
+
+function getItems(response) {
+  const direct = listFrom(response);
+  if (direct.length) return direct;
+  for (const key of ["rows", "records", "entries", "details", "invoices", "products", "purchases", "debts", "expenses", "returns", "revaluations"]) {
+    const value = response?.[key] || response?.data?.[key];
+    if (Array.isArray(value)) return value;
+  }
+  return [];
+}
+
+function displayValue(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "boolean") return value ? "نعم" : "لا";
+  if (typeof value === "object") return value.name || value.name_ar || value.username || value.invoice_number || value.id || "—";
+  if (typeof value === "number") return value.toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+  if (typeof value === "string" && /^\d{4}-\d\d-\d\dT/.test(value)) return new Date(value).toLocaleString("ar-EG");
+  return String(value);
+}
+
+function reportFromResponse(base, response) {
+  const items = getItems(response);
+  const keys = items.length ? Object.keys(items[0]).filter(field => !Array.isArray(items[0][field])).slice(0, 9) : [];
+  const summary = response?.summary || response?.totals || response?.data?.summary || response?.data?.totals || {};
+  const summaryEntries = Object.entries(summary).filter(([, value]) => ["string", "number"].includes(typeof value)).slice(0, 4);
+  return {
+    ...base,
+    chart: null,
+    donut: false,
+    sideRows: null,
+    columns: items.length ? keys.map(fieldLabel) : base.columns,
+    rows: items.map(item => keys.map(key => displayValue(item[key]))),
+    total: String(response?.total ?? response?.data?.total ?? items.length),
+    stats: summaryEntries.length ? summaryEntries.map(([key, value], index) => [SUMMARY_LABELS[key] || fieldLabel(key), displayValue(value), "", ["primary", "success", "info", "warning"][index], "", "chart"]) : base.stats.map(stat => [stat[0], "0", stat[2], stat[3], "", stat[5]])
+  };
+}
+
 const ICON_PATHS = {
   wallet: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 10h5v5h-5a2.5 2.5 0 0 1 0-5Z"/>', file: '<path d="M6 3h9l3 3v15H6zM9 10h6M9 14h6"/>', calculator: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/>', chart: '<path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/>', box: '<path d="m4 7 8-4 8 4-8 4-8-4Zm0 0v10l8 4 8-4V7M12 11v10"/>', receipt: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3ZM9 8h6M9 12h6"/>', cart: '<circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/><path d="M3 4h2l2 11h11l2-8H6"/>', alert: '<path d="M12 3 2 21h20L12 3Zm0 6v5m0 3h.01"/>', users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.8"/>', badge: '<circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/>', calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>', swap: '<path d="m7 7-4 4 4 4M3 11h14M17 17l4-4-4-4M21 13H7"/>'
 };
@@ -121,7 +197,8 @@ function renderVisual(report) {
 }
 
 function renderTable(report) {
-  return `<section class="reports-table-card"><header class="reports-table-head"><h3>${escapeHtml(report.tableTitle)}</h3><label class="reports-search"><input id="reportsSearch" type="search" placeholder="${escapeHtml(report.search)}" autocomplete="off"/>${icon("chart")}</label></header><div class="table-responsive reports-table-wrap"><table class="data-table reports-table"><thead><tr>${report.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody id="reportsTableBody">${report.rows.map((row) => `<tr data-search="${escapeHtml(row.map((cell) => typeof cell === "object" ? cell.text : cell).join(" ").toLowerCase())}">${row.map((cell) => `<td>${renderCell(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table><div class="empty-state reports-empty" id="reportsEmpty" hidden><h3>لا توجد نتائج مطابقة</h3><p>جرّب تعديل البحث أو الفلاتر.</p></div></div><footer class="reports-table-footer"><span>عرض 1 إلى ${report.rows.length} من ${escapeHtml(report.total)} نتيجة</span><div class="reports-pages"><button type="button">‹</button><button class="is-active" type="button">1</button><button type="button">2</button><button type="button">3</button><button type="button">›</button></div></footer></section>`;
+  const page = Number(report.page || 1), pages = Math.max(1, Math.ceil(Number(report.total || 0) / Number(report.pageSize || 20)));
+  return `<section class="reports-table-card"><header class="reports-table-head"><h3>${escapeHtml(report.tableTitle)}</h3><label class="reports-search"><input id="reportsSearch" type="search" placeholder="${escapeHtml(report.search)}" autocomplete="off"/>${icon("chart")}</label></header><div class="table-responsive reports-table-wrap"><table class="data-table reports-table"><thead><tr>${report.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody id="reportsTableBody">${report.rows.map((row) => `<tr data-search="${escapeHtml(row.map((cell) => typeof cell === "object" ? cell.text : cell).join(" ").toLowerCase())}">${row.map((cell) => `<td>${renderCell(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table><div class="empty-state reports-empty" id="reportsEmpty"${report.rows.length ? " hidden" : ""}><h3>لا توجد بيانات</h3><p>لا توجد نتائج ضمن الفترة المحددة.</p></div></div><footer class="reports-table-footer"><span>صفحة ${page} من ${pages} — ${escapeHtml(report.total)} نتيجة</span><div class="reports-pages"><button type="button" data-page="${page - 1}" ${page <= 1 ? "disabled" : ""}>‹</button><button class="is-active" type="button">${page}</button><button type="button" data-page="${page + 1}" ${page >= pages ? "disabled" : ""}>›</button></div></footer></section>`;
 }
 
 function renderReport(reportKey) {
@@ -129,7 +206,7 @@ function renderReport(reportKey) {
   const details = reportKey === "debts"
     ? `<section class="reports-debts-layout">${renderDonut()}${renderTable(report)}</section>`
     : `${renderVisual(report)}${renderTable(report)}`;
-  return `<header class="reports-section-header"><div><h2>${escapeHtml(report.title)}</h2><p>${escapeHtml(report.subtitle)}</p></div><div class="reports-actions"><button class="btn btn-outline" id="reportsPrint" type="button">${icon("file")}طباعة</button><button class="btn btn-primary" id="reportsExport" type="button">${icon("receipt")}تصدير</button></div></header><section class="reports-filter-bar"><label class="reports-control">${icon("calendar")}<select id="reportsPeriod"><option>هذا الشهر</option><option>الشهر السابق</option><option>آخر 3 أشهر</option><option>هذا العام</option></select></label><label class="reports-control">${icon("box")}<select id="reportsScope"><option>جميع الفئات</option><option>العبايات</option><option>الثياب</option><option>الإكسسوارات</option></select></label><button class="btn btn-outline reports-filter-apply" id="reportsApply" type="button">تطبيق الفلاتر</button></section>${renderStats(report.stats)}${details}`;
+  return `<header class="reports-section-header"><div><h2>${escapeHtml(report.title)}</h2><p>${escapeHtml(report.subtitle)}</p></div><div class="reports-actions"><button class="btn btn-outline" id="reportsPrint" type="button">${icon("file")}طباعة</button><button class="btn btn-primary" id="reportsExport" type="button">${icon("receipt")}تصدير</button></div></header><section class="reports-filter-bar"><label class="reports-control">${icon("calendar")}<select id="reportsPeriod">${Object.entries(PERIOD_LABELS).map(([value, label]) => `<option value="${value}"${value === report.period ? " selected" : ""}>${label}</option>`).join("")}</select></label><label class="reports-control reports-date"${report.period === "custom" ? "" : " hidden"}>من<input id="reportsFromDate" type="date" value="${escapeHtml(report.fromDate || "")}" /></label><label class="reports-control reports-date"${report.period === "custom" ? "" : " hidden"}>إلى<input id="reportsToDate" type="date" value="${escapeHtml(report.toDate || "")}" /></label><button class="btn btn-outline reports-filter-apply" id="reportsApply" type="button">تطبيق الفلاتر</button></section>${renderStats(report.stats)}${details}`;
 }
 
 function downloadCsv(report) {
@@ -139,7 +216,7 @@ function downloadCsv(report) {
   const link = document.createElement("a"); link.href = url; link.download = `${report.label}.csv`; link.click(); URL.revokeObjectURL(url);
 }
 
-function bindReportInteractions(reportKey, cleanup) {
+function bindReportInteractions(reportKey, cleanup, reload) {
   const report = REPORTS[reportKey]; const search = document.getElementById("reportsSearch"); const body = document.getElementById("reportsTableBody"); const empty = document.getElementById("reportsEmpty");
   document.getElementById("reportsPrint").lastChild.textContent = "تصدير PDF";
   document.getElementById("reportsExport").lastChild.textContent = "تصدير Excel";
@@ -147,24 +224,46 @@ function bindReportInteractions(reportKey, cleanup) {
   const reportTable = document.querySelector(".reports-table");
   const exportReport = () => window.GhaithPrint?.exportTableExcel({ title: report.title, table: reportTable, fileName: `ghaith-${reportKey}` });
   const printReport = () => window.GhaithPrint?.printTable({ title: report.title, subtitle: report.subtitle, table: reportTable, summary: report.stats.map(([label,value,unit]) => ({ label, value: `${value} ${unit}`.trim() })) });
-  const showApplied = () => showToast("تم تطبيق الفلاتر على التقرير");
-  search.addEventListener("input", filter); document.getElementById("reportsExport").addEventListener("click", exportReport); document.getElementById("reportsPrint").addEventListener("click", printReport); document.getElementById("reportsApply").addEventListener("click", showApplied);
-  cleanup.push(() => { search.removeEventListener("input", filter); document.getElementById("reportsExport")?.removeEventListener("click", exportReport); document.getElementById("reportsPrint")?.removeEventListener("click", printReport); document.getElementById("reportsApply")?.removeEventListener("click", showApplied); });
+  const applyFilters = () => {
+    const period = document.getElementById("reportsPeriod").value;
+    const fromDate = document.getElementById("reportsFromDate")?.value || "";
+    const toDate = document.getElementById("reportsToDate")?.value || "";
+    if (period === "custom" && (!fromDate || !toDate)) { showToast("حدد تاريخ البداية والنهاية", true); return; }
+    if (period === "custom" && fromDate > toDate) { showToast("تاريخ البداية يجب أن يسبق تاريخ النهاية", true); return; }
+    reload({ period, fromDate, toDate, page: 1 });
+  };
+  const periodChanged = event => document.querySelectorAll(".reports-date").forEach(field => { field.hidden = event.target.value !== "custom"; });
+  search.addEventListener("input", filter); document.getElementById("reportsExport").addEventListener("click", exportReport); document.getElementById("reportsPrint").addEventListener("click", printReport); document.getElementById("reportsApply").addEventListener("click", applyFilters); document.getElementById("reportsPeriod").addEventListener("change", periodChanged);
+  cleanup.push(() => { search.removeEventListener("input", filter); document.getElementById("reportsExport")?.removeEventListener("click", exportReport); document.getElementById("reportsPrint")?.removeEventListener("click", printReport); document.getElementById("reportsApply")?.removeEventListener("click", applyFilters); document.getElementById("reportsPeriod")?.removeEventListener("change", periodChanged); });
 }
 
-function showToast(message) {
-  const stack = document.getElementById("reportsToastStack"); if (!stack) return; const toast = document.createElement("div"); toast.className = "toast toast--success"; toast.textContent = message; stack.append(toast); window.setTimeout(() => toast.remove(), 2400);
+function showToast(message, isError = false) {
+  const stack = document.getElementById("reportsToastStack"); if (!stack) return; const toast = document.createElement("div"); toast.className = `toast toast--${isError ? "error" : "success"}`; toast.textContent = message; stack.append(toast); window.setTimeout(() => toast.remove(), 2400);
 }
 
 export function initReports() {
   const tabs = document.getElementById("reportsTabs"); const view = document.getElementById("reportsView"); const cleanups = [];
   if (!tabs || !view) throw new Error("reports-view-elements-missing");
   window.bindAdminThemeToggle?.(document.getElementById("reportsThemeToggle"));
-  let active = "sales";
-  const load = (key) => { active = Object.hasOwn(REPORTS, key) ? key : "sales"; while (cleanups.length) cleanups.pop()(); tabs.querySelectorAll("button").forEach((button) => button.classList.toggle("is-active", button.dataset.report === active)); view.innerHTML = renderReport(active); bindReportInteractions(active, cleanups); };
+  let active = "sales", requestId = 0;
+  const filters = Object.fromEntries(Object.keys(REPORTS).map(key => [key, { period: "this_month", fromDate: "", toDate: "", page: 1, pageSize: 20 }]));
+  const load = async (key, changes = {}) => {
+    active = Object.hasOwn(REPORTS, key) ? key : "sales"; const current = ++requestId;
+    filters[active] = { ...filters[active], ...changes };
+    const state = filters[active];
+    while (cleanups.length) cleanups.pop()(); tabs.querySelectorAll("button").forEach(button => button.classList.toggle("is-active", button.dataset.report === active));
+    view.innerHTML = '<div class="view-loading"><span class="spinner"></span><span>جاري تحميل التقرير...</span></div>';
+    try {
+      const response = await api.get(`/api/v1/admin/reports/${REPORT_ENDPOINTS[active] || active}`, { query: { period: state.period, from_date: state.period === "custom" ? state.fromDate : undefined, to_date: state.period === "custom" ? state.toDate : undefined, page: state.page, page_size: state.pageSize } });
+      if (current !== requestId) return;
+      REPORTS[active] = reportFromResponse(REPORTS[active], response);
+      Object.assign(REPORTS[active], state);
+      view.innerHTML = renderReport(active); bindReportInteractions(active, cleanups, changes => load(active, changes));
+    } catch (error) { if (current === requestId) view.innerHTML = `<section class="admin-view__error"><h2>تعذّر تحميل التقرير</h2><p>${escapeHtml(error.message)}</p></section>`; }
+  };
   const onTabClick = (event) => { const button = event.target.closest("[data-report]"); if (button) load(button.dataset.report); };
-  const onPageClick = (event) => { const button = event.target.closest(".reports-pages button"); if (!button || !/^\d+$/.test(button.textContent.trim())) return; button.parentElement.querySelectorAll("button").forEach((item) => item.classList.toggle("is-active", item === button)); };
+  const onPageClick = (event) => { const button = event.target.closest("[data-page]"); if (!button || button.disabled) return; load(active, { page: Number(button.dataset.page) }); };
   const onData = (event) => { const { report, data } = event.detail || {}; if (report && data && REPORTS[report]) { REPORTS[report] = { ...REPORTS[report], ...data }; if (active === report) load(active); } };
   tabs.addEventListener("click", onTabClick); view.addEventListener("click", onPageClick); document.addEventListener("ghaith:reports-data", onData); load(active);
-  return () => { while (cleanups.length) cleanups.pop()(); tabs.removeEventListener("click", onTabClick); view.removeEventListener("click", onPageClick); document.removeEventListener("ghaith:reports-data", onData); };
+  return () => { requestId++; while (cleanups.length) cleanups.pop()(); tabs.removeEventListener("click", onTabClick); view.removeEventListener("click", onPageClick); document.removeEventListener("ghaith:reports-data", onData); };
 }

@@ -204,6 +204,7 @@
     </div>
     <h2>تأكيد إغلاق الوردية</h2>
     <p>هل أنت متأكد من رغبتك في إغلاق الوردية وترحيل المبالغ؟ لا يمكن التراجع عن هذه الخطوة وسيتم تصفير العدادات للوردية الجديدة.</p>
+    <label class="field" for="countedCash"><span>النقدية الفعلية في الدرج</span><input class="input num" id="countedCash" type="number" min="0" step="0.01" required><small id="countedCashError" class="purchase-error"></small></label>
     <div class="sc-confirm-actions">
       <button class="btn sc-confirm-cancel" id="cancelCloseBtn" type="button">إلغاء</button>
       <button class="btn sc-confirm-yes" id="confirmCloseBtn" type="button">
@@ -237,6 +238,6 @@
 
 <div class="toast-stack" id="toastStack"></div>
 
-<script src="shift-close.js"></script>
+<script type="module" src="shift-close.js"></script>
 </body>
 </html>

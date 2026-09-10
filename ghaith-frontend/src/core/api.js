@@ -52,22 +52,42 @@ async function parseResponse(response) {
 function getErrorMessage(response, data) {
   if (Array.isArray(data?.detail)) return data.detail.map(item => item.msg).filter(Boolean).join("، ");
   if (typeof data?.detail === "string") return data.detail;
+  if (typeof data?.error?.message === "string") return data.error.message;
   if (typeof data?.message === "string") return data.message;
   if (response.status === 401) return "اسم المستخدم أو كلمة المرور غير صحيحة.";
   if (response.status === 403) return "ليس لديك صلاحية لتنفيذ هذا الإجراء.";
+  if (response.status === 429) return "عدد الطلبات كبير حالياً. انتظر لحظات ثم حاول مرة أخرى.";
   if (response.status >= 500) return "حدث خطأ في الخادم. حاول مرة أخرى لاحقاً.";
   return "تعذّر إكمال الطلب.";
+}
+
+function retryDelay(response, attempt) {
+  const retryAfter = response.headers.get("Retry-After");
+  const seconds = Number(retryAfter);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, 5000);
+  const date = Date.parse(retryAfter || "");
+  if (Number.isFinite(date)) return Math.min(Math.max(date - Date.now(), 0), 5000);
+  return 500 * (attempt + 1);
+}
+
+function wait(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
 async function refreshAccessToken() {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
 
-  const response = await fetch(buildUrl("/api/v1/auth/refresh"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken })
-  });
+  let response;
+  try {
+    response = await fetch(buildUrl("/api/v1/auth/refresh"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    });
+  } catch {
+    return false;
+  }
 
   if (!response.ok) {
     clearTokens();
@@ -80,7 +100,7 @@ async function refreshAccessToken() {
 }
 
 export async function apiRequest(path, options = {}) {
-  const { query, auth = true, retry = true, headers: customHeaders, body, ...fetchOptions } = options;
+  const { query, auth = true, retry = true, rateLimitAttempt = 0, headers: customHeaders, body, ...fetchOptions } = options;
   const headers = new Headers(customHeaders || {});
   headers.set("Accept", "application/json");
   if (body !== undefined && !(body instanceof FormData)) headers.set("Content-Type", "application/json");
@@ -99,6 +119,11 @@ export async function apiRequest(path, options = {}) {
 
   if (response.status === 401 && auth && retry && await refreshAccessToken()) {
     return apiRequest(path, { ...options, retry: false });
+  }
+
+  if (response.status === 429 && (fetchOptions.method || "GET") === "GET" && rateLimitAttempt < 2) {
+    await wait(retryDelay(response, rateLimitAttempt));
+    return apiRequest(path, { ...options, rateLimitAttempt: rateLimitAttempt + 1 });
   }
 
   if (response.status === 401 && auth) {
@@ -122,5 +147,17 @@ export const api = {
   patch: (path, body, options = {}) => apiRequest(path, { ...options, method: "PATCH", body }),
   delete: (path, options = {}) => apiRequest(path, { ...options, method: "DELETE" })
 };
+
+export function listFrom(response) {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.data?.items)) return response.data.items;
+  if (Array.isArray(response?.results)) return response.results;
+  return Array.isArray(response?.data) ? response.data : [];
+}
+
+export function idempotencyKey() {
+  return crypto.randomUUID();
+}
 
 export { API_BASE_URL };

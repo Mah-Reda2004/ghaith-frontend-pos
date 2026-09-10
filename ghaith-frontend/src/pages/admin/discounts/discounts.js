@@ -1,27 +1,26 @@
-export function initDiscounts(){
+import { api, listFrom } from "../../../core/api.js";
+import { escapeHtml } from "../../../core/utils.js";
+
+export function initDiscounts() {
   window.bindAdminThemeToggle?.(document.getElementById("discountsThemeToggle"));
-  const table=document.getElementById("discountTableBody");
-  const modal=document.getElementById("discountModal");
-  const form=document.getElementById("discountForm");
-  const title=document.getElementById("discountModalTitle");
-  const name=document.getElementById("discountName");
-  const value=document.getElementById("discountValue");
-  const error=document.getElementById("discountError");
-  const success=document.getElementById("discountSuccess");
-  let editingRow=null;
-  const rows=()=>[...table.querySelectorAll("tr")];
-  const syncStats=()=>{const values=rows().map(row=>Number(row.dataset.value));document.getElementById("discountTypesCount").textContent=values.length;document.getElementById("discountMax").textContent=`${Math.max(...values)}%`;document.getElementById("discountMin").textContent=`${Math.min(...values)}%`};
-  const setOpen=open=>{modal.hidden=!open;document.body.style.overflow=open?"hidden":"";if(open)setTimeout(()=>name.focus(),0)};
-  const openEditor=row=>{editingRow=row;title.textContent="تعديل الخصم";name.value=row.dataset.name;value.value=row.dataset.value;name.readOnly=true;clearError();setOpen(true)};
-  const openCreator=()=>{editingRow=null;title.textContent="إضافة فئة خصم";name.value="";value.value="";name.readOnly=false;clearError();setOpen(true)};
-  const clearError=()=>{error.textContent="";value.classList.remove("is-invalid");name.classList.remove("is-invalid")};
-  const validate=()=>{clearError();const amount=Number(value.value);if(!name.value.trim()){error.textContent="يرجى إدخال نوع العميل";name.classList.add("is-invalid");return false}if(value.value===""||!Number.isFinite(amount)||amount<0||amount>100){error.textContent="يجب أن تكون نسبة الخصم بين 0% و100%";value.classList.add("is-invalid");return false}return true};
-  const rowMarkup=(customer,amount)=>`<td><strong>${customer}</strong></td><td><b class="${amount>=15?"is-warning-text":amount>0?"is-orange-text":""}">${amount}%</b></td><td><button class="discount-status is-active" type="button">نشط</button></td><td><button class="discount-edit" type="button" aria-label="تعديل خصم ${customer}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"/></svg></button></td>`;
-  const submit=e=>{e.preventDefault();if(!validate())return;const customer=name.value.trim();const amount=Number(value.value);if(editingRow){editingRow.dataset.value=amount;editingRow.innerHTML=rowMarkup(customer,amount)}else{const row=document.createElement("tr");row.dataset.name=customer;row.dataset.value=amount;row.dataset.status="active";row.innerHTML=rowMarkup(customer,amount);table.append(row)}syncStats();setOpen(false);success.hidden=false;setTimeout(()=>{success.hidden=true},3500)};
-  const onTable=e=>{const edit=e.target.closest(".discount-edit");if(edit){openEditor(edit.closest("tr"));return}const status=e.target.closest(".discount-status");if(status){const active=status.classList.toggle("is-active");status.classList.toggle("is-inactive",!active);status.textContent=active?"نشط":"متوقف";status.closest("tr").dataset.status=active?"active":"inactive"}};
-  const onModal=e=>{if(e.target===modal||e.target.closest("[data-close]"))setOpen(false)};
-  const onKey=e=>{if(e.key==="Escape"&&!modal.hidden)setOpen(false)};
-  table.addEventListener("click",onTable);modal.addEventListener("click",onModal);form.addEventListener("submit",submit);document.getElementById("addDiscount").addEventListener("click",openCreator);document.getElementById("closeSuccess").addEventListener("click",()=>{success.hidden=true});document.addEventListener("keydown",onKey);value.addEventListener("input",clearError);
-  syncStats();
-  return()=>{document.body.style.overflow="";table.removeEventListener("click",onTable);modal.removeEventListener("click",onModal);form.removeEventListener("submit",submit);document.removeEventListener("keydown",onKey)};
+  const table = document.getElementById("discountTableBody"), modal = document.getElementById("discountModal"), form = document.getElementById("discountForm"), name = document.getElementById("discountName"), value = document.getElementById("discountValue"), error = document.getElementById("discountError"), success = document.getElementById("discountSuccess"), expenseForm = document.getElementById("expenseTypeForm"), expenseName = document.getElementById("expenseTypeName"), expenseError = document.getElementById("expenseTypeError"), expenseList = document.getElementById("expenseTypeList");
+  let items = [], editing = null, disposed = false;
+  document.getElementById("addDiscount").hidden = true;
+  const rowMarkup = item => `<tr data-id="${escapeHtml(item.id)}"><td><strong>${escapeHtml(item.name)}</strong></td><td><b class="${Number(item.discount_percent) >= 15 ? "is-warning-text" : Number(item.discount_percent) > 0 ? "is-orange-text" : ""}">${Number(item.discount_percent || 0)}%</b></td><td><span class="discount-status is-active">نشط</span></td><td><button class="discount-edit" type="button" aria-label="تعديل خصم ${escapeHtml(item.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16-1 5 5-1L19 9l-4-4L4 16Z"/></svg></button></td></tr>`;
+  const render = () => {
+    table.innerHTML = items.map(rowMarkup).join("");
+    const values = items.map(item => Number(item.discount_percent || 0));
+    document.getElementById("discountTypesCount").textContent = items.length;
+    document.getElementById("discountMax").textContent = `${values.length ? Math.max(...values) : 0}%`;
+    document.getElementById("discountMin").textContent = `${values.length ? Math.min(...values) : 0}%`;
+  };
+  const load = async () => { try { items = listFrom(await api.get("/api/v1/customer-types")); if (!disposed) render(); } catch (e) { if (!disposed) { table.innerHTML = `<tr><td colspan="4">${escapeHtml(e.message)}</td></tr>`; } } };
+  const loadExpenseTypes = async () => { try { const types = listFrom(await api.get("/api/v1/expense-types")); if (!disposed) expenseList.innerHTML = types.map(item => `<span>${escapeHtml(item.name || String(item))}</span>`).join("") || "لا توجد أنواع مصروفات بعد."; } catch (e) { if (!disposed) expenseList.textContent = e.message; } };
+  const setOpen = open => { modal.hidden = !open; document.body.style.overflow = open ? "hidden" : ""; };
+  const onTable = event => { const button = event.target.closest(".discount-edit"); if (!button) return; editing = items.find(item => String(item.id) === button.closest("tr").dataset.id); if (!editing) return; name.value = editing.name; value.value = editing.discount_percent || 0; error.textContent = ""; setOpen(true); };
+  const submit = async event => { event.preventDefault(); const amount = Number(value.value); if (!editing || !name.value.trim() || !Number.isFinite(amount) || amount < 0 || amount > 100) { error.textContent = "أدخل اسمًا ونسبة بين 0 و100"; return; } const button = document.getElementById("saveDiscount"); button.disabled = true; try { await api.patch(`/api/v1/admin/customer-types/${encodeURIComponent(editing.id)}`, { name: name.value.trim(), discount_percent: amount }); setOpen(false); success.hidden = false; await load(); } catch (e) { error.textContent = e.message; } finally { button.disabled = false; } };
+  const submitExpenseType = async event => { event.preventDefault(); const typeName = expenseName.value.trim(), button = document.getElementById("saveExpenseType"); if (!typeName) { expenseError.textContent = "أدخل اسم نوع المصروف."; expenseName.focus(); return; } button.disabled = true; expenseError.textContent = ""; try { await api.post("/api/v1/admin/expense-types", { name: typeName }); expenseName.value = ""; await loadExpenseTypes(); } catch (e) { expenseError.textContent = e.message; } finally { button.disabled = false; } };
+  table.addEventListener("click", onTable); form.addEventListener("submit", submit); expenseForm.addEventListener("submit", submitExpenseType); modal.addEventListener("click", event => { if (event.target === modal || event.target.closest("[data-close]")) setOpen(false); }); document.getElementById("closeSuccess").addEventListener("click", () => { success.hidden = true; });
+  load(); loadExpenseTypes();
+  return () => { disposed = true; document.body.style.overflow = ""; table.removeEventListener("click", onTable); form.removeEventListener("submit", submit); expenseForm.removeEventListener("submit", submitExpenseType); };
 }

@@ -1,4 +1,6 @@
 // ==========================================================================
+
+import { api, idempotencyKey, listFrom } from "../../../core/api.js";
 // المصروفات — منطق كامل: بطاقات الإحصائيات، جدول المصروفات، إضافة مصروف،
 // مودال النجاح، بحث، Pagination
 // ==========================================================================
@@ -31,7 +33,7 @@
   /* ------------------------------------------------------------------ */
   /* 2) Mock Data                                                        */
   /* ------------------------------------------------------------------ */
-  const EXPENSE_TYPES = ["نظافة", "ضيافة", "صيانة", "بخور", "مواصلات", "أخرى"];
+  const FALLBACK_EXPENSE_TYPES = ["نظافة", "ضيافة", "صيانة", "بخور", "مواصلات", "أخرى"];
 
   const MOCK_EXPENSES = [
     {
@@ -94,16 +96,17 @@
   /* 3) الحالة                                                           */
   /* ------------------------------------------------------------------ */
   const state = {
-    expenses: [...MOCK_EXPENSES],
+    expenses: [],
     page: 1,
     pageSize: 5,
     searchQuery: "",
     nextId: 107,
     // Stats
-    totalToday: 450,
-    totalCount: 4,
-    shiftExpenses: 150,
-    availableCash: 4850,
+    totalToday: 0,
+    totalCount: 0,
+    shiftExpenses: 0,
+    availableCash: 0,
+    currentShift: null,
   };
 
   /* ------------------------------------------------------------------ */
@@ -194,6 +197,41 @@
     };
   }
 
+  async function loadExpenseTypes() {
+    try {
+      const data = await api.get("/api/v1/expense-types"), items = listFrom(data);
+      const types = items.map(item => typeof item === "string" ? { id: item, name: item } : { id: item.id || item.name, name: item.name }).filter(item => item.id && item.name);
+      renderExpenseTypes(types.length ? types : FALLBACK_EXPENSE_TYPES.map(name => ({ id: name, name })));
+    } catch { renderExpenseTypes(FALLBACK_EXPENSE_TYPES.map(name => ({ id: name, name }))); }
+  }
+
+  function normalizeExpense(item) {
+    const type = item.expense_type || {}, cashier = item.cashier || item.created_by || {};
+    return { ...item, id: String(item.id), type: type.name || item.expense_type_name || item.type || "مصروف", description: item.description || "—", notes: item.notes || "—", shiftId: item.shift_id || item.shift?.id || "—", amount: Number(item.amount || 0), date: item.created_at || item.date || new Date().toISOString(), cashier: cashier.name || cashier.username || item.cashier_name || "—", status: item.status || "مسجل" };
+  }
+
+  async function loadExpenses() {
+    try {
+      const shiftResponse = await api.get("/api/v1/shifts/current");
+      state.currentShift = shiftResponse?.shift || shiftResponse?.data || shiftResponse;
+      const shiftId = state.currentShift?.id || state.currentShift?.shift_id;
+      if (!shiftId) throw new Error("لا توجد وردية مفتوحة");
+      const [expensesResponse, cashResponse] = await Promise.all([api.get("/api/v1/expenses", { query: { shift_id: shiftId, page: 1, page_size: 100 } }), api.get("/api/v1/expenses/available-cash", { query: { shift_id: shiftId } })]);
+      state.expenses = listFrom(expensesResponse).map(normalizeExpense);
+      state.totalCount = state.expenses.length;
+      state.shiftExpenses = state.expenses.reduce((sum, item) => sum + item.amount, 0);
+      const today = new Date().toISOString().slice(0, 10);
+      state.totalToday = state.expenses.filter(item => item.date.slice(0, 10) === today).reduce((sum, item) => sum + item.amount, 0);
+      state.availableCash = Number(cashResponse?.available_cash ?? cashResponse?.amount ?? cashResponse?.data?.available_cash ?? 0);
+      renderStats(); renderTable();
+    } catch (error) { state.expenses = []; renderStats(); renderTable(); showToast(error.message, "error"); }
+  }
+
+  function renderExpenseTypes(types) {
+    if (!els.expTypeSelect) return;
+    els.expTypeSelect.innerHTML = '<option value="">اختر نوع المصروف...</option>' + types.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+  }
+
   /* ------------------------------------------------------------------ */
   /* 6) إحصائيات البطاقات                                                */
   /* ------------------------------------------------------------------ */
@@ -230,7 +268,7 @@
     if (total === 0) {
       els.tableBody.innerHTML = `
         <tr>
-          <td colspan="7">
+          <td colspan="9">
             <div class="exp-empty">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -256,7 +294,9 @@
           <td><span class="exp-no">#${escapeHtml(exp.id)}</span></td>
           <td><span class="exp-type-badge">${escapeHtml(exp.type)}</span></td>
           <td><span class="exp-desc">${escapeHtml(exp.description)}</span></td>
+          <td><span class="exp-desc">${escapeHtml(exp.notes)}</span></td>
           <td><span class="exp-amount">${formatMoney(exp.amount)}<small>ج.م</small></span></td>
+          <td class="num" dir="ltr">${escapeHtml(exp.shiftId)}</td>
           <td>
             <div class="exp-date-cell">
               <span class="exp-date">${escapeHtml(date)}</span>
@@ -399,7 +439,7 @@
   /* 10) تأكيد إضافة المصروف                                             */
   /* ------------------------------------------------------------------ */
   if (els.confirmAddBtn) {
-    els.confirmAddBtn.addEventListener("click", () => {
+    els.confirmAddBtn.addEventListener("click", async () => {
       const type = els.expTypeSelect?.value;
       const amount = parseFloat(els.expAmountInput?.value) || 0;
       const desc = els.expDescInput?.value?.trim();
@@ -422,30 +462,14 @@
         return;
       }
 
-      // Create new expense
-      const newExpense = {
-        id: `EXP-${state.nextId++}`,
-        type,
-        description: desc,
-        amount,
-        date: new Date().toISOString(),
-        cashier: "أحمد محمد",
-        status: "مسجل",
-      };
-
-      // Update state
-      state.expenses.unshift(newExpense);
-      state.totalToday += amount;
-      state.totalCount++;
-      state.shiftExpenses += amount;
-      state.availableCash -= amount;
-
-      closeAddModal();
-      renderStats();
-      renderTable();
-
-      // Show success modal
-      showSuccessModal(newExpense);
+      els.confirmAddBtn.disabled = true;
+      try {
+        const shiftId = state.currentShift?.id || state.currentShift?.shift_id;
+        const response = await api.post("/api/v1/expenses", { expense_type_id: type, shift_id: shiftId, amount, description: desc, notes: els.expNotesInput?.value?.trim() || null, idempotency_key: idempotencyKey() });
+        const newExpense = normalizeExpense(response?.expense || response?.data || response);
+        closeAddModal(); showSuccessModal(newExpense); await loadExpenses();
+      } catch (error) { showToast(error.message, "error"); }
+      finally { els.confirmAddBtn.disabled = false; }
     });
   }
 
@@ -479,4 +503,6 @@
   /* ------------------------------------------------------------------ */
   renderStats();
   renderTable();
+  loadExpenseTypes();
+  loadExpenses();
 })();

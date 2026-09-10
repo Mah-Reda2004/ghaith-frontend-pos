@@ -1,9 +1,10 @@
 // ==========================================================================
 // نقطة البيع — منطق كامل: سلة، فلاتر تصنيف، بحث/سكانر باركود، مودال دفع.
-// سكريبت عادي (مش ES module) عشان الصفحة تشتغل بالدبل كليك من غير سيرفر.
-// لو حبيت تدمجها في راوتر المشروع الكامل، فكّها لـ modules واستخدم core/api.js
-// بدل الـ MOCK_PRODUCTS ده.
+// يعتمد على API الحقيقي للكتالوج وإتمام البيع.
 // ==========================================================================
+
+import { api } from "../../../core/api.js";
+import { getCurrentUser, getUserRole } from "../../../core/auth.js";
 
 (function () {
   "use strict";
@@ -29,33 +30,20 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* 2) بيانات المنتجات (Mock) — في المشروع الحقيقي دي بترجع من api.js  */
-  /*    /products?category=&search=  مع pagination، هنا مبسّطة للعرض   */
+  /* 2) بيانات الكتالوج القادمة من الـ API                              */
   /* ------------------------------------------------------------------ */
-  const MOCK_PRODUCTS = [
-    { id: "p1", sku: "THB-SUM-W-42", barcode: "6221031451427", name: "ثوب صيفي أبيض فاخر", price: 350, category: "رجالي", badge: "مقاس L" },
-    { id: "p2", sku: "SHM-GTH-R-58", barcode: "6221031451434", name: "جلابية بيضاء فاخرة", price: 450, category: "رجالي", badge: "مقاس XL" },
-    { id: "p3", sku: "GH-WNT-045", barcode: "6221031451441", name: "جلابية ملكي مطرز", price: 450, category: "رجالي", badge: "مقاس M" },
-    { id: "p4", sku: "GH-BSH-B01", barcode: "6221031451458", name: "بشت حساوي فاخر أسود", price: 1200, category: "رجالي", badge: "مقاس XXL" },
-    { id: "p5", sku: "ABY-001", barcode: "6221031451465", name: "عباية كلاسيك سوداء", price: 620, category: "حريمي", badge: "مقاس M" },
-    { id: "p6", sku: "HJB-042", barcode: "6221031451472", name: "طرحة حرير بيج", price: 450, category: "حريمي", badge: "لون بيج" },
-    { id: "p7", sku: "ISD-103", barcode: "6221031451489", name: "إسدال صلاة قطن", price: 320, category: "حريمي", badge: "مقاس فري" },
-    { id: "p8", sku: "NQB-005", barcode: "6221031451496", name: "نقاب سعودي فاخر", price: 180, category: "حريمي", badge: "لون أسود" },
-    { id: "p9", sku: "KID-JLB-3", barcode: "6221031451502", name: "جلابية أطفال قطن (3 قطع)", price: 280, category: "أطفال", badge: "مقاس 4-6" },
-    { id: "p10", sku: "KID-ABY-9", barcode: "6221031451519", name: "عباية بنات مطرزة", price: 320, category: "أطفال", badge: "مقاس 8-10" },
-    { id: "p11", sku: "PRF-MSK-01", barcode: "6221031451526", name: "عطر مسك ملكي 12مل", price: 210, category: "عطور", badge: "12 مل" },
-    { id: "p12", sku: "PRF-OUD-07", barcode: "6221031451533", name: "بخور عود كمبودي", price: 380, category: "عطور", badge: "50 جم" },
-  ];
-
-  const CATEGORIES = ["الكل", "رجالي", "حريمي", "أطفال", "عطور"];
-  const SALES_USERS = ["محمد أحمد", "محمود حسن", "سارة علي", "أسماء خالد"];
+  let products = [];
+  let categories = [];
+  let categoryProducts = null;
+  let salesUsers = [];
+  let currentShift = null;
 
   /* ------------------------------------------------------------------ */
   /* 3) الحالة (State)                                                  */
   /* ------------------------------------------------------------------ */
   const state = {
     cart: [], // { id, name, price, qty }
-    activeCategory: "الكل",
+    activeCategory: "",
     searchQuery: "",
   };
 
@@ -95,6 +83,9 @@
     cashInputsSection: document.getElementById("cashInputsSection"),
     paidAmount: document.getElementById("paidAmount"),
     remainingAmount: document.getElementById("remainingAmount"),
+    customerName: document.getElementById("customerName"),
+    customerPhone: document.getElementById("customerPhone"),
+    customerAddress: document.getElementById("customerAddress"),
   };
 
   let selectedDiscountPct = 0;
@@ -118,10 +109,139 @@
     setTimeout(() => toast.remove(), 3000);
   }
 
+  function listFrom(response) {
+    if (Array.isArray(response)) return response;
+    return response?.items || response?.data?.items || response?.products || response?.categories || response?.users || response?.sales_users || response?.results || (Array.isArray(response?.data) ? response.data : []);
+  }
+
+  async function loadAllCategories() {
+    return listFrom(await api.get("/api/v1/categories"));
+  }
+
+  async function loadAllProducts() {
+    const first = await api.get("/api/v1/products", { query: { page: 1, page_size: 100 } });
+    const pageCount = Math.ceil(Number(first?.total || listFrom(first).length) / 100);
+    const pages = [first];
+    for (let page = 2; page <= pageCount; page += 1) {
+      pages.push(await api.get("/api/v1/products", { query: { page, page_size: 100 } }));
+    }
+    return pages.flatMap(listFrom);
+  }
+
+  function firstRecord(value) {
+    const record = Array.isArray(value) ? value[0] : value;
+    if (!record || typeof record !== "object") return {};
+    const nested = record.data || record.item;
+    return nested && nested !== record ? firstRecord(nested) : record;
+  }
+
+  function categoryKey(value) {
+    return String(value ?? "").trim().toLocaleLowerCase("ar");
+  }
+
+  function normalizeProduct(item) {
+    const productSource = item.product || item.products;
+    const product = productSource ? firstRecord(productSource) : item;
+    const categorySource = product.category || item.category || product.categories || item.categories;
+    const category = firstRecord(categorySource);
+    const categoryId = category.id ?? category.uuid ?? category.category_id ?? category.categoryId ?? product.category_id ?? product.categoryId ?? item.category_id ?? item.categoryId ?? "";
+    const categoryName = category.name || category.name_ar || category.category_name || product.category_name || product.categoryName || item.category_name || item.categoryName || (typeof categorySource === "string" ? categorySource : "");
+    const stock = Number(item.stock_qty ?? item.stock_quantity ?? item.quantity ?? product.stock_qty ?? product.stock_quantity ?? 0);
+    return {
+      id: String(item.variant_id || item.id),
+      productId: product.id || item.product_id,
+      sku: String(item.sku || product.sku || ""),
+      barcode: String(item.barcode || product.barcode || ""),
+      name: product.name_ar || product.name || item.name_ar || item.name || "منتج",
+      price: Number(item.sale_price ?? product.sale_price ?? item.price ?? 0),
+      categoryId: String(categoryId).trim(),
+      category: categoryName || "بدون تصنيف",
+      badge: [item.size, item.color].filter(Boolean).join(" · ") || "افتراضي",
+      stock,
+      version: Number(item.version || 1)
+    };
+  }
+
+  function normalizeProducts(response) {
+    return listFrom(response).flatMap(item => {
+      const variants = item.product_variants || item.variants;
+      return Array.isArray(variants) && variants.length
+        ? variants.map(variant => normalizeProduct({ ...variant, product: item }))
+        : [normalizeProduct(item)];
+    }).filter(item => item.id && item.stock > 0);
+  }
+
+  function reconcileProductCategories() {
+    products.forEach(product => {
+      const productId = categoryKey(product.categoryId);
+      const productCategory = categoryKey(product.category);
+      const category = categories.find(item => categoryKey(item.id) === productId
+        || categoryKey(item.id) === productCategory
+        || categoryKey(item.name) === productCategory);
+      if (!category) return;
+      product.categoryId = category.id;
+      product.category = category.name;
+    });
+  }
+
   function renderSalesUsers() {
     if (!els.salesSelect) return;
-    const options = SALES_USERS.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("");
-    els.salesSelect.insertAdjacentHTML("beforeend", options);
+    els.salesSelect.innerHTML = '<option value="">اختر اسم السيلز...</option>' + salesUsers
+      .map(user => `<option value="${escapeHtml(user.id)}">${escapeHtml(user.name || user.username)}</option>`).join("");
+  }
+
+  async function loadPosData() {
+    categoryProducts = null;
+    els.productGrid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>جاري تحميل المنتجات...</p></div>';
+    const currentUser = getCurrentUser();
+    salesUsers = getUserRole(currentUser) === "sales" && currentUser?.id ? [{ id: String(currentUser.id), name: currentUser.name || currentUser.username }] : [];
+    try {
+      // Keep startup requests sequential so cashier accounts do not exceed the
+      // API's stricter per-user rate limit when a large catalogue is present.
+      const productResponse = await loadAllProducts();
+      const categoryResponse = await loadAllCategories();
+      products = normalizeProducts(productResponse);
+      categories = categoryResponse.filter(item => item.status !== "inactive" && item.is_active !== false).map(item => {
+        const category = firstRecord(item);
+        return { id: String(category.id || category.uuid || category.category_id || category.categoryId || "").trim(), name: category.name || category.name_ar || category.category_name };
+      }).filter(item => item.id && item.name);
+      reconcileProductCategories();
+      if (state.activeCategory && !categories.some(item => item.id === state.activeCategory)) state.activeCategory = "";
+      renderCategoryChips();
+      renderProductGrid();
+
+      try {
+        const salesResponse = await api.get("/api/v1/pos/sales-users", { query: { status: "active" } });
+        salesUsers = listFrom(salesResponse)
+          .filter(user => user.is_active !== false && user.status !== "inactive")
+          .map(user => ({ id: String(user.id || user.user_id), name: user.name || user.username || user.full_name }))
+          .filter(user => user.id && user.name);
+      } catch { /* يظل مستخدم السيلز الحالي متاحًا كحل احتياطي. */ }
+      renderSalesUsers();
+
+      try {
+        const shiftResponse = await api.get("/api/v1/shifts/current");
+        currentShift = shiftResponse?.shift || shiftResponse?.data || shiftResponse;
+      } catch {
+        currentShift = null;
+        showToast("تم تحميل المنتجات، لكن تعذّر تحميل الوردية الحالية. سجّل الدخول مجددًا أو راجع صلاحية الكاشير.", "error");
+      }
+
+      let customerTypes = [];
+      try { customerTypes = listFrom(await api.get("/api/v1/customer-types")); }
+      catch { /* أنواع العملاء لا تمنع عرض الكتالوج */ }
+      if (els.customerTypeSelect && customerTypes.length) {
+        els.customerTypeSelect.innerHTML = customerTypes.map(type => {
+          const discount = Number(type.discount_percent ?? type.discount_rate ?? type.discount ?? 0);
+          return `<option value="${escapeHtml(type.id)}" data-discount="${discount}">${escapeHtml(type.name)}</option>`;
+        }).join("");
+        selectedDiscountPct = Number(els.customerTypeSelect.selectedOptions[0]?.dataset.discount || 0);
+      }
+    } catch (error) {
+      products = [];
+      renderProductGrid();
+      showToast(error.message, "error");
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -130,9 +250,13 @@
   function addToCart(product) {
     const existing = state.cart.find((item) => item.id === product.id);
     if (existing) {
+      if (existing.qty >= product.stock) {
+        showToast("الكمية المطلوبة أكبر من المخزون المتاح", "error");
+        return;
+      }
       existing.qty += 1;
     } else {
-      state.cart.push({ id: product.id, name: product.name, price: product.price, qty: 1 });
+      state.cart.push({ ...product, qty: 1 });
     }
     renderCart();
     showToast(`أُضيف "${product.name}" للسلة`);
@@ -141,6 +265,10 @@
   function changeQty(id, delta) {
     const item = state.cart.find((i) => i.id === id);
     if (!item) return;
+    if (delta > 0 && item.qty >= item.stock) {
+      showToast("لا توجد كمية إضافية في المخزون", "error");
+      return;
+    }
     item.qty += delta;
     if (item.qty <= 0) {
       state.cart = state.cart.filter((i) => i.id !== id);
@@ -214,23 +342,44 @@
   /* 7) فلاتر التصنيف + شبكة المنتجات                                   */
   /* ------------------------------------------------------------------ */
   function renderCategoryChips() {
-    els.categoryChips.innerHTML = CATEGORIES.map(
-      (cat) => `<button class="chip-filter${cat === state.activeCategory ? " is-active" : ""}" data-cat="${cat}">${cat}</button>`
+    const options = [{ id: "", name: "الكل" }, ...categories];
+    els.categoryChips.innerHTML = options.map(
+      category => `<button class="chip-filter${category.id === state.activeCategory ? " is-active" : ""}" data-cat="${escapeHtml(category.id)}">${escapeHtml(category.name)}</button>`
     ).join("");
   }
 
-  els.categoryChips.addEventListener("click", (e) => {
+  els.categoryChips.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-cat]");
     if (!btn) return;
     state.activeCategory = btn.dataset.cat;
+    categoryProducts = null;
     renderCategoryChips();
     renderProductGrid();
+    if (!state.activeCategory) return;
+    try {
+      const response = await api.get("/api/v1/products/search", { query: { category_id: state.activeCategory, in_stock: true, page: 1, page_size: 100 } });
+      if (state.activeCategory !== btn.dataset.cat) return;
+      const selectedCategory = categories.find(category => category.id === state.activeCategory);
+      categoryProducts = normalizeProducts(response).map(product => ({
+        ...product,
+        categoryId: state.activeCategory,
+        category: selectedCategory?.name || product.category
+      }));
+      renderProductGrid();
+    } catch {
+      // تظل الفلترة المحلية متاحة إذا كان مسار البحث غير مدعوم في الخادم.
+    }
   });
 
   function getFilteredProducts() {
     const q = state.searchQuery.trim().toLowerCase();
-    return MOCK_PRODUCTS.filter((p) => {
-      const matchesCategory = state.activeCategory === "الكل" || p.category === state.activeCategory;
+    const activeCategory = categories.find(category => category.id === state.activeCategory);
+    const activeCategoryId = categoryKey(state.activeCategory);
+    const activeCategoryName = categoryKey(activeCategory?.name);
+    return (categoryProducts || products).filter((p) => {
+      const matchesCategory = !state.activeCategory
+        || categoryKey(p.categoryId) === activeCategoryId
+        || (activeCategoryName && categoryKey(p.category) === activeCategoryName);
       const matchesQuery =
         !q || p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.barcode.includes(q);
       return matchesCategory && matchesQuery;
@@ -251,7 +400,7 @@
         (p) => `
       <div class="product-card" data-id="${p.id}">
         <div class="product-card__badges">
-          <span class="product-card__badge-stock">مخزون: ${p.stock || 12}</span>
+          <span class="product-card__badge-stock">مخزون: ${p.stock}</span>
           <span class="product-card__badge-size">${escapeHtml(p.badge)}</span>
         </div>
         <div class="product-card__name">${escapeHtml(p.name)}</div>
@@ -263,11 +412,23 @@
       .join("");
   }
 
-  els.productGrid.addEventListener("click", (e) => {
+  els.productGrid.addEventListener("click", async (e) => {
     const card = e.target.closest(".product-card");
     if (!card) return;
-    const product = MOCK_PRODUCTS.find((p) => p.id === card.dataset.id);
-    if (product) addToCart(product);
+    let product = getFilteredProducts().find((p) => p.id === card.dataset.id);
+    if (!product) return;
+    if (product.productId) {
+      card.setAttribute("aria-busy", "true");
+      try {
+        const response = await api.get(`/api/v1/products/${encodeURIComponent(product.productId)}`);
+        const detailed = normalizeProducts([response?.product || response?.data || response]);
+        product = detailed.find(item => item.id === product.id) || product;
+        products = products.map(item => item.id === product.id ? product : item);
+        if (categoryProducts) categoryProducts = categoryProducts.map(item => item.id === product.id ? product : item);
+      } catch (error) { showToast(error.message, "error"); }
+      finally { card.removeAttribute("aria-busy"); }
+    }
+    addToCart(product);
   });
 
   /* ------------------------------------------------------------------ */
@@ -292,7 +453,7 @@
 
   function findProductByCode(code) {
     const normalizedCode = normalizeScannedCode(code).toLowerCase();
-    return MOCK_PRODUCTS.find(product =>
+    return products.find(product =>
       product.barcode.toLowerCase() === normalizedCode ||
       product.sku.toLowerCase() === normalizedCode
     );
@@ -306,7 +467,7 @@
     els.scanInput.focus();
   }
 
-  function submitScanInput(rawValue, reportMissing = false) {
+  async function submitScanInput(rawValue, reportMissing = false) {
     const value = normalizeScannedCode(rawValue);
     if (!value) return;
 
@@ -318,7 +479,7 @@
     }
 
     const query = value.toLowerCase();
-    const matches = MOCK_PRODUCTS.filter(product =>
+    const matches = products.filter(product =>
       product.name.toLowerCase().includes(query) ||
       product.sku.toLowerCase().includes(query) ||
       product.barcode.includes(query)
@@ -331,8 +492,16 @@
     }
 
     if (reportMissing) {
-      showToast(`لم يتم العثور على منتج بالكود: ${value}`, "error");
-      resetScanField();
+      try {
+        const response = await api.get(`/api/v1/products/barcode/${encodeURIComponent(value)}`);
+        const product = normalizeProduct(response?.item || response?.data || response);
+        if (!products.some(item => item.id === product.id)) products.push(product);
+        addToCart(product);
+        resetScanField();
+      } catch {
+        showToast(`لم يتم العثور على منتج بالكود: ${value}`, "error");
+        resetScanField();
+      }
       return;
     }
 
@@ -356,13 +525,20 @@
     }, 250);
   });
 
-  function handleBarcodeScan(code) {
+  async function handleBarcodeScan(code) {
     const normalizedCode = normalizeScannedCode(code);
     const product = findProductByCode(normalizedCode);
     if (product) {
       addToCart(product);
     } else {
-      showToast(`لم يتم العثور على منتج بالكود: ${normalizedCode}`, "error");
+      try {
+        const response = await api.get(`/api/v1/products/barcode/${encodeURIComponent(normalizedCode)}`);
+        const remoteProduct = normalizeProduct(response?.item || response?.data || response);
+        if (!products.some(item => item.id === remoteProduct.id)) products.push(remoteProduct);
+        addToCart(remoteProduct);
+      } catch {
+        showToast(`لم يتم العثور على منتج بالكود: ${normalizedCode}`, "error");
+      }
     }
     resetScanField();
   }
@@ -529,29 +705,77 @@
     });
   }
 
-  els.confirmPaymentBtn.addEventListener("click", () => {
+  const PAYMENT_METHODS = { "نقدي": "cash", "محفظة": "wallet", "انستا باي": "instapay", "آجل": "deferred" };
+
+  async function resolveCustomerId() {
+    const name = els.customerName?.value.trim();
+    const phone = els.customerPhone?.value.trim();
+    const address = els.customerAddress?.value.trim();
+    if (!name && !phone && !address) return null;
+    if (!name) throw new Error("اسم العميل مطلوب عند تسجيل بيانات العميل.");
+    const customer = await api.post("/api/v1/customers", {
+      name,
+      phone: phone || null,
+      address: address || null,
+      customer_type_id: els.customerTypeSelect?.value || null
+    });
+    return customer?.id || customer?.customer?.id || customer?.data?.id;
+  }
+
+  els.confirmPaymentBtn.addEventListener("click", async () => {
     if (!els.salesSelect?.value) {
       showToast("اختر اسم السيلز قبل تأكيد الدفع", "error");
       els.salesSelect?.focus();
       return;
     }
-    printReceipt();
-    showToast("تم تسجيل عملية البيع بنجاح ✓");
-    state.cart = [];
-    selectedDiscountPct = 0;
-    renderCart();
-    closePaymentModal();
+    const shiftId = currentShift?.id || currentShift?.shift_id;
+    if (!shiftId) {
+      showToast("لا توجد وردية مفتوحة. افتح وردية قبل إتمام البيع.", "error");
+      return;
+    }
+    const activeMethod = els.paymentMethodGroup.querySelector(".method-btn.is-active")?.dataset.method || "نقدي";
+    const paymentMethod = PAYMENT_METHODS[activeMethod] || "cash";
+    const { total } = getCartTotals();
+    const paidAmount = paymentMethod === "deferred" ? Number(els.paidAmount?.value || 0) : total;
+    const originalLabel = els.confirmPaymentBtn.innerHTML;
+    els.confirmPaymentBtn.disabled = true;
+    els.confirmPaymentBtn.textContent = "جاري تسجيل البيع...";
+    try {
+      const customerId = await resolveCustomerId();
+      const sale = await api.post("/api/v1/sales/checkout", {
+        items: state.cart.map(item => ({ variant_id: item.id, qty: item.qty, expected_version: item.version })),
+        customer_id: customerId,
+        sales_person_id: els.salesSelect.value,
+        payment_method: paymentMethod,
+        paid_amount: paidAmount,
+        shift_id: shiftId,
+        idempotency_key: crypto.randomUUID()
+      });
+      printReceipt(sale);
+      showToast("تم تسجيل عملية البيع بنجاح ✓");
+      state.cart = [];
+      selectedDiscountPct = 0;
+      renderCart();
+      closePaymentModal();
+      await loadPosData();
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      els.confirmPaymentBtn.disabled = false;
+      els.confirmPaymentBtn.innerHTML = originalLabel;
+      updatePaymentTotals();
+    }
   });
 
-  function printReceipt() {
+  function printReceipt(sale = {}) {
     const printArea = document.getElementById("printArea");
     if (!printArea) return;
     const { subtotal, discountValue, total } = getCartTotals();
     const now = new Date();
     const date = now.toLocaleDateString("ar-EG");
     const time = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
-    const invoiceNo = `INV-${Date.now().toString().slice(-6)}`;
-    const salesName = els.salesSelect?.value || "—";
+    const invoiceNo = sale.invoice_number || sale.invoice?.invoice_number || `INV-${Date.now().toString().slice(-6)}`;
+    const salesName = els.salesSelect?.selectedOptions[0]?.textContent || "—";
 
     if (window.GhaithPrint) {
       window.GhaithPrint.printReceipt({
@@ -561,7 +785,7 @@
         time,
         cashier: "كاشير نقطة البيع",
         sales: salesName,
-        payment: document.querySelector('input[name="paymentMethod"]:checked')?.value || "نقدي",
+        payment: els.paymentMethodGroup.querySelector(".method-btn.is-active")?.dataset.method || "نقدي",
         items: state.cart.map(item => ({ name: item.name, sku: item.sku, qty: item.qty, price: item.price })),
         totals: [
           { label: "الإجمالي الفرعي", value: subtotal },
@@ -630,5 +854,6 @@
   renderSalesUsers();
   renderProductGrid();
   renderCart();
+  loadPosData();
   els.scanInput.focus();
 })();

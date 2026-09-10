@@ -1,5 +1,6 @@
 import { bindThemeToggle, initTheme } from "../../core/theme.js";
 import { getCurrentUser, getUserRole, isAuthenticated, logout } from "../../core/auth.js";
+import { initStatusToggles } from "../../components/status-toggle/status-toggle.js";
 import "../../components/printing/printing.js";
 
 // Resolve routed assets from this module instead of the browser URL. This keeps
@@ -7,6 +8,15 @@ import "../../components/printing/printing.js";
 const ADMIN_BASE_URL = new URL("./", import.meta.url);
 
 const ROUTES = {
+  settings: { html: "settings/settings.html", css: "settings/settings.css", load: () => import("./settings/settings.js"), init: "initSettings", title: "إعدادات التكاملات", selector: ".settings-page" },
+  "purchase-invoice": {
+    html: "purchase-invoice/purchase-invoice.html",
+    css: "purchase-invoice/purchase-invoice.css",
+    load: () => import("./purchase-invoice/purchase-invoice.js"),
+    init: "initPurchaseInvoice",
+    title: "إنشاء فاتورة مشتريات",
+    selector: ".purchase-page"
+  },
   zakat: {
     html: "zakat/zakat.html",
     css: "zakat/zakat.css",
@@ -99,6 +109,22 @@ let cleanupRoute;
 let navigationId = 0;
 
 initTheme();
+bindThemeToggle(document.getElementById("adminThemeToggle"));
+initStatusToggles();
+
+function normalizeCurrencyLabels(root = document.body) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    if (/ر\.س|ج\.م|جنيه مصري|ريال/.test(node.nodeValue)) node.nodeValue = node.nodeValue.replaceAll("ر.س", "EGP").replaceAll("ج.م", "EGP").replaceAll("جنيه مصري", "EGP").replaceAll("ريال", "EGP");
+  }
+}
+
+normalizeCurrencyLabels();
+new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(node => {
+  if (node.nodeType === Node.TEXT_NODE && /ر\.س|ج\.م|جنيه مصري|ريال/.test(node.nodeValue)) node.nodeValue = node.nodeValue.replaceAll("ر.س", "EGP").replaceAll("ج.م", "EGP").replaceAll("جنيه مصري", "EGP").replaceAll("ريال", "EGP");
+  else if (node.nodeType === Node.ELEMENT_NODE) normalizeCurrencyLabels(node);
+}))).observe(document.body, { childList: true, subtree: true });
 
 const loginUrl = new URL("../auth/login/login.html", window.location.href).href;
 const currentUser = getCurrentUser();
@@ -108,8 +134,12 @@ if (!isAuthenticated() || getUserRole(currentUser) !== "admin") {
   throw new Error("authentication-required");
 }
 
-const userLabel = document.querySelector(".admin-user-chip span:last-child");
-if (userLabel) userLabel.textContent = currentUser.name || currentUser.username || "مدير النظام";
+const resolvedUser = currentUser?.user || currentUser?.data || currentUser?.profile || currentUser || {};
+const displayName = resolvedUser.name || resolvedUser.full_name || resolvedUser.username || "مدير النظام";
+const userLabel = document.getElementById("adminUserName");
+const userAvatar = document.getElementById("adminAccountAvatar");
+if (userLabel) userLabel.textContent = displayName;
+if (userAvatar) userAvatar.textContent = displayName.trim().charAt(0) || "م";
 document.querySelector(".logout-link")?.addEventListener("click", () => {
   logout();
   window.location.replace(loginUrl);
@@ -121,9 +151,14 @@ function getRouteName() {
 }
 
 function setActiveNav(routeName) {
+  const requestedRoute = routeName;
+  const activeRoute = routeName === "purchase-invoice" ? "suppliers" : routeName;
   nav.querySelectorAll("[data-route]").forEach(link => {
-    link.classList.toggle("is-active", link.dataset.route === routeName);
+    link.classList.toggle("is-active", link.dataset.route === activeRoute);
   });
+  const title = ROUTES[requestedRoute]?.title || nav.querySelector(`[data-route="${activeRoute}"] span`)?.textContent || "لوحة الإدارة";
+  const topbarTitle = document.getElementById("adminPageTitle");
+  if (topbarTitle) topbarTitle.textContent = title;
 }
 
 function setSidebarOpen(isOpen) {
@@ -206,6 +241,19 @@ async function loadRoute() {
 }
 
 sidebarToggle.addEventListener("click", () => setSidebarOpen(!sidebar.classList.contains("is-open")));
+const accountTrigger = document.getElementById("adminAccountTrigger");
+const accountMenu = document.getElementById("adminAccountMenu");
+function setAccountMenu(open) {
+  accountMenu.hidden = !open;
+  accountTrigger.setAttribute("aria-expanded", String(open));
+}
+accountTrigger.addEventListener("click", event => {
+  event.stopPropagation();
+  setAccountMenu(accountMenu.hidden);
+});
+document.addEventListener("click", event => {
+  if (!event.target.closest(".admin-account")) setAccountMenu(false);
+});
 sidebarOverlay.addEventListener("click", () => setSidebarOpen(false));
 nav.addEventListener("click", event => {
   const link = event.target.closest("[data-route]");

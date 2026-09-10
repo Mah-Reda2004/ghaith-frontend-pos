@@ -1,54 +1,14 @@
 import { bindThemeToggle, initTheme } from "../../../core/theme.js";
 import { debounce, escapeHtml } from "../../../core/utils.js";
+import { api, idempotencyKey, listFrom } from "../../../core/api.js";
 
 if (document.documentElement.dataset.cashierSpa !== "true") {
   initTheme();
   bindThemeToggle(document.getElementById("themeToggleBtn"));
 }
 
-function dateKey(daysAgo = 0) {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() - daysAgo);
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
-}
-
-const MOCK_DEBTS = [
-  {
-    id: "debt-00124",
-    invoiceId: "INV-00124",
-    customer: "أحمد محمود",
-    date: dateKey(),
-    time: "14:30",
-    cashier: "أحمد محمود",
-    total: 2500,
-    paid: 1000,
-    remaining: 1500,
-    items: [
-      { name: "ثوب ملكي فاخر", qty: 1, price: 1500 },
-      { name: "عطر الماجد الخاص", qty: 2, price: 500 },
-    ],
-  },
-  {
-    id: "debt-00145",
-    invoiceId: "INV-00145",
-    customer: "شركة النور",
-    date: dateKey(2),
-    time: "16:10",
-    cashier: "سارة خالد",
-    total: 8000,
-    paid: 4000,
-    remaining: 4000,
-    items: [
-      { name: "جلابية ملكي صوف", qty: 4, price: 1500 },
-      { name: "شماغ ديسار ملكي", qty: 4, price: 500 },
-    ],
-  },
-];
-
 const state = {
-  debts: MOCK_DEBTS.map(debt => ({ ...debt, items: debt.items.map(item => ({ ...item })) })),
+  debts: [],
   query: "",
   dateFilter: "all",
   cashierFilter: "all",
@@ -81,6 +41,43 @@ const els = {
 
 function formatMoney(value) {
   return Number(value).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function normalizeDebt(item) {
+  const customer = item.customer || {}, invoice = item.invoice || {}, cashier = invoice.cashier || item.cashier || {};
+  const created = item.created_at || invoice.created_at || new Date().toISOString();
+  return {
+    ...item,
+    id: String(item.id),
+    customerId: customer.id || item.customer_id || invoice.customer_id,
+    invoiceId: invoice.invoice_number || item.invoice_number || item.invoice_id || "—",
+    customer: customer.name || item.customer_name || "عميل",
+    date: created.slice(0, 10),
+    time: new Date(created).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
+    cashier: cashier.name || cashier.username || item.cashier_name || "—",
+    total: Number(item.total_amount ?? invoice.total_amount ?? item.original_amount ?? 0),
+    paid: Number(item.paid_amount ?? item.amount_paid ?? 0),
+    remaining: Number(item.remaining_amount ?? item.balance ?? 0),
+    items: item.items || invoice.items || []
+  };
+}
+
+async function loadDebts() {
+  els.refresh.disabled = true;
+  els.refresh.classList.add("is-loading");
+  try {
+    const response = await api.get("/api/v1/debts", { query: { page: 1, page_size: 100 } });
+    state.debts = listFrom(response).map(normalizeDebt);
+    populateCashierFilter();
+    renderDebts();
+  } catch (error) {
+    state.debts = [];
+    renderDebts();
+    showToast(error.message, "error");
+  } finally {
+    els.refresh.disabled = false;
+    els.refresh.classList.remove("is-loading");
+  }
 }
 
 function getVisibleDebts() {
@@ -158,7 +155,12 @@ function showToast(message, type = "success") {
   window.setTimeout(() => toast.remove(), 3000);
 }
 
-function openDetail(debt) {
+async function openDetail(debt) {
+  try {
+    const response = await api.get(`/api/v1/debts/${encodeURIComponent(debt.id)}`);
+    debt = normalizeDebt(response?.debt || response?.data || response);
+    if (debt.customerId) debt.customerSummary = await api.get(`/api/v1/debtors/${encodeURIComponent(debt.customerId)}/summary`);
+  } catch (error) { showToast(error.message, "error"); return; }
   state.currentDebt = debt;
   const subtotal = debt.total / 1.15;
   const tax = debt.total - subtotal;
@@ -226,7 +228,7 @@ function closePayment() {
   els.paymentOverlay.hidden = true;
 }
 
-function confirmPayment() {
+async function confirmPayment() {
   const debt = state.currentDebt;
   const amountInput = document.getElementById("debtPaymentAmount");
   const error = document.getElementById("debtPaymentError");
@@ -235,11 +237,14 @@ function confirmPayment() {
     error.textContent = `أدخل مبلغًا من 1 إلى ${formatMoney(debt.remaining)} ج.م`;
     return;
   }
-  debt.paid += amount;
-  debt.remaining = Math.max(0, debt.total - debt.paid);
-  closePayment();
-  renderDebts();
-  showToast(debt.remaining === 0 ? "تم تسديد المديونية بالكامل" : "تم تسجيل الدفعة بنجاح");
+  els.confirmPayment.disabled = true;
+  try {
+    await api.post(`/api/v1/debts/${encodeURIComponent(debt.id)}/payments`, { amount, method: state.paymentMethod, idempotency_key: idempotencyKey() });
+    closePayment();
+    await loadDebts();
+    showToast("تم تسجيل الدفعة بنجاح");
+  } catch (apiError) { error.textContent = apiError.message; }
+  finally { els.confirmPayment.disabled = false; }
 }
 
 function printDebt(debt) {
@@ -251,14 +256,19 @@ function printDebt(debt) {
   window.print();
 }
 
-els.debtsList.addEventListener("click", event => {
+els.debtsList.addEventListener("click", async event => {
   const button = event.target.closest("[data-action]");
   if (!button) return;
   const debt = findDebtFromTarget(button);
   if (!debt) return;
   if (button.dataset.action === "view") openDetail(debt);
   if (button.dataset.action === "pay") openPayment(debt);
-  if (button.dataset.action === "remind") showToast(`تم إرسال تذكير إلى ${debt.customer}`);
+  if (button.dataset.action === "remind") {
+    button.disabled = true;
+    try { await api.post(`/api/v1/debts/${encodeURIComponent(debt.id)}/reminder`); showToast(`تم إرسال تذكير إلى ${debt.customer}`); }
+    catch (error) { showToast(error.message, "error"); }
+    finally { button.disabled = false; }
+  }
 });
 
 els.search.addEventListener("input", debounce(() => {
@@ -276,17 +286,7 @@ els.cashierFilter.addEventListener("change", () => {
   renderDebts();
 });
 
-els.refresh.addEventListener("click", () => {
-  els.refresh.disabled = true;
-  els.refresh.classList.add("is-loading");
-  window.setTimeout(() => {
-    populateCashierFilter();
-    renderDebts();
-    els.refresh.disabled = false;
-    els.refresh.classList.remove("is-loading");
-    showToast("تم تحديث بيانات المديونيات");
-  }, 450);
-});
+els.refresh.addEventListener("click", loadDebts);
 
 els.closeDetail.addEventListener("click", closeDetail);
 els.cancelDetail.addEventListener("click", closeDetail);
@@ -304,5 +304,4 @@ els.paymentBody.addEventListener("click", event => {
   renderPayment();
 });
 
-populateCashierFilter();
-renderDebts();
+loadDebts();

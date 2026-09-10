@@ -1,7 +1,9 @@
 // ==========================================================================
 // سجل الفواتير — منطق كامل: تحميل البيانات، فلاتر، Pagination، مودال التفاصيل، طباعة
-// Mock data من invoices.json — في المشروع الحقيقي بيتحول لـ api.get('/invoices')
+// البيانات تُحمّل من API الفواتير الحالي.
 // ==========================================================================
+
+import { api, listFrom } from "../../../core/api.js";
 
 (function () {
   "use strict";
@@ -77,6 +79,7 @@
     pageSize: 10,
     filters: {},
     allData: [],    // Mock: كل البيانات من JSON
+    returns: [],
     currentInvoice: null,
     returnStep: "select",
     returnItems: [],
@@ -139,6 +142,31 @@
     "تحويل":   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>`,
     "آجل":     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
   };
+  const STATUS_LABELS = { completed: "مكتملة", pending: "قيد الدفع", deferred: "آجل", cancelled: "ملغاة", void: "ملغاة", returned: "مرتجع" };
+  const PAYMENT_LABELS = { cash: "نقدي", wallet: "محفظة", card: "فيزا", transfer: "تحويل", instapay: "تحويل", deferred: "آجل" };
+
+  function normalizeInvoice(item) {
+    const customer = item.customer || {}, cashier = item.cashier || item.created_by || {}, sales = item.sales_person || {};
+    return {
+      ...item,
+      id: String(item.id),
+      number: item.invoice_number || item.number || item.id,
+      customer: customer.name || item.customer_name || "عميل نقدي",
+      phone: customer.phone || item.customer_phone || "",
+      date: item.created_at || item.invoice_date || new Date().toISOString(),
+      cashier: cashier.name || cashier.username || item.cashier_name || "—",
+      sales: sales.name || sales.username || item.sales_person_name || "—",
+      items_count: item.items_count ?? item.item_count ?? item.items?.length ?? 0,
+      payment_method: PAYMENT_LABELS[item.payment_method] || item.payment_method || "—",
+      status: STATUS_LABELS[item.status] || item.status || "مكتملة",
+      total: Number(item.total_amount ?? item.total ?? 0),
+      subtotal: Number(item.subtotal ?? 0),
+      discount: Number(item.discount_amount ?? 0),
+      paid: Number(item.paid_amount ?? 0),
+      remaining: Number(item.remaining_amount ?? 0),
+      items: item.items || item.invoice_items || []
+    };
+  }
 
   /* ------------------------------------------------------------------ */
   /* 6) إخفاء/إظهار حالات الجدول                                         */
@@ -159,19 +187,17 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* 7) تحميل البيانات (Mock — يتبدل بـ api.get بعدين)                   */
+  /* 7) تحميل البيانات من الخادم                                         */
   /* ------------------------------------------------------------------ */
   async function loadData() {
     showState("loading");
     try {
-      // في المشروع الحقيقي: const res = await api.get('/invoices', { page: state.page, pageSize: state.pageSize, ...state.filters });
-      const dataUrl = document.documentElement.dataset.cashierSpa === "true"
-        ? "../../../mock-data/invoices.json"
-        : "../../../../mock-data/invoices.json";
-      const res = await fetch(dataUrl);
-      if (!res.ok) throw new Error("Network error");
-      const json = await res.json();
-      state.allData = json.data;
+      const [response, returnsResponse] = await Promise.all([
+        api.get("/api/v1/invoices", { query: { page: 1, page_size: 100 } }),
+        api.get("/api/v1/returns", { query: { page: 1, page_size: 100 } })
+      ]);
+      state.allData = listFrom(response).map(normalizeInvoice);
+      state.returns = listFrom(returnsResponse);
       renderTable();
     } catch (e) {
       showState("error");
@@ -184,7 +210,7 @@
   function getFiltered() {
     const f = state.filters;
     return state.allData.filter(inv => {
-      if (f.invNo    && !inv.id.toLowerCase().includes(f.invNo.toLowerCase())) return false;
+      if (f.invNo    && !inv.number.toLowerCase().includes(f.invNo.toLowerCase())) return false;
       if (f.customer && !inv.customer.toLowerCase().includes(f.customer.toLowerCase())) return false;
       if (f.phone    && inv.phone && !inv.phone.includes(f.phone)) return false;
       if (f.cashier  && inv.cashier !== f.cashier) return false;
@@ -223,7 +249,7 @@
       const st = STATUS_MAP[inv.status] || { cls: "is-done", label: inv.status };
       const methodIcon = METHOD_ICONS[inv.payment_method] || "";
       tr.innerHTML = `
-        <td><span class="inv-no">#${escapeHtml(inv.id)}</span></td>
+        <td><span class="inv-no">#${escapeHtml(inv.number)}</span></td>
         <td><span class="inv-customer">${escapeHtml(inv.customer)}</span></td>
         <td><span style="font-size:var(--fs-sm);direction:ltr;display:inline-block;">${escapeHtml(inv.phone || "---")}</span></td>
         <td>
@@ -241,7 +267,11 @@
             ${escapeHtml(inv.payment_method)}
           </span>
         </td>
+        <td><span class="inv-total">${formatMoney(inv.subtotal)}</span></td>
+        <td><span class="inv-total">${formatMoney(inv.discount)}</span></td>
         <td><span class="inv-total">${formatMoney(inv.total)}</span></td>
+        <td><span class="inv-total">${formatMoney(inv.paid)}</span></td>
+        <td><span class="inv-total">${formatMoney(inv.remaining)}</span></td>
         <td><span class="inv-status ${st.cls}">${escapeHtml(st.label)}</span></td>
         <td>
           <div class="row-actions">
@@ -351,13 +381,21 @@
   /* ------------------------------------------------------------------ */
   /* 12) Row Actions — View / Print                                      */
   /* ------------------------------------------------------------------ */
-  els.invoicesTbody.addEventListener("click", e => {
+  els.invoicesTbody.addEventListener("click", async e => {
     const btn = e.target.closest("[data-action]");
     const row = e.target.closest("tr[data-invoice-id]");
     const id = btn ? btn.dataset.id : row && row.dataset.invoiceId;
     if (!id) return;
-    const inv = state.allData.find(i => i.id === id);
+    let inv = state.allData.find(i => i.id === id);
     if (!inv) return;
+
+    if (!btn || ["view", "print", "return-flow"].includes(btn.dataset.action)) {
+      try {
+        const response = await api.get(`/api/v1/invoices/${encodeURIComponent(id)}`);
+        inv = normalizeInvoice(response?.invoice || response?.data || response);
+        state.allData = state.allData.map(item => item.id === id ? inv : item);
+      } catch (error) { showToast(error.message, "error"); return; }
+    }
 
     if (!btn || btn.dataset.action === "view") openDetailModal(inv);
     if (btn && btn.dataset.action === "print") printSingleInvoice(inv);
@@ -392,6 +430,16 @@
   ];
 
   function buildReturnItems(inv) {
+    const invoiceItems = inv.items || [];
+    if (invoiceItems.length) return invoiceItems.map((item, index) => ({
+      id: String(item.id || item.invoice_item_id),
+      name: item.product_name || item.name || item.product?.name || "منتج",
+      sku: item.sku || item.variant?.sku || "—",
+      soldQty: Number(item.quantity || item.qty || 1), qty: 0,
+      price: Number(item.unit_price || item.price || item.sale_price || 0), selected: false,
+      variantId: item.variant_id || item.variant?.id || null,
+      version: Number(item.version || item.variant?.version || 1)
+    }));
     const subtotal = Number(inv.total) / (1 + TAX_RATE);
     const weights = [0.4, 0.35, 0.25];
     return RETURN_NAMES.map((entry, index) => {
@@ -427,11 +475,11 @@
     els.returnFlowInvoiceNo.textContent = state.currentInvoice ? `رقم الفاتورة: #${state.currentInvoice.id}` : "";
   }
 
-  function openReturnFlow(inv) {
+  async function openReturnFlow(inv) {
     state.currentInvoice = inv;
     state.returnStep = "select";
     state.returnItems = buildReturnItems(inv);
-    state.replacementProducts = REPLACEMENT_MOCK.slice();
+    state.replacementProducts = [];
     state.exchangeCart = [];
     state.refundMethod = "store-credit";
     state.paymentMethod = "cash";
@@ -440,6 +488,28 @@
     els.returnFlowOverlay.hidden = false;
     document.body.style.overflow = "hidden";
     renderReturnFlow();
+    try {
+      const response = await api.get("/api/v1/products", { query: { page: 1, page_size: 100 } });
+      state.replacementProducts = listFrom(response).flatMap(product => (product.variants || product.product_variants || [product]).map(variant => ({ id: String(variant.id), name: product.name_ar || product.name || variant.name || "منتج", sku: variant.sku || product.sku || "—", price: Number(variant.sale_price ?? product.sale_price ?? 0), category: product.category?.name || product.category_name || "أخرى", version: Number(variant.version || 1) }))).filter(item => item.id);
+    } catch (error) { showToast(error.message, "error"); }
+  }
+
+  async function submitReturn() {
+    const reason = document.getElementById("returnReason")?.value;
+    if (!reason) { showToast("اختر سبب الإرجاع", "error"); return; }
+    const created = await api.post("/api/v1/returns", { original_invoice_id: state.currentInvoice.id, items: getSelectedReturnItems().map(item => ({ invoice_item_id: item.id, qty: item.qty })), reason, refund_method: state.refundMethod === "store-credit" ? "exchange_credit" : "cash", idempotency_key: crypto.randomUUID() });
+    const returnId = created?.id || created?.return?.id || created?.data?.id;
+    if (returnId) await api.get(`/api/v1/returns/${encodeURIComponent(returnId)}`);
+    state.returnStep = "success"; renderReturnFlow(); await loadData();
+  }
+
+  async function submitExchange() {
+    const shift = await api.get("/api/v1/shifts/current");
+    const difference = getExchangeTotal() - getReturnTotals().total;
+    const created = await api.post("/api/v1/exchanges", { original_invoice_id: state.currentInvoice.id, returned_items: getSelectedReturnItems().map(item => ({ invoice_item_id: item.id, qty: item.qty })), new_items: state.exchangeCart.map(item => ({ variant_id: item.id, qty: item.qty, expected_version: item.version })), sales_person_id: state.currentInvoice.sales_person_id || state.currentInvoice.sales_person?.id, settlement_method: state.paymentMethod === "mixed" ? "cash" : state.paymentMethod, cash_amount: state.paymentMethod === "cash" ? Math.max(0, difference) : 0, card_amount: state.paymentMethod === "card" ? Math.max(0, difference) : 0, shift_id: shift?.id || shift?.shift?.id || shift?.data?.id, idempotency_key: crypto.randomUUID() });
+    const exchangeId = created?.id || created?.exchange?.id || created?.data?.id;
+    if (exchangeId) await api.get(`/api/v1/exchanges/${encodeURIComponent(exchangeId)}`);
+    state.returnStep = "success"; renderReturnFlow(); await loadData();
   }
 
   function closeReturnFlow() {
@@ -572,7 +642,7 @@
     window.print();
   }
 
-  els.returnFlowBody.addEventListener("click", event => {
+  els.returnFlowBody.addEventListener("click", async event => {
     const target = event.target.closest("[data-flow-action]");
     if (!target) return;
     const action = target.dataset.flowAction;
@@ -586,7 +656,7 @@
     if (action === "return-dec" && returnItem && returnItem.qty > 1) { returnItem.qty--; renderReturnSelection(); }
     if (action === "to-manage") { state.returnStep = "manage"; renderReturnFlow(); }
     if (action === "back-select") { state.returnStep = "select"; renderReturnFlow(); }
-    if (action === "confirm-return") { state.returnStep = state.refundMethod === "exchange" ? "exchange" : "success"; renderReturnFlow(); }
+    if (action === "confirm-return") { if (state.refundMethod === "exchange") { state.returnStep = "exchange"; renderReturnFlow(); } else { try { target.disabled = true; await submitReturn(); } catch (error) { showToast(error.message, "error"); target.disabled = false; } } }
     if (action === "add-exchange") { const product = state.replacementProducts.find(item => item.id === target.dataset.productId); const existing = state.exchangeCart.find(item => item.id === product.id); existing ? existing.qty++ : state.exchangeCart.push({ ...product, qty: 1 }); renderExchangePicker(); }
     if (action === "exchange-category") { state.exchangeCategory = target.dataset.category; renderExchangePicker(); }
     if (action === "exchange-inc" && exchangeItem) { exchangeItem.qty++; renderExchangePicker(); }
@@ -594,7 +664,7 @@
     if (action === "to-summary") { state.returnStep = "summary"; renderReturnFlow(); }
     if (action === "back-exchange") { state.returnStep = "exchange"; renderReturnFlow(); }
     if (action === "payment-method") { state.paymentMethod = target.dataset.value; renderExchangeSummary(); }
-    if (action === "finish-exchange") { state.returnStep = "success"; renderReturnFlow(); }
+    if (action === "finish-exchange") { try { target.disabled = true; await submitExchange(); } catch (error) { showToast(error.message, "error"); target.disabled = false; } }
     if (action === "print-return") printReturnReceipt();
   });
 
@@ -612,8 +682,12 @@
   /* ------------------------------------------------------------------ */
   /* 13) مودال التفاصيل                                                  */
   /* ------------------------------------------------------------------ */
-  function openDetailModal(inv) {
+  async function openDetailModal(inv) {
     state.currentInvoice = inv;
+    const relatedReturn = state.returns.find(item => String(item.original_invoice_id || item.invoice_id) === String(inv.id));
+    if (relatedReturn?.id) {
+      try { relatedReturn.detail = await api.get(`/api/v1/returns/${encodeURIComponent(relatedReturn.id)}`); } catch { /* القائمة تكفي إذا تعذر التفصيل */ }
+    }
     const { date, time } = formatDate(inv.date);
     const st = STATUS_MAP[inv.status] || { cls: "is-done", label: inv.status };
     const items = buildReturnItems(inv);
