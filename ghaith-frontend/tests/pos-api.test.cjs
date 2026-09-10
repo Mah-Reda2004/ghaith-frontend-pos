@@ -19,9 +19,8 @@ const assert = require('node:assert/strict');
       if (path === '/api/v1/products/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') return route.fulfill({ json: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name_ar: 'ثوب API', category: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'رجالي' }, product_variants: [{ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', sku: 'API-SKU', barcode: '62210000', size: 'L', color: 'أبيض', sale_price: 350, stock_qty: 3, version: 7 }] } });
       if (path === '/api/v1/categories') return route.fulfill({ json: { items: [{ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'رجالي' }] } });
       if (path === '/api/v1/customer-types') return route.fulfill({ json: { items: [{ id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', name: 'عادي', discount_percent: 0 }] } });
-      if (path === '/api/v1/pos/sales-users') return route.fulfill({ json: { items: [{ id: '11111111-1111-4111-8111-111111111111', name: 'سيلز الاختبار', role: 'sales', is_active: true }] } });
       if (path === '/api/v1/shifts/current') return route.fulfill({ json: { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', status: 'open' } });
-      if (path === '/api/v1/admin/users') return route.fulfill({ status: 403, json: { detail: 'forbidden' } });
+      if (path === '/api/v1/admin/users') return route.fulfill({ json: { items: [{ id: '11111111-1111-4111-8111-111111111111', name: 'سيلز الاختبار', role: 'sales', is_active: true }], total: 1 } });
       if (path === '/api/v1/sales/checkout') {
         checkoutBody = request.postDataJSON();
         return route.fulfill({ json: { id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', invoice_number: 'INV-API-1', total_amount: 350 } });

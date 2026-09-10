@@ -111,7 +111,34 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
 
   function listFrom(response) {
     if (Array.isArray(response)) return response;
-    return response?.items || response?.data?.items || response?.products || response?.categories || response?.users || response?.sales_users || response?.results || (Array.isArray(response?.data) ? response.data : []);
+    return response?.items || response?.data?.items || response?.data?.users || response?.data?.sales_users || response?.data?.results || response?.products || response?.categories || response?.users || response?.sales_users || response?.results || (Array.isArray(response?.data) ? response.data : []);
+  }
+
+  function normalizeSalesUser(item) {
+    const user = firstRecord(item.user || item.sales_user || item);
+    const roleRecord = firstRecord(user.roles || user.role);
+    const roleValue = roleRecord.slug || roleRecord.code || roleRecord.name || (typeof user.role === "string" ? user.role : "") || user.role_name || user.role_code || "";
+    const role = String(roleValue).trim().toLowerCase();
+    return {
+      id: String(user.id || user.user_id || item.user_id || ""),
+      name: user.name || user.full_name || user.username || item.name || item.username || "",
+      role,
+      active: user.is_active !== false && item.is_active !== false && user.status !== "inactive" && item.status !== "inactive"
+    };
+  }
+
+  async function loadSalesUsers() {
+    let responses;
+    try {
+      const first = await api.get("/api/v1/admin/users", { query: { page: 1, page_size: 100 } });
+      const pages = Math.ceil(Number(first?.total || listFrom(first).length) / 100);
+      responses = [first];
+      for (let page = 2; page <= pages; page += 1) responses.push(await api.get("/api/v1/admin/users", { query: { page, page_size: 100 } }));
+    } catch {
+      responses = [await api.get("/api/v1/pos/sales-users", { query: { status: "active" } })];
+    }
+    salesUsers = responses.flatMap(listFrom).map(normalizeSalesUser)
+      .filter(user => ["sales", "salesperson", "sales_person", "سيلز", "بائع", "مبيعات"].includes(user.role) && user.active && user.id && user.name);
   }
 
   async function loadAllCategories() {
@@ -148,7 +175,7 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     const categoryName = category.name || category.name_ar || category.category_name || product.category_name || product.categoryName || item.category_name || item.categoryName || (typeof categorySource === "string" ? categorySource : "");
     const stock = Number(item.stock_qty ?? item.stock_quantity ?? item.quantity ?? product.stock_qty ?? product.stock_quantity ?? 0);
     return {
-      id: String(item.variant_id || item.id),
+      id: String(item.variant_id || item.product_variant_id || item.variant?.id || item.id),
       productId: product.id || item.product_id,
       sku: String(item.sku || product.sku || ""),
       barcode: String(item.barcode || product.barcode || ""),
@@ -210,13 +237,8 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
       renderCategoryChips();
       renderProductGrid();
 
-      try {
-        const salesResponse = await api.get("/api/v1/pos/sales-users", { query: { status: "active" } });
-        salesUsers = listFrom(salesResponse)
-          .filter(user => user.is_active !== false && user.status !== "inactive")
-          .map(user => ({ id: String(user.id || user.user_id), name: user.name || user.username || user.full_name }))
-          .filter(user => user.id && user.name);
-      } catch { /* يظل مستخدم السيلز الحالي متاحًا كحل احتياطي. */ }
+      try { await loadSalesUsers(); }
+      catch { /* لا نلغي تحميل شاشة البيع إذا تعذرت قائمة المستخدمين. */ }
       renderSalesUsers();
 
       try {
@@ -248,7 +270,10 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
   /* 6) السلة: إضافة / تعديل كمية / حذف                                 */
   /* ------------------------------------------------------------------ */
   function addToCart(product) {
-    const existing = state.cart.find((item) => item.id === product.id);
+    const existing = state.cart.find(item => item.id === product.id
+      || (product.barcode && item.barcode === product.barcode)
+      || (product.sku && item.sku === product.sku)
+      || (product.productId && item.productId === product.productId && item.badge === product.badge));
     if (existing) {
       if (existing.qty >= product.stock) {
         showToast("الكمية المطلوبة أكبر من المخزون المتاح", "error");
