@@ -140,6 +140,15 @@
 .inventory-table th, .inventory-table td { padding-inline: var(--space-4); vertical-align: middle; }
 .inventory-table :is(th, td):nth-child(2), .inventory-table :is(th, td):nth-child(4), .inventory-table :is(th, td):nth-child(6) { white-space: nowrap; }
 .inventory-table td:nth-child(1), .inventory-table td:nth-child(5) { line-height: 1.55; overflow-wrap: anywhere; }
+.inventory-table { table-layout: auto; min-width: calc(var(--space-7) * 18); }
+.inventory-table :is(th, td) { width: auto !important; }
+.inventory-code { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.inventory-code b { color: var(--color-text); font-size: var(--fs-sm); }
+.inventory-code small { color: var(--color-text-faint); font-size: var(--fs-xs); }
+.inventory-variants { min-width: 11rem; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.inventory-variant { display: inline-grid; gap: .2rem; padding: .45rem .65rem; border: var(--border-width) solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface-alt)); color: var(--color-text-muted); font-size: var(--fs-xs); white-space: nowrap; }
+.inventory-variant b { color: var(--color-text); }
+.inventory-variant small { padding-inline-start: .35rem; border-inline-start: var(--border-width) solid var(--color-border); color: var(--color-primary); }
 
 .inventory-level { width: 100%; min-width: 8.5rem; max-width: 11rem; display: inline-flex; flex-direction: column; gap: var(--space-2); }
 .inventory-level > span { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); direction: rtl; color: var(--color-text-muted); font-size: var(--fs-xs); }

@@ -37,6 +37,7 @@ const els = {
   confirmPayment: document.getElementById("confirmDebtPaymentBtn"),
   toastStack: document.getElementById("toastStack"),
   printArea: document.getElementById("printArea"),
+  startNewSale: document.getElementById("startNewSaleBtn"),
 };
 
 function formatMoney(value) {
@@ -287,6 +288,11 @@ els.cashierFilter.addEventListener("change", () => {
 });
 
 els.refresh.addEventListener("click", loadDebts);
+els.startNewSale?.addEventListener("click", event => {
+  event.preventDefault();
+  if (document.documentElement.dataset.cashierSpa === "true") window.location.hash = "pos";
+  else window.location.href = "../cashier.html#pos";
+});
 
 els.closeDetail.addEventListener("click", closeDetail);
 els.cancelDetail.addEventListener("click", closeDetail);

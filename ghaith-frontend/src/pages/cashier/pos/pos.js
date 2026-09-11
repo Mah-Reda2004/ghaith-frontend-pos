@@ -86,6 +86,10 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     customerName: document.getElementById("customerName"),
     customerPhone: document.getElementById("customerPhone"),
     customerAddress: document.getElementById("customerAddress"),
+    variantOverlay: document.getElementById("variantOverlay"),
+    variantPickerTitle: document.getElementById("variantPickerTitle"),
+    variantPickerGrid: document.getElementById("variantPickerGrid"),
+    closeVariantPicker: document.getElementById("closeVariantPicker"),
   };
 
   let selectedDiscountPct = 0;
@@ -128,15 +132,10 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
   }
 
   async function loadSalesUsers() {
-    let responses;
-    try {
-      const first = await api.get("/api/v1/admin/users", { query: { page: 1, page_size: 100 } });
-      const pages = Math.ceil(Number(first?.total || listFrom(first).length) / 100);
-      responses = [first];
-      for (let page = 2; page <= pages; page += 1) responses.push(await api.get("/api/v1/admin/users", { query: { page, page_size: 100 } }));
-    } catch {
-      responses = [await api.get("/api/v1/pos/sales-users", { query: { status: "active" } })];
-    }
+    const first = await api.get("/api/v1/admin/users", { query: { page: 1, page_size: 100 } });
+    const pages = Math.ceil(Number(first?.total || listFrom(first).length) / 100);
+    const responses = [first];
+    for (let page = 2; page <= pages; page += 1) responses.push(await api.get("/api/v1/admin/users", { query: { page, page_size: 100 } }));
     salesUsers = responses.flatMap(listFrom).map(normalizeSalesUser)
       .filter(user => ["sales", "salesperson", "sales_person", "سيلز", "بائع", "مبيعات"].includes(user.role) && user.active && user.id && user.name);
   }
@@ -146,11 +145,11 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
   }
 
   async function loadAllProducts() {
-    const first = await api.get("/api/v1/products", { query: { page: 1, page_size: 100 } });
-    const pageCount = Math.ceil(Number(first?.total || listFrom(first).length) / 100);
+    const first = await api.get("/api/v1/products/search", { query: { in_stock: true, page: 1, page_size: 100 } });
+    const pageCount = Number(first?.pages || first?.total_pages) || Math.ceil(Number(first?.total || listFrom(first).length) / 100);
     const pages = [first];
     for (let page = 2; page <= pageCount; page += 1) {
-      pages.push(await api.get("/api/v1/products", { query: { page, page_size: 100 } }));
+      pages.push(await api.get("/api/v1/products/search", { query: { in_stock: true, page, page_size: 100 } }));
     }
     return pages.flatMap(listFrom);
   }
@@ -166,6 +165,11 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     return String(value ?? "").trim().toLocaleLowerCase("ar");
   }
 
+  function visibleVariantValue(value) {
+    const text = String(value || "").trim();
+    return text && !["افتراضي", "غير محدد", "—", "default", "n/a", "null"].includes(text.toLowerCase()) ? text : "";
+  }
+
   function normalizeProduct(item) {
     const productSource = item.product || item.products;
     const product = productSource ? firstRecord(productSource) : item;
@@ -174,16 +178,20 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     const categoryId = category.id ?? category.uuid ?? category.category_id ?? category.categoryId ?? product.category_id ?? product.categoryId ?? item.category_id ?? item.categoryId ?? "";
     const categoryName = category.name || category.name_ar || category.category_name || product.category_name || product.categoryName || item.category_name || item.categoryName || (typeof categorySource === "string" ? categorySource : "");
     const stock = Number(item.stock_qty ?? item.stock_quantity ?? item.quantity ?? product.stock_qty ?? product.stock_quantity ?? 0);
+    const size = item.size || item.variant?.size || product.size || "";
+    const color = item.color || item.variant?.color || product.color || "";
     return {
       id: String(item.variant_id || item.product_variant_id || item.variant?.id || item.id),
-      productId: product.id || item.product_id,
+      productId: item.product_id || item.productId || product.id,
       sku: String(item.sku || product.sku || ""),
       barcode: String(item.barcode || product.barcode || ""),
       name: product.name_ar || product.name || item.name_ar || item.name || "منتج",
       price: Number(item.sale_price ?? product.sale_price ?? item.price ?? 0),
       categoryId: String(categoryId).trim(),
       category: categoryName || "بدون تصنيف",
-      badge: [item.size, item.color].filter(Boolean).join(" · ") || "افتراضي",
+      size,
+      color,
+      badge: [color, size].filter(Boolean).join(" · "),
       stock,
       version: Number(item.version || 1)
     };
@@ -196,6 +204,52 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
         ? variants.map(variant => normalizeProduct({ ...variant, product: item }))
         : [normalizeProduct(item)];
     }).filter(item => item.id && item.stock > 0);
+  }
+
+  function findVariantInResponse(response, cartItem) {
+    const record = firstRecord(response);
+    const variants = record.product_variants || record.variants;
+    if (Array.isArray(variants)) {
+      const variant = variants.find(item => String(item.id || item.variant_id) === cartItem.id);
+      if (variant) return normalizeProduct({ ...variant, product: record });
+    }
+    const normalized = normalizeProduct(record);
+    return normalized.id === cartItem.id ? normalized : null;
+  }
+
+  async function loadLatestCartItem(item) {
+    const cacheBust = { _: Date.now() };
+    if (item.barcode) {
+      try {
+        const latest = findVariantInResponse(await api.get(`/api/v1/products/barcode/${encodeURIComponent(item.barcode)}`, { query: cacheBust }), item);
+        if (latest) return latest;
+      } catch { /* نجرّب تفاصيل المنتج عند تعذّر البحث بالباركود. */ }
+    }
+    if (item.productId) {
+      try { return findVariantInResponse(await api.get(`/api/v1/products/${encodeURIComponent(item.productId)}`, { query: cacheBust }), item); }
+      catch { return null; }
+    }
+    return null;
+  }
+
+  async function refreshCartStock() {
+    const [catalogResponse, liveItems] = await Promise.all([
+      loadAllProducts(),
+      Promise.all(state.cart.map(loadLatestCartItem))
+    ]);
+    const latestProducts = normalizeProducts(catalogResponse);
+    const latestById = new Map(latestProducts.map(product => [product.id, product]));
+    state.cart = state.cart.flatMap((item, index) => {
+      const latest = liveItems[index] || latestById.get(item.id);
+      if (!latest) return [];
+      return [{ ...item, ...latest, qty: Math.min(item.qty, latest.stock) }];
+    }).filter(item => item.qty > 0);
+    products = latestProducts;
+    reconcileProductCategories();
+    renderProductGrid();
+    renderCart();
+    renderModalCartItems();
+    updatePaymentTotals();
   }
 
   function reconcileProductCategories() {
@@ -242,11 +296,10 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
       renderSalesUsers();
 
       try {
-        const shiftResponse = await api.get("/api/v1/shifts/current");
-        currentShift = shiftResponse?.shift || shiftResponse?.data || shiftResponse;
+        const response = await api.get("/api/v1/shifts/current");
+        currentShift = firstRecord(response?.shift || response);
       } catch {
         currentShift = null;
-        showToast("تم تحميل المنتجات، لكن تعذّر تحميل الوردية الحالية. سجّل الدخول مجددًا أو راجع صلاحية الكاشير.", "error");
       }
 
       let customerTypes = [];
@@ -255,7 +308,8 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
       if (els.customerTypeSelect && customerTypes.length) {
         els.customerTypeSelect.innerHTML = customerTypes.map(type => {
           const discount = Number(type.discount_percent ?? type.discount_rate ?? type.discount ?? 0);
-          return `<option value="${escapeHtml(type.id)}" data-discount="${discount}">${escapeHtml(type.name)}</option>`;
+          const code = type.code || type.slug || type.type || "walk_in";
+          return `<option value="${escapeHtml(type.id)}" data-code="${escapeHtml(code)}" data-discount="${discount}">${escapeHtml(type.name)}</option>`;
         }).join("");
         selectedDiscountPct = Number(els.customerTypeSelect.selectedOptions[0]?.dataset.discount || 0);
       }
@@ -333,7 +387,7 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
             <button class="cart-item__remove" type="button" data-action="remove" aria-label="حذف">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
-            <div class="cart-item__name">${escapeHtml(item.name)}</div>
+            <div class="cart-item__name">${escapeHtml(item.name)}${item.badge ? `<small>${escapeHtml(item.badge)}</small>` : ""}</div>
           </div>
           <div class="cart-item__bottom">
             <div class="qty-stepper">
@@ -372,6 +426,12 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
       category => `<button class="chip-filter${category.id === state.activeCategory ? " is-active" : ""}" data-cat="${escapeHtml(category.id)}">${escapeHtml(category.name)}</button>`
     ).join("");
   }
+
+  els.categoryChips.addEventListener("wheel", event => {
+    if (els.categoryChips.scrollWidth <= els.categoryChips.clientWidth || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    els.categoryChips.scrollLeft += event.deltaY;
+  }, { passive: false });
 
   els.categoryChips.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-cat]");
@@ -412,49 +472,96 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
   }
 
   function renderProductGrid() {
-    const products = getFilteredProducts();
-    if (products.length === 0) {
+    const variants = getFilteredProducts();
+    if (variants.length === 0) {
       els.productGrid.innerHTML = `
         <div class="empty-state" style="grid-column: 1 / -1;">
           <p>مفيش منتجات مطابقة للبحث.</p>
         </div>`;
       return;
     }
-    els.productGrid.innerHTML = products
+    const grouped = [...variants.reduce((map, variant) => {
+      const key = String(variant.productId || variant.id);
+      if (!map.has(key)) map.set(key, { key, name: variant.name, variants: [] });
+      map.get(key).variants.push(variant);
+      return map;
+    }, new Map()).values()];
+    els.productGrid.innerHTML = grouped
       .map(
-        (p) => `
-      <div class="product-card" data-id="${p.id}">
+        (group) => {
+          const first = group.variants[0];
+          const stock = group.variants.reduce((sum, item) => sum + item.stock, 0);
+          const prices = group.variants.map(item => item.price);
+          const priceLabel = Math.min(...prices) === Math.max(...prices) ? formatMoney(first.price) : `${formatMoney(Math.min(...prices))} - ${formatMoney(Math.max(...prices))}`;
+          const colors = [...new Set(group.variants.map(item => visibleVariantValue(item.color)).filter(Boolean))];
+          const sizes = [...new Set(group.variants.map(item => visibleVariantValue(item.size)).filter(Boolean))];
+          return `
+      <div class="product-card" data-product-key="${escapeHtml(group.key)}">
         <div class="product-card__badges">
-          <span class="product-card__badge-stock">مخزون: ${p.stock}</span>
-          <span class="product-card__badge-size">${escapeHtml(p.badge)}</span>
+          <span class="product-card__badge-stock">المخزون: ${stock}</span>
+          ${group.variants.length > 1 ? `<span class="product-card__variant-count">${group.variants.length} اختيارات</span>` : ""}
         </div>
-        <div class="product-card__name">${escapeHtml(p.name)}</div>
+        <div class="product-card__name">${escapeHtml(group.name)}</div>
+        ${colors.length || sizes.length ? `<div class="product-card__details">
+          ${colors.length ? `<span><b>الألوان</b>${escapeHtml(colors.join("، "))}</span>` : ""}
+          ${sizes.length ? `<span><b>المقاسات</b>${escapeHtml(sizes.join("، "))}</span>` : ""}
+        </div>` : ""}
         <div class="product-card__footer">
-          <span class="product-card__price num">${formatMoney(p.price)} <small>ج.م</small></span>
+          <span class="product-card__price num">${priceLabel} <small>ج.م</small></span>
+          <span class="product-card__choose">${group.variants.length > 1 ? "اختيار" : "إضافة"} +</span>
         </div>
-      </div>`
+      </div>`;
+        }
       )
       .join("");
   }
 
-  els.productGrid.addEventListener("click", async (e) => {
+  function closeVariantPicker() {
+    els.variantOverlay.hidden = true;
+    document.body.classList.remove("modal-open");
+  }
+
+  function openVariantPicker(group) {
+    els.variantPickerTitle.textContent = group[0].name;
+    const hint = els.variantOverlay.querySelector(".variant-picker__hint");
+    if (hint) hint.textContent = `${group.length} اختيارات متاحة — اختر المقاس واللون المناسبين`;
+    els.variantPickerGrid.innerHTML = `<div class="variant-picker__columns" aria-hidden="true"><span>#</span><span>المقاس</span><span>اللون</span><span>المتاح</span><span>السعر</span><span></span></div>` + group.map((item, index) => {
+      const color = visibleVariantValue(item.color);
+      const size = visibleVariantValue(item.size);
+      return `
+      <button class="variant-option" type="button" data-variant-id="${escapeHtml(item.id)}" ${item.stock <= 0 ? "disabled" : ""}>
+        <span class="variant-option__number">${index + 1}</span>
+        <span class="variant-option__cell" data-label="المقاس"><strong>${escapeHtml(size || "غير محدد")}</strong></span>
+        <span class="variant-option__cell" data-label="اللون"><b>${escapeHtml(color || "غير محدد")}</b></span>
+        <span class="variant-option__stock"><i></i><b class="num">${item.stock}</b><small>قطعة</small></span>
+        <span class="variant-option__price num">${formatMoney(item.price)} <small>ج.م</small></span>
+        <span class="variant-option__select">اختيار <b aria-hidden="true">←</b></span>
+      </button>`;
+    }).join("");
+    els.variantOverlay.hidden = false;
+    document.body.classList.add("modal-open");
+    requestAnimationFrame(() => els.variantPickerGrid.querySelector("button:not(:disabled)")?.focus());
+  }
+
+  els.productGrid.addEventListener("click", (e) => {
     const card = e.target.closest(".product-card");
     if (!card) return;
-    let product = getFilteredProducts().find((p) => p.id === card.dataset.id);
-    if (!product) return;
-    if (product.productId) {
-      card.setAttribute("aria-busy", "true");
-      try {
-        const response = await api.get(`/api/v1/products/${encodeURIComponent(product.productId)}`);
-        const detailed = normalizeProducts([response?.product || response?.data || response]);
-        product = detailed.find(item => item.id === product.id) || product;
-        products = products.map(item => item.id === product.id ? product : item);
-        if (categoryProducts) categoryProducts = categoryProducts.map(item => item.id === product.id ? product : item);
-      } catch (error) { showToast(error.message, "error"); }
-      finally { card.removeAttribute("aria-busy"); }
-    }
-    addToCart(product);
+    const variants = getFilteredProducts().filter(product => String(product.productId || product.id) === card.dataset.productKey);
+    if (!variants.length) return;
+    if (variants.length === 1) addToCart(variants[0]);
+    else openVariantPicker(variants);
   });
+
+  els.variantPickerGrid.addEventListener("click", event => {
+    const option = event.target.closest("[data-variant-id]");
+    if (!option) return;
+    const product = products.find(item => item.id === option.dataset.variantId) || categoryProducts?.find(item => item.id === option.dataset.variantId);
+    if (!product) return;
+    addToCart(product);
+    closeVariantPicker();
+  });
+  els.closeVariantPicker.addEventListener("click", closeVariantPicker);
+  els.variantOverlay.addEventListener("click", event => { if (event.target === els.variantOverlay) closeVariantPicker(); });
 
   /* ------------------------------------------------------------------ */
   /* 8) خانة البحث/السكانر — دي أهم جزء:                                 */
@@ -661,7 +768,7 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
         els.discountHintRow.style.display = "flex";
         if (els.discountBadge) {
           const selectedOption = els.customerTypeSelect ? els.customerTypeSelect.options[els.customerTypeSelect.selectedIndex] : null;
-          const typeName = selectedOption ? selectedOption.value : "";
+          const typeName = selectedOption?.textContent?.trim() || "";
           els.discountBadge.querySelector ? 
             (els.discountBadge.lastChild.textContent = ` خصم ${typeName} ${selectedDiscountPct}%`) :
             null;
@@ -738,11 +845,15 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     const address = els.customerAddress?.value.trim();
     if (!name && !phone && !address) return null;
     if (!name) throw new Error("اسم العميل مطلوب عند تسجيل بيانات العميل.");
+    const customerTypeValue = String(els.customerTypeSelect?.value || "").trim();
+    const customerTypeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(customerTypeValue)
+      ? customerTypeValue
+      : null;
     const customer = await api.post("/api/v1/customers", {
       name,
       phone: phone || null,
       address: address || null,
-      customer_type_id: els.customerTypeSelect?.value || null
+      customer_type_id: customerTypeId
     });
     return customer?.id || customer?.customer?.id || customer?.data?.id;
   }
@@ -755,7 +866,7 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     }
     const shiftId = currentShift?.id || currentShift?.shift_id;
     if (!shiftId) {
-      showToast("لا توجد وردية مفتوحة. افتح وردية قبل إتمام البيع.", "error");
+      showToast("لا توجد وردية مفتوحة للحساب الحالي. افتح وردية ثم أعد المحاولة.", "error");
       return;
     }
     const activeMethod = els.paymentMethodGroup.querySelector(".method-btn.is-active")?.dataset.method || "نقدي";
@@ -784,7 +895,14 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
       closePaymentModal();
       await loadPosData();
     } catch (error) {
-      showToast(error.message, "error");
+      if (error.status === 409) {
+        try {
+          await refreshCartStock();
+          showToast(state.cart.length ? "تم تحديث المخزون والسلة. راجع الكميات ثم اضغط تأكيد الدفع مرة أخرى." : "تغيّر المخزون ولم تعد أصناف السلة متاحة.", "error");
+        } catch {
+          showToast("تغيّر المخزون. أعد تحميل شاشة البيع ثم حاول مرة أخرى.", "error");
+        }
+      } else showToast(error.message, "error");
     } finally {
       els.confirmPaymentBtn.disabled = false;
       els.confirmPaymentBtn.innerHTML = originalLabel;

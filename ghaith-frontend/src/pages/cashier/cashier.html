@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="../../components/notifications/notifications.css" />
   <link rel="stylesheet" href="../../components/printing/printing.css" />
   <link rel="stylesheet" id="cashierRouteStyle" />
+  <link rel="stylesheet" href="../../components/cashier-select/cashier-select.css" />
 </head>
 <body>
   <div class="pos-shell cashier-shell">
@@ -42,13 +43,13 @@
           <button class="pos-topbar__icon-btn notification-trigger" id="notificationTrigger" type="button" aria-label="الإشعارات" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="notification-count" id="notificationCount" hidden>0</span></button>
           <section class="notification-panel" id="notificationPanel" aria-label="مركز الإشعارات" hidden><header><div><h2>الإشعارات</h2><span id="notificationUnreadLabel">لا توجد إشعارات جديدة</span></div><button type="button" id="notificationMarkAll">تحديد الكل كمقروء</button></header><div class="notification-list" id="notificationList"></div><footer><button type="button" id="notificationClear">مسح الإشعارات المقروءة</button></footer></section>
         </div>
-        <div class="pos-user-menu" id="cashierUserMenu" data-user-name="أحمد محمود">
+        <div class="pos-user-menu" id="cashierUserMenu" data-user-name="المستخدم">
           <button class="pos-topbar__avatar" id="userMenuBtn" type="button" aria-label="فتح قائمة المستخدم" aria-haspopup="menu" aria-expanded="false" aria-controls="userMenuDropdown">
             <span aria-hidden="true">AD</span>
           </button>
           <div class="pos-user-menu__dropdown" id="userMenuDropdown" role="menu" hidden>
             <div class="pos-user-menu__identity">
-              <strong id="currentUserName">أحمد محمود</strong>
+              <strong id="currentUserName">المستخدم</strong>
               <span>موظف مبيعات</span>
             </div>
             <div class="pos-user-menu__actions">

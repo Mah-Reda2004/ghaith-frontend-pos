@@ -22,9 +22,6 @@ function addApiFields() {
     <div class="field"><label for="productSupplier">المورد <b>*</b></label><select class="select" id="productSupplier" required><option value="">اختر المورد...</option></select></div>
     <div class="field" id="productStatusField"><label for="productStatus">حالة المنتج</label><select class="select" id="productStatus"><option value="active">نشط</option><option value="inactive">غير نشط</option></select></div>
     <p class="products-api-note">ينشئ الخادم متغير المخزون الافتراضي تلقائيًا. المقاس واللون غير متاحين حاليًا في API إنشاء المنتجات.</p>`);
-  const skuLabel = document.querySelector('label[for="productSku"]');
-  if (skuLabel) skuLabel.textContent = "الباركود (اختياري)";
-  document.getElementById("productSku")?.removeAttribute("required");
   document.querySelector(".products-form-section:nth-of-type(2)")?.insertAdjacentHTML("beforeend", productVariantsMarkup("productVariant"));
   document.querySelector(".products-page")?.insertAdjacentHTML("beforeend", '<div class="modal-overlay products-modal" id="productRevaluationsModal" hidden><section class="modal products-dialog" role="dialog" aria-modal="true" aria-labelledby="productRevaluationsTitle"><header class="modal__header products-dialog__header"><h2 class="modal__title" id="productRevaluationsTitle">سجل إعادة تقييم المنتج</h2><button class="btn-icon" id="closeProductRevaluations" type="button" aria-label="إغلاق">×</button></header><div class="products-dialog__body"><div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>السعر السابق</th><th>السعر الجديد</th><th>السبب</th></tr></thead><tbody id="productRevaluationsBody"></tbody></table></div></div></section></div>');
 }
@@ -36,7 +33,7 @@ function getElements() {
     categoryFilter: document.getElementById("productsCategoryFilter"), stockFilter: document.getElementById("productsStockFilter"), paginationInfo: document.getElementById("productsPaginationInfo"), pagination: document.querySelector(".products-pagination .pagination__pages"),
     totalStat: document.getElementById("productsTotalStat"), lowStat: document.getElementById("productsLowStat"), emptyStat: document.getElementById("productsEmptyStat"), valueStat: document.getElementById("productsValueStat"),
     modal: document.getElementById("productModal"), modalTitle: document.getElementById("productModalTitle"), form: document.getElementById("productForm"), id: document.getElementById("productId"),
-    nameAr: document.getElementById("productNameAr"), nameEn: document.getElementById("productNameEn"), category: document.getElementById("productCategory"), supplier: document.getElementById("productSupplier"), sku: document.getElementById("productSku"), status: document.getElementById("productStatus"), statusField: document.getElementById("productStatusField"),
+    nameAr: document.getElementById("productNameAr"), nameEn: document.getElementById("productNameEn"), category: document.getElementById("productCategory"), supplier: document.getElementById("productSupplier"), status: document.getElementById("productStatus"), statusField: document.getElementById("productStatusField"),
     salePrice: document.getElementById("productSalePrice"), costPrice: document.getElementById("productCostPrice"), salesPercentage: document.getElementById("productSalesPercentage"), netProfitPercentage: document.getElementById("productNetProfitPercentage"), quantity: document.getElementById("productQuantity"), minimum: document.getElementById("productMinimum"), nameError: document.getElementById("productNameError"), saveButton: document.getElementById("saveProductBtn"),
     successModal: document.getElementById("productSuccessModal"), successTitle: document.getElementById("productSuccessTitle"), successName: document.getElementById("successProductName"), successSku: document.getElementById("successProductSku"), successCategory: document.getElementById("successProductCategory"), successQuantity: document.getElementById("successProductQuantity"), toastStack: document.getElementById("productsToastStack")
   };
@@ -52,13 +49,22 @@ function normalizeProduct(item, variant = item.variant || {}) {
     size: variant.size || item.size || item.variant_size || "—", color: variant.color || item.color || item.variant_color || "—",
     salePrice: Number(variant.sale_price ?? item.sale_price ?? item.sell_price ?? 0), costPrice: Number(variant.purchase_price ?? item.purchase_price ?? item.cost_price ?? 0),
     salesPercentage: Number(variant.commission_rate ?? item.commission_rate ?? 0), quantity: Number(variant.stock_quantity ?? variant.stock_qty ?? variant.quantity ?? item.stock_quantity ?? item.stock_qty ?? 0), minimum: Number(variant.low_stock_threshold ?? item.low_stock_threshold ?? item.min_qty ?? 0),
-    stockStatus: variant.stock_status || item.stock_status || "available", status: item.status || "active", supplierId: item.supplier_id || item.supplier?.id || item.default_supplier_id || "", version: Number(item.version || 1), variantId: variant.id || item.variant_id || "", variantVersion: Number(variant.version || item.variant_version || 0)
+    stockStatus: variant.stock_status || item.stock_status || "available", status: item.status || "active", supplierId: item.supplier_id || item.supplier?.id || item.default_supplier_id || "", supplierName: item.supplier_name || item.supplier?.name || "", version: Number(item.version || 1), variantId: variant.id || item.variant_id || "", variantVersion: Number(variant.version || item.variant_version || 0)
   };
 }
 
 function normalizeProductRows(item) {
   const variants = item.product_variants || item.variants || [];
-  return variants.length ? variants.map(variant => normalizeProduct(item, variant)) : [normalizeProduct(item)];
+  const normalizedVariants = variants.length ? variants.map(variant => normalizeProduct(item, variant)) : [normalizeProduct(item)];
+  const product = { ...normalizedVariants[0] };
+  product.variants = normalizedVariants;
+  product.quantity = normalizedVariants.reduce((sum, variant) => sum + variant.quantity, 0);
+  product.supplierName ||= suppliers.find(supplier => String(supplier.id) === String(product.supplierId))?.name || "—";
+  return [product];
+}
+
+function renderVariantBadges(variants) {
+  return `<div class="product-variant-badges">${variants.map(variant => `<span class="product-variant-badge"><span>المقاس: <b>${escapeHtml(variant.size || "غير محدد")}</b></span><span>اللون: <b>${escapeHtml(variant.color || "غير محدد")}</b></span><small>${variant.quantity.toLocaleString("en-US")} قطعة</small></span>`).join("")}</div>`;
 }
 
 function stockState(product) {
@@ -123,7 +129,15 @@ function renderProducts(elements) {
   const pageProducts = products.slice(start, start + UI_PAGE_SIZE);
   elements.tableBody.innerHTML = pageProducts.map(product => {
     const state = stockState(product);
-    return `<tr data-product-id="${escapeHtml(String(product.id))}"><td class="num" dir="ltr">${escapeHtml(String(product.id))}</td><td><span class="product-name-cell"><strong>${escapeHtml(product.nameAr)}</strong><small>${escapeHtml(product.nameEn)}</small></span></td><td class="num" dir="ltr">${escapeHtml(product.barcode)}</td><td><span class="product-sku-cell num" dir="ltr">${escapeHtml(product.sku)}</span></td><td>${escapeHtml(product.category)}</td><td>${escapeHtml(product.size)}</td><td>${escapeHtml(product.color)}</td><td class="num">${money(product.costPrice)}</td><td class="num">${money(product.salePrice)}</td><td class="num">${product.salesPercentage}%</td><td class="num">${product.quantity}</td><td class="num">${product.minimum}</td><td><span class="product-stock product-stock--${state}">${stockLabel(product)}</span></td><td><button class="status-toggle status-toggle--table${product.status === "active" ? "" : " is-inactive"}" type="button" role="switch" aria-checked="${product.status === "active"}" data-action="toggle-status"><span class="status-toggle__label">${product.status === "active" ? "نشط" : "غير نشط"}</span><span class="status-toggle__track" aria-hidden="true"><span class="status-toggle__thumb"></span></span></button></td><td><div class="products-actions"><button class="products-action" type="button" data-action="revaluations" aria-label="سجل تقييم ${escapeHtml(product.nameAr)}">↻</button><button class="products-action products-action--edit" type="button" data-action="edit" aria-label="تعديل ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="products-action products-action--delete" type="button" data-action="delete" aria-label="أرشفة ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div></td></tr>`;
+    return `<tr data-product-id="${escapeHtml(String(product.id))}">
+      <td><span class="product-name-cell"><strong>${escapeHtml(product.nameAr)}</strong><small>${escapeHtml(product.nameEn)}</small></span></td>
+      <td><span class="product-barcode-cell"><b class="num" dir="ltr">${escapeHtml(product.barcode)}</b><small class="num" dir="ltr">SKU: ${escapeHtml(product.sku)}</small></span></td>
+      <td>${escapeHtml(product.category)}</td><td>${renderVariantBadges(product.variants || [product])}</td><td>${escapeHtml(product.supplierName || "—")}</td>
+      <td class="num">${money(product.costPrice)}</td><td class="num">${money(product.salePrice)}</td><td class="num">${product.salesPercentage}%</td><td class="num">${product.quantity}</td><td class="num">${product.minimum}</td>
+      <td><span class="product-stock product-stock--${state}">${stockLabel(product)}</span></td>
+      <td><button class="status-toggle status-toggle--table${product.status === "active" ? "" : " is-inactive"}" type="button" role="switch" aria-checked="${product.status === "active"}" data-action="toggle-status"><span class="status-toggle__label">${product.status === "active" ? "نشط" : "غير نشط"}</span><span class="status-toggle__track" aria-hidden="true"><span class="status-toggle__thumb"></span></span></button></td>
+      <td><div class="products-actions"><button class="products-action" type="button" data-action="revaluations" aria-label="سجل تقييم ${escapeHtml(product.nameAr)}">↻</button><button class="products-action products-action--edit" type="button" data-action="edit" aria-label="تعديل ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="products-action products-action--delete" type="button" data-action="delete" aria-label="أرشفة ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div></td>
+    </tr>`;
   }).join("");
   elements.empty.hidden = pageProducts.length > 0;
   elements.tableBody.hidden = pageProducts.length === 0;
@@ -191,7 +205,7 @@ function setModalTitle(elements, text) {
 async function openProductModal(elements, product = null) {
   elements.form.reset(); elements.nameError.hidden = true;
   elements.id.value = product?.id || ""; elements.nameAr.value = product?.nameAr || ""; elements.nameEn.value = product?.nameEn || ""; elements.category.value = product?.categoryId || ""; elements.supplier.value = product?.supplierId || "";
-  elements.sku.value = product?.barcode || ""; elements.status.value = product?.status || "active"; elements.statusField.hidden = false;
+  elements.status.value = product?.status || "active"; elements.statusField.hidden = false;
   elements.salePrice.value = product?.salePrice ?? ""; elements.costPrice.value = product?.costPrice ?? ""; elements.salesPercentage.value = product?.salesPercentage ?? 0; elements.quantity.value = product?.quantity ?? 0; elements.minimum.value = product?.minimum ?? 5;
   elements.costPrice.readOnly = Boolean(product); elements.modal.dataset.variantId = ""; elements.modal.dataset.variantVersion = "";
   setModalTitle(elements, product ? "تعديل المنتج" : "إضافة منتج جديد"); elements.modal.hidden = false; updateProfit(elements);
@@ -221,7 +235,21 @@ async function showRevaluations(product) {
 function showSuccess(elements, product, edited = false) {
   elements.successTitle.textContent = edited ? "تم تحديث المنتج بنجاح" : "تمت إضافة المنتج بنجاح";
   elements.successName.textContent = product.nameAr; elements.successSku.textContent = product.sku; elements.successCategory.textContent = product.category; elements.successQuantity.textContent = product.quantity.toLocaleString("en-US");
+  elements.successModal.dataset.productId = String(product.id || "");
   elements.successModal.hidden = false;
+}
+
+async function printSavedProductBarcodes(elements, button) {
+  const product = products.find(item => String(item.id) === elements.successModal.dataset.productId);
+  if (!product) { showToast(elements, "تعذّر العثور على نسخ المنتج. أعد تحميل الصفحة وحاول مرة أخرى.", true); return; }
+  const printable = (product.variants || [product]).filter(variant => Number(variant.quantity) > 0 && (variant.barcode !== "—" || variant.sku !== "—")).map(variant => ({
+    name: product.nameAr, barcode: variant.barcode !== "—" ? variant.barcode : variant.sku, sku: variant.sku !== "—" ? variant.sku : variant.barcode,
+    price: variant.salePrice ?? product.salePrice, size: variant.size === "—" ? "" : variant.size, color: variant.color === "—" ? "" : variant.color, copies: variant.quantity
+  }));
+  if (!printable.length) { showToast(elements, "لا توجد نسخ لها باركود وكمية متاحة للطباعة.", true); return; }
+  button.disabled = true; const original = button.innerHTML; button.textContent = "جاري إرسال الباركود...";
+  try { await window.GhaithPrint?.printBarcodes(printable); }
+  finally { button.disabled = false; button.innerHTML = original; }
 }
 
 async function saveProduct(elements) {
@@ -291,7 +319,7 @@ export function initProducts() {
   document.getElementById("closeProductRevaluations").addEventListener("click", () => { document.getElementById("productRevaluationsModal").hidden = true; });
   document.getElementById("closeProductModal").addEventListener("click", () => closeProductModal(elements)); document.getElementById("cancelProductModal").addEventListener("click", () => closeProductModal(elements));
   document.getElementById("addAnotherProduct").addEventListener("click", () => { closeSuccess(elements); openProductModal(elements); }); document.getElementById("backToProducts").addEventListener("click", () => closeSuccess(elements));
-  document.getElementById("printProductBarcode").addEventListener("click", () => window.GhaithPrint?.printBarcode({ name: elements.successName.textContent, sku: elements.successSku.textContent, copies: 1 }));
+  document.getElementById("printProductBarcode").addEventListener("click", event => printSavedProductBarcodes(elements, event.currentTarget));
   elements.form.addEventListener("submit", handleSubmit); elements.tableBody.addEventListener("click", handleTable); elements.pagination.addEventListener("click", handlePagination);
   elements.search.addEventListener("input", refresh); elements.categoryFilter.addEventListener("change", refresh); elements.stockFilter.addEventListener("change", refresh);
   const refreshPricing = debounce(() => previewPricing(elements), 350);

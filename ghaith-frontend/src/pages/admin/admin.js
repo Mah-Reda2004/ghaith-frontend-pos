@@ -1,6 +1,7 @@
 import { bindThemeToggle, initTheme } from "../../core/theme.js";
 import { getCurrentUser, getUserRole, isAuthenticated, logout } from "../../core/auth.js";
 import { initStatusToggles } from "../../components/status-toggle/status-toggle.js";
+import { initAppSelects } from "../../components/cashier-select/cashier-select.js";
 import "../../components/printing/printing.js";
 
 // Resolve routed assets from this module instead of the browser URL. This keeps
@@ -111,6 +112,7 @@ let navigationId = 0;
 initTheme();
 bindThemeToggle(document.getElementById("adminThemeToggle"));
 initStatusToggles();
+initAppSelects(document);
 
 function normalizeCurrencyLabels(root = document.body) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);

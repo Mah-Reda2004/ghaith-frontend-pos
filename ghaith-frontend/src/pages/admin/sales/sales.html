@@ -17,38 +17,33 @@
   </div>
 
   <div class="sales-stats">
-    <article class="sales-stat sales-stat--total"><span class="sales-stat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5M8 16h8"/></svg></span><div><small>إجمالي المبيعات</small><strong dir="ltr">84,520 <em>EGP</em></strong><span class="is-up">↗ 12.5% <i>مقارنة بالشهر الماضي</i></span></div></article>
-    <article class="sales-stat sales-stat--cash"><span class="sales-stat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg></span><div><small>صافي المبيعات</small><strong dir="ltr">79,150 <em>EGP</em></strong><span class="sales-stat__bar"><i></i></span></div></article>
-    <article class="sales-mini"><small>عدد الفواتير</small><strong>342</strong></article>
-    <article class="sales-mini"><small>متوسط الفاتورة</small><strong dir="ltr">247 <em>EGP</em></strong></article>
-    <article class="sales-mini"><small>إجمالي الخصومات</small><strong class="is-warning" dir="ltr">3,200 <em>EGP</em></strong></article>
-    <article class="sales-mini"><small>إجمالي المرتجعات</small><strong class="is-danger" dir="ltr">2,170 <em>EGP</em></strong></article>
+    <article class="sales-stat sales-stat--total"><span class="sales-stat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5M8 16h8"/></svg></span><div><small>إجمالي المبيعات</small><strong dir="ltr">—</strong></div></article>
+    <article class="sales-stat sales-stat--cash"><span class="sales-stat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2"/></svg></span><div><small>صافي المبيعات</small><strong dir="ltr">—</strong></div></article>
+    <article class="sales-mini"><small>عدد الفواتير</small><strong>—</strong></article>
+    <article class="sales-mini"><small>متوسط الفاتورة</small><strong dir="ltr">—</strong></article>
+    <article class="sales-mini"><small>إجمالي الخصومات</small><strong class="is-warning" dir="ltr">—</strong></article>
+    <article class="sales-mini"><small>إجمالي المرتجعات</small><strong class="is-danger" dir="ltr">—</strong></article>
   </div>
 
   <section class="table-card sales-table-card">
     <div class="sales-toolbar">
       <label class="input-search sales-search"><input class="input" id="salesSearch" type="search" placeholder="بحث برقم الفاتورة أو اسم العميل..."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></label>
-      <select class="select" id="salesCashier" aria-label="الكاشير"><option value="">كل الكاشيرين</option><option>أحمد محمد</option><option>سارة علي</option></select>
-      <button class="sales-filter is-active" type="button" data-filter="all">الكل</button><button class="sales-filter" type="button" data-filter="sale">بيع مكتمل</button><button class="sales-filter" type="button" data-filter="return">مرتجع</button>
-      <select class="select" id="salesPayment" aria-label="طريقة الدفع"><option value="">طريقة الدفع</option><option value="cash">نقدي</option><option value="card">بطاقة</option></select>
-      <select class="select" id="salesStatus" aria-label="حالة الفاتورة"><option value="">حالة الفاتورة</option><option value="sale">مكتملة</option><option value="return">مرتجع</option></select>
+      <div class="sales-select-filters">
+        <select class="select" id="salesPayment" aria-label="طريقة الدفع"><option value="">طريقة الدفع</option><option value="cash">نقدي</option><option value="card">بطاقة</option></select>
+        <select class="select" id="salesStatus" aria-label="حالة الفاتورة"><option value="">حالة الفاتورة</option><option value="sale">مكتملة</option><option value="return">مرتجع</option></select>
+      </div>
     </div>
     <div class="table-responsive sales-table-wrap">
-      <table class="data-table sales-table"><thead><tr><th>المعرّف</th><th>رقم الفاتورة</th><th>التاريخ والوقت</th><th>الكاشير</th><th>موظف المبيعات</th><th>العميل</th><th>هاتف العميل</th><th>عدد المنتجات</th><th>طريقة الدفع</th><th>الإجمالي الفرعي</th><th>الخصم</th><th>الصافي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>الإجراءات</th></tr></thead><tbody id="salesTableBody">
-        <tr data-type="sale" data-payment="cash" data-cashier="أحمد محمد" data-search="INV-2023-0891 محمد خالد 0555000021"><td><b dir="ltr">#INV-2023-0891</b></td><td>24 أكتوبر 2023 <small>14:30</small></td><td>أحمد محمد</td><td><strong>محمد خالد</strong><small>0555000021</small></td><td>3</td><td dir="ltr">1,450 EGP</td><td class="is-muted">—</td><td class="sales-net" dir="ltr">1,450 EGP</td><td><button class="sales-view" type="button" aria-label="عرض الفاتورة">⌕</button></td></tr>
-        <tr data-type="sale" data-payment="card" data-cashier="سارة علي" data-search="INV-2023-0890 عميل نقدي سارة علي"><td><b dir="ltr">#INV-2023-0890</b></td><td>24 أكتوبر 2023 <small>12:15</small></td><td>سارة علي</td><td><strong>عميل نقدي</strong><small>—</small></td><td>1</td><td dir="ltr">450 EGP</td><td class="is-warning" dir="rtl">50 EGP</td><td class="sales-net" dir="ltr">400 EGP</td><td><button class="sales-view" type="button" aria-label="عرض الفاتورة">⌕</button></td></tr>
-        <tr data-type="return" data-payment="cash" data-cashier="خالد عبدالله" data-search="RET-2023-0105 عبدالله السلام خالد عبدالله"><td><b class="is-danger" dir="ltr">#RET-2023-0105</b></td><td>24 أكتوبر 2023 <small>10:05</small></td><td>خالد عبدالله</td><td><strong>عبدالله السلام</strong><small>0555000099</small></td><td>1</td><td dir="ltr">850 EGP</td><td class="is-muted">—</td><td class="sales-net is-danger" dir="ltr">-850 EGP</td><td><button class="sales-view" type="button" aria-label="عرض الفاتورة">⌕</button></td></tr>
-      </tbody></table>
+      <table class="data-table sales-table"><thead><tr><th>رقم الفاتورة</th><th>التاريخ والوقت</th><th>الكاشير</th><th>موظف المبيعات</th><th>العميل</th><th>هاتف العميل</th><th>عدد المنتجات</th><th>طريقة الدفع</th><th>الإجمالي الفرعي</th><th>الخصم</th><th>الصافي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>الإجراءات</th></tr></thead><tbody id="salesTableBody"></tbody></table>
       <div class="sales-empty" id="salesEmpty" hidden><span>⌕</span><h3>لا توجد فواتير مطابقة</h3><p>جرّب تغيير البحث أو الفلاتر.</p></div>
     </div>
-    <footer class="pagination"><span class="pagination__info" id="salesResultInfo">عرض 1 إلى 3 من أصل 342 نتيجة</span><div class="pagination__pages"><button class="page-btn" type="button">‹</button><button class="page-btn is-active" type="button">1</button><button class="page-btn" type="button">2</button><button class="page-btn" type="button">3</button><button class="page-btn" type="button">…</button><button class="page-btn" type="button">35</button><button class="page-btn" type="button">›</button></div></footer>
+    <footer class="pagination"><span class="pagination__info" id="salesResultInfo">جاري تحميل المبيعات...</span></footer>
   </section>
 
   <div class="sales-modal" id="salesModal" hidden><div class="sales-modal__backdrop" data-close-modal></div><article class="sales-modal__panel" role="dialog" aria-modal="true" aria-labelledby="invoiceTitle">
-    <header><div><span class="sales-modal__eyebrow">تفاصيل الفاتورة</span><h2 id="invoiceTitle" dir="ltr">#INV-2023-0891</h2><small>24 أكتوبر 2023، 14:30 · أحمد محمد</small></div><div class="sales-modal__actions"><button class="btn btn-outline" type="button" id="printInvoice">طباعة الفاتورة</button><button class="sales-modal__close" type="button" data-close-modal aria-label="إغلاق">×</button></div></header>
-    <section class="invoice-customer"><div><span>معلومات العميل</span><strong id="invoiceCustomer">محمد خالد</strong><small>عميل مسجل</small></div><div><small>رقم الهاتف</small><b dir="ltr">+966 50 123 4567</b></div></section>
-    <section class="invoice-block"><h3>المنتجات</h3><div class="invoice-products"><div><strong>ثوب صيفي فاخر - أبيض</strong><small dir="ltr">THB-SUM-W-42</small><span>2 × 350 EGP</span><b>700 EGP</b></div><div><strong>شماغ غيث الماسي - أحمر</strong><small dir="ltr">SHM-GTH-R-58</small><span>1 × 250 EGP</span><b>250 EGP</b></div></div></section>
-    <div class="invoice-summary"><section><h3>تفاصيل الخصم</h3><p><span>نوع الخصم</span><b>خصم ثابت</b></p><p><span>قيمة الخصم</span><b class="is-up">50 EGP</b></p></section><section><h3>تفاصيل الدفع</h3><p><span>الإجمالي النهائي</span><b>900 EGP</b></p><p><span>المبلغ المدفوع</span><b class="is-up">500 EGP</b></p><p><span>المبلغ المتبقي</span><b class="is-danger">400 EGP</b></p><p><span>طريقة الدفع</span><b>مدى / نقدي</b></p></section></div>
+    <header><div><span class="sales-modal__eyebrow">تفاصيل الفاتورة</span><h2 id="invoiceTitle" dir="ltr">—</h2></div><div class="sales-modal__actions"><button class="btn btn-outline" type="button" id="printInvoice">طباعة الفاتورة</button><button class="sales-modal__close" type="button" data-close-modal aria-label="إغلاق">×</button></div></header>
+    <section class="invoice-customer"><div><span>معلومات العميل</span><strong id="invoiceCustomer">—</strong></div></section>
+    <section class="invoice-block"><h3>المنتجات</h3><div class="invoice-products"></div></section>
     <footer><button class="btn btn-outline" type="button" data-close-modal>إغلاق</button></footer>
   </article></div>
 </section>

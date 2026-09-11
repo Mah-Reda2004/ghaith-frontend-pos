@@ -1,83 +1,37 @@
 import { debounce, escapeHtml } from "../../../core/utils.js";
 import { api, listFrom } from "../../../core/api.js";
 
+const reportDefinition = ({ label, title, subtitle, tableTitle, search, columns, statLabels = [] }) => ({
+  label, title, subtitle, tableTitle, search, columns,
+  stats: statLabels.map(([name, unit = "", tone = "info", iconName = "chart"]) => [name, "0", unit, tone, "", iconName]),
+  rows: [], total: "0", chart: null, sideRows: null, donut: false
+});
+
 const REPORTS = {
-  sales: {
-    label: "المبيعات", title: "تقرير المبيعات", subtitle: "نظرة شاملة على أداء المبيعات والفواتير خلال الفترة المحددة",
-    stats: [
-      ["إجمالي المبيعات", "45,230", "ر.س", "primary", "+12.5% مقارنة بالفترة السابقة", "wallet"],
-      ["عدد الفواتير", "1,142", "", "info", "+8.2% مقارنة بالفترة السابقة", "file"],
-      ["متوسط قيمة الفاتورة", "39.60", "ر.س", "warning", "+4.1% مقارنة بالفترة السابقة", "calculator"],
-      ["صافي المبيعات", "41,800", "ر.س", "success", "+15.3% مقارنة بالفترة السابقة", "chart"]
-    ],
-    chart: { type: "line", title: "اتجاه المبيعات", values: [18, 27, 23, 35, 32, 43, 40, 55], compare: [12, 20, 17, 26, 24, 34, 32, 43], labels: ["30 أكتوبر", "25 أكتوبر", "20 أكتوبر", "15 أكتوبر", "10 أكتوبر", "5 أكتوبر", "3 أكتوبر", "1 أكتوبر"] },
-    tableTitle: "تفاصيل المبيعات", search: "بحث في الفواتير...",
-    columns: ["رقم الفاتورة", "التاريخ", "الكاشير", "العميل", "الإجمالي", "الخصم", "المدفوع", "المتبقي", "الحالة"],
-    rows: [
-      ["#INV-2023-001", "24 أكتوبر 14:30", "أحمد محمد", "شركة الأفق", "1,250.00", "50.00", { text: "1,200.00", className: "reports-positive" }, "0.00", { text: "مكتملة", badge: "success" }],
-      ["#INV-2023-002", "24 أكتوبر 15:45", "سارة علي", "عميل نقدي", "450.00", "0.00", { text: "200.00", className: "reports-positive" }, { text: "250.00", className: "reports-warning" }, { text: "مدفوعة جزئيًا", badge: "warning" }],
-      ["#INV-2023-003", "24 أكتوبر 16:10", "أحمد محمد", "مؤسسة البيضاء", "-320.00", "0.00", { text: "-320.00", className: "reports-negative" }, "0.00", { text: "مرتجع", badge: "danger" }],
-      ["#INV-2023-004", "25 أكتوبر 09:15", "سارة علي", "مجموعة الشروق", "3,400.00", "400.00", { text: "3,000.00", className: "reports-positive" }, "0.00", { text: "مكتملة", badge: "success" }]
-    ], total: "1,142"
-  },
-  profits: {
-    label: "الأرباح", title: "تقرير الأرباح", subtitle: "نظرة شاملة على الأداء المالي والربحية",
-    stats: [["إجمالي المبيعات", "245,000", "ر.س", "success", "+12.5%", "wallet"], ["تكلفة البضاعة", "98,500", "ر.س", "info", "+3.2%", "box"], ["إجمالي المصروفات", "32,400", "ر.س", "danger", "+5.1%", "receipt"], ["صافي الربح", "114,100", "ر.س", "success", "+18.4%", "chart"]],
-    chart: { type: "bars", title: "اتجاه الأرباح (الإيرادات مقابل التكاليف)", values: [48, 60, 72, 55, 88], compare: [35, 44, 51, 39, 62], labels: ["يناير", "فبراير", "مارس", "أبريل", "مايو"] },
-    sideRows: [["الثياب الرسمية", "56,000 ر.س", 72], ["الأشمغة والغتر", "32,500 ر.س", 55], ["الإكسسوارات", "18,200 ر.س", 38]],
-    tableTitle: "أحدث المعاملات المؤثرة على الأرباح", search: "بحث في المعاملات...", columns: ["رقم المرجع", "التاريخ", "النوع", "الفئة", "المبلغ (الإيراد)", "التكلفة", "صافي الربح"],
-    rows: [["TRX-9823", "24 مايو 2024", "مبيعات جملة", "الثياب الرسمية", "12,500 ر.س", "7,200 ر.س", { text: "+5,300 ر.س", className: "reports-positive" }], ["EXP-4412", "22 مايو 2024", "مصروف تشغيلي", "تسويق", "—", "3,000 ر.س", { text: "-3,000 ر.س", className: "reports-negative" }], ["TRX-9822", "21 مايو 2024", "مبيعات التجزئة", "الأشمغة والغتر", "4,200 ر.س", "1,800 ر.س", { text: "+2,400 ر.س", className: "reports-positive" }]], total: "56"
-  },
-  products: {
-    label: "المنتجات", title: "تقرير المنتجات", subtitle: "تحليل أداء المنتجات وحركة المبيعات والربحية",
-    stats: [["إجمالي المنتجات", "1,248", "", "primary", "منتج مسجل", "box"], ["المنتجات المباعة", "892", "", "success", "+9.4% هذا الشهر", "cart"], ["متوسط هامش الربح", "38.5", "%", "info", "+2.1%", "chart"], ["منتجات بدون حركة", "42", "", "warning", "تحتاج مراجعة", "alert"]],
-    chart: { type: "bars", title: "أعلى المنتجات مبيعًا", values: [92, 78, 65, 57, 46], compare: [66, 59, 48, 42, 35], labels: ["عباية ملكية", "ثوب كلاسيك", "شماغ فاخر", "عطر العود", "أزرار فضية"] },
-    tableTitle: "تفاصيل أداء المنتجات", search: "بحث باسم المنتج أو SKU...", columns: ["المنتج", "رمز SKU", "الفئة", "الكمية المباعة", "الإيرادات", "التكلفة", "صافي الربح", "الحالة"],
-    rows: [["عباية ملكية سوداء", "SKU-ABY-001", "العبايات", "120", "54,000 ر.س", "32,000 ر.س", { text: "22,000 ر.س", className: "reports-positive" }, { text: "نشط", badge: "success" }], ["ثوب أبيض كلاسيك", "SKU-THB-042", "الثياب", "85", "39,500 ر.س", "24,100 ر.س", { text: "15,400 ر.س", className: "reports-positive" }, { text: "نشط", badge: "success" }], ["عطر العود الأصيل", "SKU-PRF-105", "العطور", "18", "8,100 ر.س", "5,900 ر.س", { text: "2,200 ر.س", className: "reports-warning" }, { text: "بطيء", badge: "warning" }]], total: "1,248"
-  },
-  customers: {
-    label: "العملاء", title: "تقرير العملاء", subtitle: "تحليل قاعدة العملاء والمشتريات والمديونيات",
-    stats: [["إجمالي العملاء", "1,248", "", "primary", "عميل مسجل", "users"], ["العملاء النشطين", "892", "", "success", "خلال آخر 30 يومًا", "badge"], ["متوسط قيمة الطلب", "450", "ر.س", "info", "+7.3%", "cart"], ["إجمالي ديون العملاء", "12,450", "ر.س", "danger", "تحتاج متابعة", "wallet"]],
-    tableTitle: "تفاصيل العملاء", search: "بحث باسم العميل أو الهاتف...", columns: ["اسم العميل", "رقم الهاتف", "إجمالي الفواتير", "إجمالي المشتريات", "الديون الحالية", "تاريخ آخر شراء", "النوع"],
-    rows: [["أحمد عبدالله", "+966 50 123 4567", "15", "12,500 ر.س", { text: "0.00 ر.س", className: "reports-positive" }, "2023-10-25", { text: "VIP", badge: "warning" }], ["مؤسسة الغيث التجارية", "+966 55 987 6543", "42", "45,200 ر.س", { text: "5,400 ر.س", className: "reports-negative" }, "2023-10-24", { text: "جملة", badge: "success" }], ["سالم الدوسري", "+966 54 321 0987", "3", "850 ر.س", { text: "0.00 ر.س", className: "reports-positive" }, "2023-10-20", "عادي"], ["خالد الشمري", "+966 56 789 1234", "8", "3,400 ر.س", { text: "450 ر.س", className: "reports-warning" }, "2023-10-18", "عادي"]], total: "1,248"
-  },
-  suppliers: {
-    label: "الموردين", title: "تقرير الموردين", subtitle: "نظرة عامة على أداء الموردين والالتزامات المالية",
-    stats: [["إجمالي الموردين", "45", "", "primary", "مورد نشط", "users"], ["إجمالي المشتريات", "1,250,000", "ر.س", "warning", "+8.5%", "cart"], ["إجمالي المدفوع", "980,000", "ر.س", "success", "78.4% من الإجمالي", "wallet"], ["الرصيد المتبقي", "270,000", "ر.س", "warning", "مستحق الدفع", "receipt"]],
-    tableTitle: "تفاصيل الموردين", search: "بحث باسم المورد...", columns: ["اسم المورد", "عدد الفواتير", "إجمالي المشتريات", "إجمالي المدفوع", "الرصيد المتبقي"],
-    rows: [["شركة النسيج العربي", "12", "450,000 ر.س", { text: "400,000 ر.س", className: "reports-positive" }, { text: "50,000 ر.س", className: "reports-warning" }], ["مؤسسة الخيوط الذهبية", "8", "320,000 ر.س", { text: "320,000 ر.س", className: "reports-positive" }, "0 ر.س"], ["مصانع العز للنسيج", "15", "480,000 ر.س", { text: "260,000 ر.س", className: "reports-positive" }, { text: "220,000 ر.س", className: "reports-warning" }]], total: "45"
-  },
-  inventory: {
-    label: "المخزون", title: "تقرير المخزون", subtitle: "نظرة عامة على حالة المخزون وقيمته الحالية",
-    stats: [["إجمالي قيمة المخزون", "452,000", "ر.س", "success", "+5.2% عن الشهر الماضي", "wallet"], ["عدد المنتجات", "1,248", "", "info", "منتج نشط في النظام", "box"], ["منتجات منخفضة المخزون", "42", "", "warning", "تتطلب إعادة طلب قريبًا", "alert"], ["منتجات نفد مخزونها", "12", "", "danger", "غير متاحة للبيع", "alert"]],
-    tableTitle: "تفاصيل المنتجات", search: "بحث برمز SKU...", columns: ["المنتج / رمز SKU", "الفئة", "الكمية", "سعر الشراء", "قيمة المخزون", "الحالة"],
-    rows: [["عباية ملكية سوداء — SKU-ABY-001", "العبايات", "120", "350.00 ر.س", "42,000.00 ر.س", { text: "كافٍ", badge: "success" }], ["ثوب أبيض كلاسيك — SKU-THB-042", "الثياب", "15", "180.00 ر.س", "2,700.00 ر.س", { text: "منخفض", badge: "warning" }], ["عطر العود الأصيل — SKU-PRF-105", "العطور", "0", "450.00 ر.س", "0.00 ر.س", { text: "نفد", badge: "danger" }], ["أزرار أكمام فضية — SKU-ACC-011", "الإكسسوارات", "85", "120.00 ر.س", "10,200.00 ر.س", { text: "كافٍ", badge: "success" }]], total: "1,248"
-  },
-  debts: {
-    label: "المديونيات", title: "تقرير المديونيات", subtitle: "متابعة مديونيات العملاء والتحصيلات",
-    stats: [["إجمالي المديونيات", "125,400", "ر.س", "primary", "إجمالي مستحق", "wallet"], ["عدد العملاء المدينين", "42", "عميل", "info", "بحسابات مفتوحة", "users"], ["إجمالي التحصيل", "80,200", "ر.س", "success", "خلال الفترة", "receipt"], ["المتبقي للتحصيل", "45,200", "ر.س", "primary", "36% من الإجمالي", "calendar"]],
-    donut: true,
-    tableTitle: "تفاصيل مديونيات العملاء", search: "بحث باسم العميل...", columns: ["اسم العميل", "رقم الهاتف", "الفواتير", "إجمالي الدين", "المسدد", "المتبقي", "الحالة"],
-    rows: [["عبدالله المرزوق", "050 123 4567", "3", "12,500 ر.س", { text: "5,000 ر.س", className: "reports-positive" }, "7,500 ر.س", { text: "مدفوع جزئيًا", badge: "warning" }], ["شركة النور للتجارة", "055 987 6543", "1", "8,200 ر.س", "0 ر.س", "8,200 ر.س", { text: "غير مسدد", badge: "danger" }], ["محمد السالم", "053 444 5555", "5", "45,000 ر.س", { text: "30,000 ر.س", className: "reports-positive" }, "15,000 ر.س", { text: "مدفوع جزئيًا", badge: "warning" }]], total: "42"
-  },
-  expenses: {
-    label: "المصروفات", title: "التقارير - تقرير المصروفات", subtitle: "نظرة عامة على المصروفات والأداء المالي",
-    stats: [["إجمالي المصروفات (المدة المحددة)", "45,230", "ر.س", "primary", "+5.2%", "wallet"], ["مصروفات هذا الشهر", "12,450", "ر.س", "warning", "إجمالي الشهر", "calendar"], ["متوسط المصروف اليومي", "415", "ر.س", "success", "-1.8%", "chart"]],
-    chart: { type: "line", title: "اتجاه المصروفات", values: [22, 34, 18, 82, 41, 29, 58], compare: [], labels: ["1 أكت", "5 أكت", "10 أكت", "15 أكت", "20 أكت", "25 أكت", "30 أكت"] },
-    tableTitle: "تفاصيل المصروفات", search: "بحث في التفاصيل...", columns: ["التاريخ", "الوصف / البيان", "التصنيف", "المستخدم", "المبلغ"],
-    rows: [["15 أكتوبر 2023", "شراء أقمشة حريرية للتفصيل", "مواد خام", "محمد (مدير)", "4,500 ر.س"], ["14 أكتوبر 2023", "فاتورة كهرباء المعرض", "مرافق", "أحمد (كاشير)", "1,200 ر.س"], ["12 أكتوبر 2023", "صيانة ماكينات الخياطة", "صيانة", "محمد (مدير)", "850 ر.س"], ["10 أكتوبر 2023", "ضيافة عملاء", "نثريات", "أحمد (كاشير)", "120 ر.س"]], total: "42"
-  },
-  returns: {
-    label: "المرتجعات والاستبدالات", title: "التقارير - تقرير المرتجعات والاستبدالات", subtitle: "نظرة عامة على حركات المرتجعات والاستبدالات وتأثيرها المالي",
-    stats: [["عدد المرتجعات", "142", "", "danger", "+5.2% مقارنة بالشهر السابق", "receipt"], ["قيمة المرتجعات", "12,450", "ر.س", "danger", "+2.1% مقارنة بالشهر السابق", "wallet"], ["عدد الاستبدالات", "87", "", "warning", "ثابت مقارنة بالشهر السابق", "swap"], ["التأثير الصافي على المبيعات", "-8,200", "ر.س", "danger", "يمثل 3.4% من إجمالي المبيعات", "chart"]],
-    tableTitle: "سجل الحركات", search: "بحث برقم الفاتورة أو المنتج...", columns: ["رقم الحركة", "النوع", "الفاتورة المرتبطة", "التاريخ", "المنتج", "الكمية", "القيمة", "الحالة"],
-    rows: [["#RET-4921", { text: "مرتجع", badge: "danger" }, "INV-98233", "12 مايو 2024 14:30", "ثوب رجالي فاخر - أسود", "1", "450.00 ر.س", { text: "مكتمل", badge: "success" }], ["#EXC-4922", { text: "استبدال", badge: "warning" }, "INV-98105", "12 مايو 2024 11:15", "شماغ أحمر كلاسيك", "1", "220.00 ر.س", { text: "مكتمل", badge: "success" }], ["#RET-4923", { text: "مرتجع", badge: "danger" }, "INV-98341", "11 مايو 2024 16:45", "عقال مقصب ملكي", "2", "300.00 ر.س", { text: "قيد المراجعة", badge: "warning" }]], total: "24"
-  }
+  sales: reportDefinition({ label: "المبيعات", title: "تقرير المبيعات", subtitle: "نظرة شاملة على أداء المبيعات والفواتير خلال الفترة المحددة", tableTitle: "تفاصيل المبيعات", search: "بحث في الفواتير...", columns: ["رقم الفاتورة", "التاريخ", "الكاشير", "العميل", "الإجمالي", "الخصم", "المدفوع", "المتبقي", "الحالة"], statLabels: [["إجمالي المبيعات", "ج.م", "primary", "wallet"], ["عدد الفواتير", "", "info", "file"], ["متوسط قيمة الفاتورة", "ج.م", "warning", "calculator"], ["صافي المبيعات", "ج.م", "success", "chart"]] }),
+  profits: reportDefinition({ label: "الأرباح", title: "تقرير الأرباح", subtitle: "نظرة شاملة على الأداء المالي والربحية", tableTitle: "أحدث المعاملات المؤثرة على الأرباح", search: "بحث في المعاملات...", columns: ["رقم المرجع", "التاريخ", "النوع", "الفئة", "المبلغ (الإيراد)", "التكلفة", "صافي الربح"], statLabels: [["إجمالي المبيعات", "ج.م", "success", "wallet"], ["تكلفة البضاعة", "ج.م", "info", "box"], ["إجمالي المصروفات", "ج.م", "danger", "receipt"], ["صافي الربح", "ج.م", "success", "chart"]] }),
+  products: reportDefinition({ label: "المنتجات", title: "تقرير المنتجات", subtitle: "تحليل أداء المنتجات وحركة المبيعات والربحية", tableTitle: "تفاصيل أداء المنتجات", search: "بحث باسم المنتج أو SKU...", columns: ["المنتج", "رمز SKU", "الفئة", "الكمية المباعة", "الإيرادات", "التكلفة", "صافي الربح", "الحالة"], statLabels: [["إجمالي المنتجات", "", "primary", "box"], ["المنتجات المباعة", "", "success", "cart"], ["متوسط هامش الربح", "%", "info", "chart"], ["منتجات بدون حركة", "", "warning", "alert"]] }),
+  customers: reportDefinition({ label: "العملاء", title: "تقرير العملاء", subtitle: "تحليل قاعدة العملاء والمشتريات والمديونيات", tableTitle: "تفاصيل العملاء", search: "بحث باسم العميل أو الهاتف...", columns: ["اسم العميل", "رقم الهاتف", "إجمالي الفواتير", "إجمالي المشتريات", "الديون الحالية", "تاريخ آخر شراء", "النوع"], statLabels: [["إجمالي العملاء", "", "primary", "users"], ["العملاء النشطون", "", "success", "badge"], ["متوسط قيمة الطلب", "ج.م", "info", "cart"], ["إجمالي ديون العملاء", "ج.م", "danger", "wallet"]] }),
+  suppliers: reportDefinition({ label: "الموردين", title: "تقرير الموردين", subtitle: "نظرة عامة على أداء الموردين والالتزامات المالية", tableTitle: "تفاصيل الموردين", search: "بحث باسم المورد...", columns: ["اسم المورد", "عدد الفواتير", "إجمالي المشتريات", "إجمالي المدفوع", "الرصيد المتبقي"], statLabels: [["إجمالي الموردين", "", "primary", "users"], ["إجمالي المشتريات", "ج.م", "warning", "cart"], ["إجمالي المدفوع", "ج.م", "success", "wallet"], ["الرصيد المتبقي", "ج.م", "warning", "receipt"]] }),
+  inventory: reportDefinition({ label: "المخزون", title: "تقرير المخزون", subtitle: "نظرة عامة على حالة المخزون وقيمته الحالية", tableTitle: "تفاصيل المنتجات", search: "بحث برمز SKU...", columns: ["المنتج / رمز SKU", "الفئة", "الكمية", "سعر الشراء", "قيمة المخزون", "الحالة"], statLabels: [["إجمالي قيمة المخزون", "ج.م", "success", "wallet"], ["عدد المنتجات", "", "info", "box"], ["منتجات منخفضة المخزون", "", "warning", "alert"], ["منتجات نفد مخزونها", "", "danger", "alert"]] }),
+  debts: reportDefinition({ label: "المديونيات", title: "تقرير المديونيات", subtitle: "متابعة مديونيات العملاء والتحصيلات", tableTitle: "تفاصيل مديونيات العملاء", search: "بحث باسم العميل...", columns: ["اسم العميل", "رقم الهاتف", "الفواتير", "إجمالي الدين", "المسدد", "المتبقي", "الحالة"], statLabels: [["إجمالي المديونيات", "ج.م", "primary", "wallet"], ["عدد العملاء المدينين", "عميل", "info", "users"], ["إجمالي التحصيل", "ج.م", "success", "receipt"], ["المتبقي للتحصيل", "ج.م", "primary", "calendar"]] }),
+  expenses: reportDefinition({ label: "المصروفات", title: "التقارير - تقرير المصروفات", subtitle: "نظرة عامة على المصروفات والأداء المالي", tableTitle: "تفاصيل المصروفات", search: "بحث في التفاصيل...", columns: ["التاريخ", "الوصف / البيان", "التصنيف", "المستخدم", "المبلغ"], statLabels: [["إجمالي المصروفات", "ج.م", "primary", "wallet"], ["مصروفات هذا الشهر", "ج.م", "warning", "calendar"], ["متوسط المصروف اليومي", "ج.م", "success", "chart"]] }),
+  returns: reportDefinition({ label: "المرتجعات والاستبدالات", title: "التقارير - تقرير المرتجعات والاستبدالات", subtitle: "نظرة عامة على حركات المرتجعات والاستبدالات وتأثيرها المالي", tableTitle: "سجل الحركات", search: "بحث برقم الفاتورة أو المنتج...", columns: ["رقم الحركة", "النوع", "الفاتورة المرتبطة", "التاريخ", "المنتج", "الكمية", "القيمة", "الحالة"], statLabels: [["عدد المرتجعات", "", "danger", "receipt"], ["قيمة المرتجعات", "ج.م", "danger", "wallet"], ["عدد الاستبدالات", "", "warning", "swap"], ["التأثير الصافي على المبيعات", "ج.م", "danger", "chart"]] })
 };
 
 const REPORT_ENDPOINTS = { profits: "overview", customers: "debts", suppliers: "purchases", inventory: "inventory-revaluations", returns: "returns-exchanges" };
 REPORTS.discounts = { ...REPORTS.expenses, label: "الخصومات", title: "تقرير الخصومات", subtitle: "تفاصيل الخصومات المطبقة خلال الفترة المحددة", tableTitle: "تفاصيل الخصومات", search: "بحث في الخصومات..." };
 REPORTS.commissions = { ...REPORTS.expenses, label: "العمولات", title: "تقرير العمولات", subtitle: "تفاصيل عمولات موظفي المبيعات خلال الفترة المحددة", tableTitle: "تفاصيل العمولات", search: "بحث في العمولات..." };
+
+// Report definitions carry presentation metadata only. No sample values may reach the UI.
+Object.values(REPORTS).forEach(report => {
+  report.rows = [];
+  report.total = "0";
+  report.chart = null;
+  report.sideRows = null;
+  report.donut = false;
+  report.stats = report.stats.map(([label, , unit, tone, , iconName]) => [label, "0", unit, tone, "", iconName]);
+});
 const PERIOD_LABELS = { today: "اليوم", yesterday: "أمس", this_week: "هذا الأسبوع", this_month: "هذا الشهر", last_30_days: "آخر 30 يومًا", custom: "فترة مخصصة" };
 const FIELD_LABELS = {
   id: "المعرّف", invoice_number: "رقم الفاتورة", reference_number: "رقم المرجع", created_at: "التاريخ", date: "التاريخ",
@@ -135,12 +89,17 @@ function displayValue(value) {
 
 function reportFromResponse(base, response) {
   const items = getItems(response);
-  const keys = items.length ? Object.keys(items[0]).filter(field => !Array.isArray(items[0][field])).slice(0, 9) : [];
+  const keys = items.length ? Object.keys(items[0]).filter(field => field !== "id" && !field.endsWith("_id") && !Array.isArray(items[0][field])).slice(0, 9) : [];
   const summary = response?.summary || response?.totals || response?.data?.summary || response?.data?.totals || {};
   const summaryEntries = Object.entries(summary).filter(([, value]) => ["string", "number"].includes(typeof value)).slice(0, 4);
+  const rawChart = response?.chart || response?.trend || response?.data?.chart || response?.data?.trend;
+  const chartValues = rawChart?.values || rawChart?.data || rawChart?.series;
+  const chart = rawChart && Array.isArray(chartValues) && chartValues.length
+    ? { type: rawChart.type === "bars" ? "bars" : "line", title: rawChart.title || "حركة التقرير", labels: rawChart.labels || rawChart.periods || chartValues.map((_, index) => String(index + 1)), values: chartValues.map(Number), compare: (rawChart.compare || rawChart.previous || []).map(Number) }
+    : null;
   return {
     ...base,
-    chart: null,
+    chart,
     donut: false,
     sideRows: null,
     columns: items.length ? keys.map(fieldLabel) : base.columns,
@@ -178,9 +137,10 @@ function renderLineChart(chart) {
 }
 
 function renderBars(chart) {
-  const width = 760, height = 270, pad = 38, max = Math.max(...chart.values, ...chart.compare, 1), group = (width - pad * 2) / chart.values.length;
+  const compare = Array.isArray(chart.compare) ? chart.compare : [];
+  const width = 760, height = 270, pad = 38, max = Math.max(...chart.values, ...compare, 1), group = (width - pad * 2) / chart.values.length;
   const grid = [0, 1, 2, 3].map((_, index) => { const y = pad + index * ((height - pad * 2) / 3); return `<line x1="${pad}" y1="${y}" x2="${width - pad}" y2="${y}" stroke="var(--color-border)"/>`; }).join("");
-  const bars = chart.values.map((value, index) => { const h1 = value / max * (height - pad * 2), h2 = chart.compare[index] / max * (height - pad * 2), x = pad + index * group; return `<rect x="${x + group * .18}" y="${height - pad - h2}" width="${group * .26}" height="${h2}" rx="3" fill="var(--color-surface-hover)"/><rect x="${x + group * .48}" y="${height - pad - h1}" width="${group * .26}" height="${h1}" rx="3" fill="var(--color-primary)"/><text x="${x + group * .5}" y="${height - 8}" text-anchor="middle" fill="var(--color-text-muted)" font-size="10">${escapeHtml(chart.labels[index])}</text>`; }).join("");
+  const bars = chart.values.map((value, index) => { const h1 = value / max * (height - pad * 2), h2 = (compare[index] || 0) / max * (height - pad * 2), x = pad + index * group; return `<rect x="${x + group * .18}" y="${height - pad - h2}" width="${group * .26}" height="${h2}" rx="3" fill="var(--color-surface-hover)"/><rect x="${x + group * .48}" y="${height - pad - h1}" width="${group * .26}" height="${h1}" rx="3" fill="var(--color-primary)"/><text x="${x + group * .5}" y="${height - 8}" text-anchor="middle" fill="var(--color-text-muted)" font-size="10">${escapeHtml(chart.labels[index])}</text>`; }).join("");
   return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(chart.title)}">${grid}${bars}</svg>`;
 }
 
@@ -203,9 +163,7 @@ function renderTable(report) {
 
 function renderReport(reportKey) {
   const report = REPORTS[reportKey] || REPORTS.sales;
-  const details = reportKey === "debts"
-    ? `<section class="reports-debts-layout">${renderDonut()}${renderTable(report)}</section>`
-    : `${renderVisual(report)}${renderTable(report)}`;
+  const details = `${renderVisual(report)}${renderTable(report)}`;
   return `<header class="reports-section-header"><div><h2>${escapeHtml(report.title)}</h2><p>${escapeHtml(report.subtitle)}</p></div><div class="reports-actions"><button class="btn btn-outline" id="reportsPrint" type="button">${icon("file")}طباعة</button><button class="btn btn-primary" id="reportsExport" type="button">${icon("receipt")}تصدير</button></div></header><section class="reports-filter-bar"><label class="reports-control">${icon("calendar")}<select id="reportsPeriod">${Object.entries(PERIOD_LABELS).map(([value, label]) => `<option value="${value}"${value === report.period ? " selected" : ""}>${label}</option>`).join("")}</select></label><label class="reports-control reports-date"${report.period === "custom" ? "" : " hidden"}>من<input id="reportsFromDate" type="date" value="${escapeHtml(report.fromDate || "")}" /></label><label class="reports-control reports-date"${report.period === "custom" ? "" : " hidden"}>إلى<input id="reportsToDate" type="date" value="${escapeHtml(report.toDate || "")}" /></label><button class="btn btn-outline reports-filter-apply" id="reportsApply" type="button">تطبيق الفلاتر</button></section>${renderStats(report.stats)}${details}`;
 }
 

@@ -1,27 +1,7 @@
 import { escapeHtml } from "../../../core/utils.js";
 import { api } from "../../../core/api.js";
 
-const DEFAULT_DASHBOARD_CHARTS = {
-  sales: {
-    labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"],
-    max: 100,
-    series: {
-      daily: [22, 35, 28, 55, 40, 72, 68, 90],
-      weekly: [30, 48, 62, 50, 76, 58, 88, 82],
-      monthly: [35, 65, 50, 80, 40, 90, 70, 95]
-    }
-  },
-  category: {
-    total: "125.5k",
-    totalLabel: "إجمالي",
-    items: [
-      { label: "جلابيب رجالي", value: 45, tone: "orange" },
-      { label: "عطور ومسك", value: 30, tone: "blue" },
-      { label: "إكسسوارات", value: 15, tone: "green" },
-      { label: "أخرى", value: 10, tone: "brown" }
-    ]
-  }
-};
+const EMPTY_DASHBOARD_CHARTS = { sales: { labels: [], series: { daily: [], weekly: [], monthly: [] } }, category: { total: "0", totalLabel: "الإجمالي", items: [] } };
 
 const CATEGORY_COLORS = {
   orange: "var(--chart-1)",
@@ -30,7 +10,7 @@ const CATEGORY_COLORS = {
   brown: "color-mix(in srgb, var(--color-primary) 25%, var(--color-text-faint))"
 };
 
-let currentDashboardCharts = DEFAULT_DASHBOARD_CHARTS;
+let currentDashboardCharts = EMPTY_DASHBOARD_CHARTS;
 
 function toChartNumber(value) {
   const number = Number(value);
@@ -52,20 +32,18 @@ function buildLinePath(values, width, height, padding) {
   return { path, points };
 }
 
-export function renderSalesChart(period = "monthly", data = DEFAULT_DASHBOARD_CHARTS.sales) {
+export function renderSalesChart(period = "monthly", data = EMPTY_DASHBOARD_CHARTS.sales) {
   const chart = document.getElementById("dashboardSalesChart");
   if (!chart) return;
   const width = 680;
   const height = 280;
   const padding = 44;
-  const fallbackValues = DEFAULT_DASHBOARD_CHARTS.sales.series[period] || DEFAULT_DASHBOARD_CHARTS.sales.series.monthly;
   const sourceValues = data.series?.[period];
-  const values = Array.isArray(sourceValues) && sourceValues.length > 1 ? sourceValues.map(toChartNumber) : fallbackValues;
+  const values = Array.isArray(sourceValues) ? sourceValues.map(toChartNumber) : [];
+  if (values.length < 2) { chart.innerHTML = '<p class="empty-state">لا توجد بيانات مبيعات كافية للفترة المحددة.</p>'; return; }
   const labels = Array.isArray(data.labels) && data.labels.length === values.length
     ? data.labels
-    : (values.length === DEFAULT_DASHBOARD_CHARTS.sales.labels.length
-      ? DEFAULT_DASHBOARD_CHARTS.sales.labels
-      : values.map((_, index) => String(index + 1)));
+    : values.map((_, index) => String(index + 1));
   const requestedMax = toChartNumber(data.max);
   const max = Math.max(requestedMax, Math.ceil(Math.max(...values, 1) / 25) * 25);
   const normalizedValues = values.map(value => (value / max) * 100);
@@ -80,17 +58,18 @@ export function renderSalesChart(period = "monthly", data = DEFAULT_DASHBOARD_CH
   chart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="أداء المبيعات"><defs><linearGradient id="salesArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--color-primary)" stop-opacity="0.3"/><stop offset="1" stop-color="var(--color-primary)" stop-opacity="0"/></linearGradient></defs>${grid}<path d="${area}" fill="url(#salesArea)"/><path d="${path}" fill="none" stroke="var(--color-primary)" stroke-width="3" stroke-linecap="round"/>${axisLabels}</svg>`;
 }
 
-export function renderCategoryChart(data = DEFAULT_DASHBOARD_CHARTS.category) {
+export function renderCategoryChart(data = EMPTY_DASHBOARD_CHARTS.category) {
   const chart = document.getElementById("dashboardCategoryChart");
   const legend = document.getElementById("dashboardCategoryLegend");
   if (!chart || !legend) return;
-  const sourceItems = Array.isArray(data.items) && data.items.length ? data.items : DEFAULT_DASHBOARD_CHARTS.category.items;
+  const sourceItems = Array.isArray(data.items) ? data.items : [];
   const items = sourceItems.map(item => ({
     label: String(item.label || ""),
     value: toChartNumber(item.value),
     tone: Object.hasOwn(CATEGORY_COLORS, item.tone) ? item.tone : "brown"
   }));
-  const valuesTotal = items.reduce((total, item) => total + item.value, 0) || 100;
+  const valuesTotal = items.reduce((total, item) => total + item.value, 0);
+  if (!items.length || !valuesTotal) { chart.innerHTML = '<p class="empty-state">لا توجد مبيعات موزعة حسب التصنيف.</p>'; legend.innerHTML = ""; return; }
   let offset = 0;
   const segments = items.map(item => {
     const value = (item.value / valuesTotal) * 100;
@@ -98,10 +77,10 @@ export function renderCategoryChart(data = DEFAULT_DASHBOARD_CHARTS.category) {
     offset += value;
     return segment;
   }).join("");
-  const total = escapeHtml(data.total ?? DEFAULT_DASHBOARD_CHARTS.category.total);
-  const totalLabel = escapeHtml(data.totalLabel ?? DEFAULT_DASHBOARD_CHARTS.category.totalLabel);
+  const total = escapeHtml(data.total ?? valuesTotal);
+  const totalLabel = escapeHtml(data.totalLabel ?? "الإجمالي");
   chart.innerHTML = `<svg viewBox="0 0 120 120" role="img" aria-label="${totalLabel} ${total}"><g transform="rotate(-90 60 60)">${segments}</g><text x="60" y="55" text-anchor="middle" fill="var(--color-text-muted)" font-size="8">${totalLabel}</text><text x="60" y="70" text-anchor="middle" fill="var(--color-text)" font-size="13" font-weight="700">${total}</text></svg>`;
-  legend.innerHTML = items.map(item => `<span><i class="is-${item.tone}"></i>${escapeHtml(item.label)} <b>${Math.round(item.value)}%</b></span>`).join("");
+  legend.innerHTML = items.map(item => `<span><i class="is-${item.tone}"></i>${escapeHtml(item.label)} <b>${Math.round((item.value / valuesTotal) * 100)}%</b></span>`).join("");
 }
 
 export function updateDashboardCharts(data = {}, period = "monthly") {
@@ -116,9 +95,9 @@ export function updateDashboardCharts(data = {}, period = "monthly") {
 export function initDashboard() {
   const themeButton = document.getElementById("dashboardThemeToggle");
   window.bindAdminThemeToggle?.(themeButton);
-  currentDashboardCharts = DEFAULT_DASHBOARD_CHARTS;
+  currentDashboardCharts = EMPTY_DASHBOARD_CHARTS;
   let activePeriod = "monthly";
-  updateDashboardCharts(window.ghaithDashboardData || DEFAULT_DASHBOARD_CHARTS, activePeriod);
+  updateDashboardCharts(EMPTY_DASHBOARD_CHARTS, activePeriod);
   let disposed = false;
   const loadDashboard = async period => {
     try {
@@ -129,7 +108,13 @@ export function initDashboard() {
       document.querySelectorAll(".dashboard-stat-card .stat-value").forEach((node, index) => { if (primary[index] !== undefined) node.textContent = Number(primary[index]).toLocaleString("en-US"); });
       const quick = [data.total_purchases ?? data.purchases_total, data.total_debts ?? data.debts_total, data.inventory_value, data.product_count ?? data.total_products];
       document.querySelectorAll(".dashboard-quick-card strong").forEach((node, index) => { if (quick[index] !== undefined) node.textContent = Number(quick[index]).toLocaleString("en-US"); });
-      if (response.sales || response.category) updateDashboardCharts(response, activePeriod);
+      const trend = response.sales || response.sales_chart || response.sales_trend || data.sales_chart || data.sales_trend || {};
+      const categoryRows = response.category?.items || response.category_distribution || response.sales_by_category || data.category_distribution || data.sales_by_category || [];
+      const values = trend.values || trend.data || trend.series?.[activePeriod] || [];
+      updateDashboardCharts({
+        sales: { labels: trend.labels || trend.periods || [], max: trend.max, series: { daily: values, weekly: values, monthly: values, ...(trend.series || {}) } },
+        category: { total: response.category?.total ?? data.total_sales ?? 0, totalLabel: "إجمالي المبيعات", items: categoryRows.map((item, index) => ({ label: item.label || item.name || item.category_name, value: item.value ?? item.total ?? item.sales ?? 0, tone: ["orange", "blue", "green", "brown"][index % 4] })) }
+      }, activePeriod);
     } catch (error) {
       const subtitle = document.querySelector(".dashboard-header .page-subtitle");
       if (subtitle) subtitle.textContent = error.message;

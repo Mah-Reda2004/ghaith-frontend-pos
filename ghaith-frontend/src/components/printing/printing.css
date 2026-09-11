@@ -7,6 +7,26 @@
   .system-print-area[data-print-mode="barcode"]{width:50mm}.barcode-label{width:50mm;height:30mm;display:grid;place-items:center;align-content:center;gap:1mm;padding:2mm;break-after:page;text-align:center}.barcode-label h1,.barcode-label p{margin:0}.barcode-label h1{font-size:14px}.barcode-label p{font-size:8px}.barcode-bars{width:40mm;height:9mm;background:repeating-linear-gradient(90deg,#000 0 1px,transparent 1px 3px,#000 3px 5px,transparent 5px 6px,#000 6px 7px,transparent 7px 10px)}.barcode-label b{font:9px monospace}.barcode-label strong{font-size:10px}
 }
 
+@media print {
+  .system-print-area[data-print-mode="report-wide"] { display: block !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+  .a4-report.is-wide { width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 0 10mm !important; font-size: 8.5pt !important; }
+  .a4-report.is-wide > header { padding-block-end: 4mm !important; }
+  .a4-report.is-wide h1 { font-size: 22pt !important; }
+  .a4-report.is-wide h2 { font-size: 17pt !important; }
+  .a4-report.is-wide header p { font-size: 9pt !important; }
+  .a4-report.is-wide .a4-summary { margin: 4mm 0 !important; gap: 4px !important; }
+  .a4-report.is-wide .a4-summary div { padding: 6px !important; }
+  .a4-report.is-wide .a4-summary span { font-size: 8pt !important; }
+  .a4-report.is-wide .a4-summary b { font-size: 11pt !important; }
+  .a4-report.is-wide table { width: 100% !important; margin-block-start: 4mm !important; table-layout: auto !important; border-collapse: collapse !important; }
+  .a4-report.is-wide thead { display: table-header-group !important; }
+  .a4-report.is-wide tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .a4-report.is-wide th { padding: 7px 5px !important; background: #e9edf2 !important; font-size: 8.5pt !important; white-space: nowrap !important; }
+  .a4-report.is-wide td { padding: 7px 5px !important; font-size: 8pt !important; white-space: nowrap !important; word-break: normal !important; }
+  .a4-report.is-wide tbody tr:nth-child(even) td { background: #f5f7f9 !important; }
+  .a4-report.is-wide > footer { font-size: 8pt !important; }
+}
+
 @media print{
   html,body{width:auto!important;min-width:0!important;height:auto!important;min-height:0!important;margin:0!important;padding:0!important;background:#fff!important;overflow:visible!important}
   .system-print-area,.system-print-area *{box-sizing:border-box!important;color:#000!important;box-shadow:none!important;text-shadow:none!important}

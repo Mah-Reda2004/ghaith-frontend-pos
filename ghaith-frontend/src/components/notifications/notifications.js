@@ -5,7 +5,8 @@ const CHANNEL_NAME = "ghaith-notifications";
 const MAX_ITEMS = 80;
 let audioContext;
 
-function readItems(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||[]}catch{return []}}
+function isLegacyDemo(item){return["product:2","product:3"].includes(item?.entityId)||(item?.message||"").includes("بشت سماوي فاخر")||(item?.message||"").includes("طقم أزرار أكمام ملكي")}
+function readItems(){try{const items=JSON.parse(localStorage.getItem(STORAGE_KEY))||[];const clean=items.filter(item=>!isLegacyDemo(item));if(clean.length!==items.length)saveItems(clean);return clean}catch{return []}}
 function saveItems(items){localStorage.setItem(STORAGE_KEY,JSON.stringify(items.slice(0,MAX_ITEMS)))}
 function normalize(item={}){return{id:item.id||`${Date.now()}-${Math.random().toString(16).slice(2)}`,type:item.type||"info",priority:item.priority||"info",title:String(item.title||"إشعار جديد"),message:String(item.message||""),createdAt:item.createdAt||new Date().toISOString(),read:Boolean(item.read),action:item.action||null,entityId:item.entityId||null}}
 
@@ -26,7 +27,7 @@ export function initNotificationCenter(){
   const root=document.getElementById("notificationCenter");if(!root)return()=>{};
   const trigger=document.getElementById("notificationTrigger"),panel=document.getElementById("notificationPanel"),list=document.getElementById("notificationList"),count=document.getElementById("notificationCount"),label=document.getElementById("notificationUnreadLabel");
   const unlockAudio=()=>{if(!audioContext){const Context=window.AudioContext||window.webkitAudioContext;if(Context)audioContext=new Context()}audioContext?.resume?.()};document.addEventListener("pointerdown",unlockAudio,{once:true});
-  if(!localStorage.getItem(`${STORAGE_KEY}:seeded`)){saveItems([normalize({type:"low_stock",priority:"warning",title:"مخزون منتج منخفض",message:"متبقي 5 قطع فقط من بشت سماوي فاخر، والحد الأدنى 8.",entityId:"product:2"}),normalize({type:"out_of_stock",priority:"critical",title:"منتج غير متاح للبيع",message:"نفد طقم أزرار أكمام ملكي من المخزون.",read:true,entityId:"product:3"})]);localStorage.setItem(`${STORAGE_KEY}:seeded`,"1")}
+  localStorage.removeItem(`${STORAGE_KEY}:seeded`);
   const render=()=>{const items=readItems();const unread=items.filter(item=>!item.read).length;count.textContent=unread>99?"99+":String(unread);count.hidden=!unread;label.textContent=unread?`${unread} إشعار غير مقروء`:"لا توجد إشعارات جديدة";list.innerHTML=items.length?items.map(item=>`<article class="notification-item is-${escapeHtml(item.priority)}${item.read?"":" is-unread"}" data-id="${escapeHtml(item.id)}"><span class="notification-item__icon">${iconFor(item.type)}</span><div><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.message)}</p><small>${relativeTime(item.createdAt)}</small>${item.action?`<a href="${escapeHtml(item.action.href)}">${escapeHtml(item.action.label)}</a>`:""}</div><button type="button" data-read aria-label="${item.read?"تحديد كغير مقروء":"تحديد كمقروء"}">${item.read?"○":"●"}</button></article>`).join(""):`<div class="notification-empty"><span>✓</span><h3>كل شيء على ما يرام</h3><p>لا توجد إشعارات حاليًا.</p></div>`};
   const setOpen=open=>{panel.hidden=!open;trigger.setAttribute("aria-expanded",String(open));if(open)render()};
   const onRoot=e=>{const readButton=e.target.closest("[data-read]");if(readButton){const id=readButton.closest("[data-id]").dataset.id;const items=readItems();const item=items.find(entry=>entry.id===id);if(item)item.read=!item.read;saveItems(items);emitChange(item);render();return}if(e.target.closest("a"))setOpen(false)};

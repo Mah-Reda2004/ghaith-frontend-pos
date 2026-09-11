@@ -127,6 +127,18 @@
   </button>
 </div>
 
+<!-- ============== اختيار لون ومقاس المنتج ============== -->
+<div class="modal-overlay variant-overlay" id="variantOverlay" hidden>
+  <section class="variant-picker" role="dialog" aria-modal="true" aria-labelledby="variantPickerTitle">
+    <header class="variant-picker__header">
+      <div><span>اختيار النسخة</span><h2 id="variantPickerTitle">—</h2></div>
+      <button class="btn-icon" id="closeVariantPicker" type="button" aria-label="إغلاق">×</button>
+    </header>
+    <p class="variant-picker__hint">اختر اللون والمقاس المتاح لإضافته إلى السلة</p>
+    <div class="variant-picker__grid" id="variantPickerGrid"></div>
+  </section>
+</div>
+
 <!-- ============== مودال إتمام الدفع ============== -->
 <div class="modal-overlay" id="paymentOverlay" style="display:none;">
   <div class="modal payment-modal">

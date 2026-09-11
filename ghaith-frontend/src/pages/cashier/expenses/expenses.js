@@ -31,68 +31,6 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
   }
 
   /* ------------------------------------------------------------------ */
-  /* 2) Mock Data                                                        */
-  /* ------------------------------------------------------------------ */
-  const FALLBACK_EXPENSE_TYPES = ["نظافة", "ضيافة", "صيانة", "بخور", "مواصلات", "أخرى"];
-
-  const MOCK_EXPENSES = [
-    {
-      id: "EXP-101",
-      type: "نظافة",
-      description: "شراء مساحيق تنظيف وأدوات نظافة للمحل",
-      amount: 100.0,
-      date: "2023-11-20T10:35:00",
-      cashier: "أحمد محمود",
-      status: "مسجل",
-    },
-    {
-      id: "EXP-102",
-      type: "ضيافة",
-      description: "قهوة وشاي وضيافة للعملاء",
-      amount: 50.0,
-      date: "2023-11-20T12:15:00",
-      cashier: "محمد علي",
-      status: "مسجل",
-    },
-    {
-      id: "EXP-103",
-      type: "صيانة",
-      description: "إصلاح مكيف الهواء",
-      amount: 250.0,
-      date: "2023-11-19T09:00:00",
-      cashier: "أحمد محمود",
-      status: "مسجل",
-    },
-    {
-      id: "EXP-104",
-      type: "بخور",
-      description: "شراء بخور للمحل",
-      amount: 80.0,
-      date: "2023-11-19T14:20:00",
-      cashier: "محمد علي",
-      status: "مسجل",
-    },
-    {
-      id: "EXP-105",
-      type: "مواصلات",
-      description: "مواصلات توصيل بضاعة",
-      amount: 120.0,
-      date: "2023-11-18T11:45:00",
-      cashier: "أحمد محمود",
-      status: "مسجل",
-    },
-    {
-      id: "EXP-106",
-      type: "نظافة",
-      description: "شراء مناديل ومعطرات",
-      amount: 45.0,
-      date: "2023-11-18T16:30:00",
-      cashier: "محمد علي",
-      status: "مسجل",
-    },
-  ];
-
-  /* ------------------------------------------------------------------ */
   /* 3) الحالة                                                           */
   /* ------------------------------------------------------------------ */
   const state = {
@@ -201,8 +139,8 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     try {
       const data = await api.get("/api/v1/expense-types"), items = listFrom(data);
       const types = items.map(item => typeof item === "string" ? { id: item, name: item } : { id: item.id || item.name, name: item.name }).filter(item => item.id && item.name);
-      renderExpenseTypes(types.length ? types : FALLBACK_EXPENSE_TYPES.map(name => ({ id: name, name })));
-    } catch { renderExpenseTypes(FALLBACK_EXPENSE_TYPES.map(name => ({ id: name, name }))); }
+      renderExpenseTypes(types);
+    } catch (error) { renderExpenseTypes([]); showToast(error.message, "error"); }
   }
 
   function normalizeExpense(item) {
@@ -482,7 +420,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     if (els.successType) els.successType.textContent = expense.type;
     if (els.successAmount) els.successAmount.textContent = `${expense.amount} جنيه`;
     if (els.successTime) els.successTime.textContent = time;
-    if (els.successShift) els.successShift.textContent = "وردية #2";
+    if (els.successShift) els.successShift.textContent = `وردية #${state.currentShift?.id || state.currentShift?.shift_id || "—"}`;
     if (els.successOverlay) els.successOverlay.style.display = "flex";
   }
 

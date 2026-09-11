@@ -1,10 +1,11 @@
 import { bindThemeToggle, initTheme } from "../../core/theme.js";
 import "../../components/printing/printing.js";
 import { initNotificationCenter } from "../../components/notifications/notifications.js";
+import { initCashierSelects } from "../../components/cashier-select/cashier-select.js";
 import { getCurrentUser, isAuthenticated, logout } from "../../core/auth.js";
 
 const ROUTES = {
-  pos: { html: "pos/pos.html", script: "pos/pos.js", module: true, title: "نقطة البيع", selector: ".pos-body", extras: [".pos-cart-fab", "#paymentOverlay", ".toast-stack", "#printArea"] },
+  pos: { html: "pos/pos.html", script: "pos/pos.js", module: true, title: "نقطة البيع", selector: ".pos-body", extras: [".pos-cart-fab", "#variantOverlay", "#paymentOverlay", ".toast-stack", "#printArea"] },
   invoices: { html: "invoices/invoices.html", css: "invoices/invoices.css", script: "invoices/invoices.js", module: true, title: "سجل الفواتير", selector: ".inv-body", extras: ["#invoiceDetailOverlay", "#returnFlowOverlay", ".toast-stack", "#printArea"] },
   debts: { html: "debts/debts.html", css: "debts/debts.css", script: "debts/debts.js", module: true, title: "المديونيات", selector: ".debts-page", extras: ["#debtDetailOverlay", "#debtPaymentOverlay", ".toast-stack", "#printArea"] },
   expenses: { html: "expenses/expenses.html", css: "expenses/expenses.css", script: "expenses/expenses.js", module: true, title: "المصروفات", selector: ".exp-body", extras: ["#addExpenseOverlay", "#expSuccessOverlay", ".toast-stack"] },
@@ -31,6 +32,7 @@ if (!isAuthenticated()) {
 }
 bindThemeToggle(document.getElementById("themeToggleBtn"));
 initNotificationCenter();
+initCashierSelects(document);
 const currentUser = getCurrentUser();
 const displayName = currentUser?.name || currentUser?.username || userMenu.dataset.userName;
 currentUserName.textContent = displayName;

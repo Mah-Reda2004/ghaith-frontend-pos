@@ -1,4 +1,3 @@
-// Local purchase prototype. Replace these service functions when the purchase API is ready.
 const KEY = "ghaith-purchase-prototype-v1";
 export const roundMoney = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 export function purchaseTotals(invoice) {
@@ -8,20 +7,14 @@ export function purchaseTotals(invoice) {
   const paid = invoice.paymentState === "full" ? total : invoice.paymentState === "deferred" ? 0 : roundMoney(invoice.paid);
   return { subtotal, lineDiscount, total, paid, remaining: roundMoney(total - paid) };
 }
-function seed() {
-  return { version: 1, suppliers: [
-    { id: "demo-supplier-1", name: "شركة الأمل للملابس", phone: "01012345678", address: "القاهرة — العتبة" },
-    { id: "demo-supplier-2", name: "مصنع النور للملابس", phone: "01123456789", address: "المحلة الكبرى" }
-  ], categories: [{ id: "demo-category-1", name: "تيشيرتات" }, { id: "demo-category-2", name: "بناطيل" }], variants: [
-    { id: "demo-variant-1", name: "تيشيرت قطن سادة", categoryId: "demo-category-1", color: "أبيض", size: "L", barcode: "62210001", sku: "TS-WHT-L", cost: 200, price: 350, stock: 20, minimum: 5 },
-    { id: "demo-variant-2", name: "بنطلون جينز كلاسيك", categoryId: "demo-category-2", color: "أزرق", size: "32", barcode: "62210003", sku: "JN-BLU-32", cost: 400, price: 650, stock: 12, minimum: 3 }
-  ], invoices: [], draft: null };
-}
+function emptyData() { return { version: 1, suppliers: [], categories: [], variants: [], invoices: [], draft: null }; }
 export function readPurchaseData() {
   const raw = localStorage.getItem(KEY);
-  if (!raw) return seed();
+  if (!raw) return emptyData();
   const data = JSON.parse(raw);
   if (data.version !== 1 || ![data.suppliers, data.categories, data.variants, data.invoices].every(Array.isArray)) throw new Error("تعذّر قراءة البيانات المحلية المحفوظة.");
+  const hasDemoData = [...data.suppliers, ...data.categories, ...data.variants].some(item => String(item?.id || "").startsWith("demo-"));
+  if (hasDemoData) { localStorage.removeItem(KEY); return emptyData(); }
   return data;
 }
 export function writePurchaseData(data) {

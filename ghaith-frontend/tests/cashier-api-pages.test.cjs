@@ -5,18 +5,23 @@ const assert = require('node:assert/strict');
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-    const errors = [], calls = [];
+    const errors = [], calls = []; let closeBody; let closeKey;
     page.on('pageerror', error => errors.push(error.message));
-    await page.addInitScript(() => { sessionStorage.setItem('ghaith-access-token', 'cashier-test'); sessionStorage.setItem('ghaith-current-user', JSON.stringify({ id: '11111111-1111-4111-8111-111111111111', name: 'الكاشير', role: 'cashier' })); });
+    await page.addInitScript(() => { if (!location.pathname.includes('/auth/login/')) { sessionStorage.setItem('ghaith-access-token', 'cashier-test'); sessionStorage.setItem('ghaith-current-user', JSON.stringify({ id: '11111111-1111-4111-8111-111111111111', name: 'الكاشير', role: 'cashier' })); } });
     await page.route('https://test-3f530955.fastapicloud.dev/**', route => {
       const request = route.request(), path = new URL(request.url()).pathname; calls.push(`${request.method()} ${path}`);
       if (path === '/api/v1/categories') return route.fulfill({ json: { categories: [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'رجالي' }, { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'عطور' }] } });
-      if (path === '/api/v1/products/search') return route.fulfill({ json: { items: [{ id: 'p2', name_ar: 'عطر API', sale_price: 100, product_variants: [{ id: 'abababab-abab-4bab-8bab-abababababab', sku: 'PERFUME', stock_qty: 3, version: 1 }] }] } });
-      if (path === '/api/v1/products') return route.fulfill({ json: { products: [{ id: 'p1', name_ar: 'ثوب API', category_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', sale_price: 300, product_variants: [{ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', sku: 'THOB', stock_qty: 2, version: 1 }] }, { id: 'p2', name_ar: 'عطر API', categories: [{ category_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name_ar: 'عطور' }], sale_price: 100, product_variants: [{ id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', sku: 'PERFUME', stock_qty: 3, version: 1 }] }] } });
+      if (path === '/api/v1/products' || path === '/api/v1/products/search') {
+        const categoryId = new URL(request.url()).searchParams.get('category_id');
+        const items = [{ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', product_id: 'p1', name: 'ثوب API', category: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'رجالي' }, sku: 'THOB', size: 'L', color: 'أبيض', sale_price: 300, stock_qty: 2, version: 1 }, { id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', product_id: 'p2', name: 'عطر API', category: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'عطور' }, sku: 'PERFUME', size: 'افتراضي', color: 'افتراضي', sale_price: 100, stock_qty: 3, version: 1 }];
+        const filtered = categoryId ? items.filter(item => item.category.id === categoryId) : items;
+        return route.fulfill({ json: { items: filtered, total: filtered.length } });
+      }
       if (path === '/api/v1/customer-types') return route.fulfill({ json: [] });
-      if (path === '/api/v1/admin/users') return route.fulfill({ json: { items: [{ id: '77777777-7777-4777-8777-777777777777', name: 'سيلز النظام', roles: [{ name: 'sales' }], is_active: true }, { id: '88888888-8888-4888-8888-888888888888', name: 'مدير النظام', role: 'admin', is_active: true }], total: 2 } });
-      if (path === '/api/v1/shifts/current') return route.fulfill({ json: { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', opened_at: new Date().toISOString() } });
-      if (path.endsWith('/summary')) return route.fulfill({ json: { total_sales: 400, invoice_count: 2, cash_total: 300, card_total: 100, returns_total: 0, total_expenses: 20, payment_breakdown: { cash: { amount: 300, count: 1 }, card: { amount: 100, count: 1 } } } });
+      if (path === '/api/v1/admin/users') return route.fulfill({ json: { items: [{ id: '77777777-7777-4777-8777-777777777777', name: 'سيلز النظام', role: 'sales', is_active: true }], total: 1 } });
+      if (path === '/api/v1/shifts/current') return route.fulfill({ json: { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', version: 4, opened_at: new Date().toISOString() } });
+      if (path.endsWith('/summary')) return route.fulfill({ json: { total_sales: 400, invoice_count: 2, cash_total: 300, card_total: 100, returns_total: 0, total_expenses: 20, expense_count: 1, payment_breakdown: { cash: { amount: 300, count: 1 }, card: { amount: 100, count: 1 } } } });
+      if (path === '/api/v1/shifts/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee/close' && request.method() === 'POST') { closeBody = request.postDataJSON(); closeKey = request.headers()['idempotency-key']; return route.fulfill({ json: { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', status: 'closed' } }); }
       if (path === '/api/v1/invoices') return route.fulfill({ json: { items: [{ id: 'ffffffff-ffff-4fff-8fff-ffffffffffff', invoice_number: 'INV-API', status: 'completed', payment_method: 'cash', total_amount: 300, created_at: new Date().toISOString() }] } });
       if (path === '/api/v1/debts') return route.fulfill({ json: { items: [{ id: '99999999-9999-4999-8999-999999999999', invoice_number: 'INV-DEBT', customer_name: 'عميل آجل', total_amount: 500, paid_amount: 100, remaining_amount: 400, created_at: new Date().toISOString() }] } });
       return route.fulfill({ json: {} });
@@ -36,6 +41,14 @@ const assert = require('node:assert/strict');
     assert.ok(calls.includes('GET /api/v1/invoices'));
     assert.ok(calls.includes('GET /api/v1/debts'));
     assert.ok(calls.includes('GET /api/v1/shifts/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee/summary'));
+    await page.locator('#closeShiftBtn').click();
+    await page.locator('#countedCash').fill('295');
+    await page.locator('#confirmCloseBtn').click();
+    await page.getByText('تم إغلاق الوردية بنجاح').waitFor();
+    await page.waitForURL(/\/auth\/login\/login\.html/);
+    assert.deepEqual(closeBody, { counted_cash: 295, payment_counts: [{ method: 'cash', counted_amount: 295 }, { method: 'card', counted_amount: 100 }], notes: null, expected_version: 4 });
+    assert.match(closeKey, /^[0-9a-f-]{36}$/i);
+    assert.equal(await page.evaluate(() => sessionStorage.getItem('ghaith-access-token')), null);
     assert.deepEqual(errors, []);
     console.log('PASS: backend categories filter POS products; invoices, debts and shift summary are API-backed.');
   } finally { await browser.close(); }

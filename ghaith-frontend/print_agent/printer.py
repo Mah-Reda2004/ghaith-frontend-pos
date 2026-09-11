@@ -179,11 +179,17 @@ class PrinterManager:
         image = Image.new("L", (width, height), "white")
         draw, small, bold = ImageDraw.Draw(image), font(16), font(20, True)
         draw_rtl(draw, (width // 2, 7), "غيث", bold, "ma")
-        draw_rtl(draw, (width // 2, 32), str(data.get("name") or "منتج غيث")[:32], small, "ma")
+        draw_rtl(draw, (width // 2, 30), str(data.get("name") or "منتج غيث")[:32], small, "ma")
+        details = " | ".join(part for part in (
+            f"المقاس: {data.get('size')}" if data.get("size") else "",
+            f"اللون: {data.get('color')}" if data.get("color") else "",
+        ) if part)
+        if details:
+            draw_rtl(draw, (width // 2, 49), details[:42], small, "ma")
         sku = str(data.get("sku") or data.get("barcode") or "000000")
         code = Code128(sku, writer=ImageWriter()).render({"module_height": 8, "module_width": .23, "quiet_zone": 1, "font_size": 0, "text_distance": 0, "dpi": dpi}).convert("L")
         code.thumbnail((width - 28, max(35, height - 125)))
-        code_y = 54
+        code_y = 68 if details else 54
         image.paste(code, ((width - code.width) // 2, code_y))
         sku_y = min(code_y + code.height + 10, height - 48)
         draw.text((width // 2, sku_y), sku, font=small, fill="black", anchor="ma")

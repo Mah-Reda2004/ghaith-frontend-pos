@@ -78,7 +78,7 @@ import { api, listFrom } from "../../../core/api.js";
     page: 1,
     pageSize: 10,
     filters: {},
-    allData: [],    // Mock: كل البيانات من JSON
+    allData: [],
     returns: [],
     currentInvoice: null,
     returnStep: "select",
@@ -205,7 +205,7 @@ import { api, listFrom } from "../../../core/api.js";
   }
 
   /* ------------------------------------------------------------------ */
-  /* 8) فلترة البيانات (Mock — في الحقيقي الـ API يعمل ده)              */
+  /* 8) فلترة بيانات الـ API محليًا للعرض الحالي                         */
   /* ------------------------------------------------------------------ */
   function getFiltered() {
     const f = state.filters;
@@ -415,20 +415,6 @@ import { api, listFrom } from "../../../core/api.js";
   /* 13) تدفق الاسترجاع والاستبدال                                      */
   /* ------------------------------------------------------------------ */
   const TAX_RATE = 0.15;
-  const RETURN_NAMES = [
-    ["قميص قطني فاخر - أزرق", "LXT-001-BL"],
-    ["حزام جلد طبيعي - بني", "LXT-084-BR"],
-    ["أزرار أكمام فضية", "LXT-012-SL"],
-  ];
-  const REPLACEMENT_MOCK = [
-    { id: "rp-1", name: "جلابية ملكي صوف", sku: "102234", price: 350, category: "جلابيب" },
-    { id: "rp-2", name: "جلابية كلاسيك قطن", sku: "102235", price: 245, category: "جلابيب" },
-    { id: "rp-3", name: "جلابية شتوية ثقيلة", sku: "102236", price: 420, category: "جلابيب" },
-    { id: "rp-4", name: "طقم ملابس داخلية", sku: "204551", price: 85, category: "ملابس داخلية" },
-    { id: "rp-5", name: "شماغ ديسار ملكي", sku: "300112", price: 210, category: "أشمغة وغتر" },
-    { id: "rp-6", name: "عطر العود الكمبودي", sku: "400856", price: 550, category: "عطور" },
-  ];
-
   function buildReturnItems(inv) {
     const invoiceItems = inv.items || [];
     if (invoiceItems.length) return invoiceItems.map((item, index) => ({
@@ -440,20 +426,7 @@ import { api, listFrom } from "../../../core/api.js";
       variantId: item.variant_id || item.variant?.id || null,
       version: Number(item.version || item.variant?.version || 1)
     }));
-    const subtotal = Number(inv.total) / (1 + TAX_RATE);
-    const weights = [0.4, 0.35, 0.25];
-    return RETURN_NAMES.map((entry, index) => {
-      const soldQty = index === 0 ? 2 : index === 1 ? 1 : 3;
-      return {
-        id: `${inv.id}-${index + 1}`,
-        name: entry[0],
-        sku: entry[1],
-        soldQty,
-        qty: 0,
-        price: Number((subtotal * weights[index] / soldQty).toFixed(2)),
-        selected: false,
-      };
-    });
+    return [];
   }
 
   function getSelectedReturnItems() {
@@ -588,6 +561,7 @@ import { api, listFrom } from "../../../core/api.js";
   function renderExchangePicker() {
     setFlowHeading("اختيار المنتجات البديلة");
     const total = getExchangeTotal();
+    const categories = ["الكل", ...new Set(state.replacementProducts.map(product => product.category).filter(Boolean))];
     const visibleProducts = state.replacementProducts.filter(product => {
       const matchesCategory = state.exchangeCategory === "الكل" || product.category === state.exchangeCategory;
       const query = state.exchangeQuery.trim().toLowerCase();
@@ -598,7 +572,7 @@ import { api, listFrom } from "../../../core/api.js";
       <div class="exchange-picker">
         <aside class="exchange-cart"><div class="exchange-cart__header"><h3>سلة الاستبدال</h3><span>${state.exchangeCart.reduce((sum, item) => sum + item.qty, 0)} عناصر</span></div><div class="exchange-cart__list">${state.exchangeCart.length ? state.exchangeCart.map(item => `<div class="exchange-cart__item" data-exchange-id="${item.id}"><strong>${escapeHtml(item.name)}</strong><div><span class="return-stepper"><button data-flow-action="exchange-dec">−</button><span>${item.qty}</span><button data-flow-action="exchange-inc">+</button></span><span class="return-price num">${formatMoney(item.price * item.qty)} ج.م</span></div></div>`).join("") : '<p class="return-hint">لم يتم اختيار منتجات بديلة بعد.</p>'}</div><div class="return-breakdown"><div><span>الإجمالي</span><strong class="return-price num">${formatMoney(total)} ج.م</strong></div></div><button class="btn btn-primary exchange-next" data-flow-action="to-summary" ${state.exchangeCart.length === 0 ? "disabled" : ""}>التالي</button></aside>
         <main class="exchange-products">${visibleProducts.length ? visibleProducts.map(product => `<button class="product-card exchange-product" type="button" data-flow-action="add-exchange" data-product-id="${product.id}"><div class="product-card__badges"><span class="product-card__badge-stock">المخزون: متاح</span><span class="product-card__badge-size">${escapeHtml(product.category)}</span></div><strong class="product-card__name">${escapeHtml(product.name)}</strong><small>كود: ${escapeHtml(product.sku)}</small><div class="product-card__footer"><span class="product-card__price num">${formatMoney(product.price)} <small>ج.م</small></span></div></button>`).join("") : '<p class="return-hint">لا توجد منتجات مطابقة.</p>'}</main>
-        <aside class="exchange-categories"><input class="input" id="exchangeSearch" value="${escapeHtml(state.exchangeQuery)}" placeholder="بحث عن منتج...">${["الكل", "جلابيب", "ملابس داخلية", "أشمغة وغتر", "عطور"].map(category => `<button class="exchange-category${state.exchangeCategory === category ? " is-active" : ""}" data-flow-action="exchange-category" data-category="${category}" type="button">${category}</button>`).join("")}</aside>
+        <aside class="exchange-categories"><input class="input" id="exchangeSearch" value="${escapeHtml(state.exchangeQuery)}" placeholder="بحث عن منتج...">${categories.map(category => `<button class="exchange-category${state.exchangeCategory === category ? " is-active" : ""}" data-flow-action="exchange-category" data-category="${escapeHtml(category)}" type="button">${escapeHtml(category)}</button>`).join("")}</aside>
       </div>`;
   }
 

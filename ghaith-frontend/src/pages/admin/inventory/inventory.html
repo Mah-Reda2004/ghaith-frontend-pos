@@ -11,7 +11,7 @@
     <header class="content__header inventory-header">
       <div>
         <h1 class="page-title">نظرة عامة على المخزون</h1>
-        <p class="page-subtitle">تحليل شامل لحالة المستودعات والمنتجات لشهر أكتوبر 2023</p>
+        <p class="page-subtitle">تحليل مباشر لحالة المستودعات والمنتجات</p>
       </div>
       <div class="inventory-header__actions">
         <button class="theme-toggle" id="inventoryThemeToggle" type="button" aria-label="تبديل الثيم">
@@ -28,14 +28,14 @@
     <div class="inventory-stat-grid">
       <article class="inventory-stat inventory-stat--items">
         <span class="inventory-stat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18H6zM9 3v3h6V3"/><path d="m9 13 2 2 4-4"/></svg></span>
-        <div class="inventory-stat__body"><span>إجمالي القطع</span><strong class="num">15,342</strong><small>نمو مستقر <b class="delta-chip is-up">↗ +1.2%</b></small></div>
+        <div class="inventory-stat__body"><span>إجمالي القطع</span><strong class="num">—</strong></div>
       </article>
       <article class="inventory-stat inventory-stat--value">
-        <div class="inventory-stat__body"><span>إجمالي قيمة المخزون</span><strong class="num" dir="ltr">2,450,000 <small>EGP</small></strong><small>مقارنة بالشهر الماضي <b class="delta-chip is-up">↗ +4.5%</b></small></div>
+        <div class="inventory-stat__body"><span>إجمالي قيمة المخزون</span><strong class="num" dir="ltr">—</strong></div>
       </article>
       <article class="inventory-stat inventory-stat--low">
         <span class="inventory-stat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5M12 18h.01"/></svg></span>
-        <div class="inventory-stat__body"><span>منتجات منخفضة المخزون</span><strong class="num">24</strong><small>تحتاج انتباه فوري <b class="delta-chip is-down">↗ +8</b></small></div>
+        <div class="inventory-stat__body"><span>منتجات منخفضة المخزون</span><strong class="num">—</strong></div>
       </article>
     </div>
 
@@ -47,7 +47,7 @@
       <section class="card inventory-chart inventory-chart--distribution">
         <div class="inventory-chart__header"><div><h2>توزيع المخزون</h2><p>حسب الفئات الرئيسية</p></div></div>
         <div class="inventory-donut" id="inventoryDistributionChart" aria-label="توزيع المخزون حسب الفئة"></div>
-        <div class="inventory-legend" id="inventoryDistributionLegend"><span><i class="is-orange"></i>عبايات فاخرة <b>45%</b></span><span><i class="is-warning"></i>طرح ونقابات <b>25%</b></span><span><i class="is-brown"></i>إسدالات صلاة <b>15%</b></span><span><i class="is-muted"></i>إكسسوارات <b>15%</b></span></div>
+        <div class="inventory-legend" id="inventoryDistributionLegend"></div>
       </section>
     </div>
 
@@ -61,18 +61,13 @@
       </div>
       <div class="table-responsive inventory-table-wrap">
         <table class="data-table inventory-table">
-          <thead><tr><th>المنتج</th><th>الباركود</th><th>رمز SKU</th><th>المقاس</th><th>اللون</th><th>التصنيف</th><th>سعر الشراء</th><th>قيمة المخزون</th><th>الرصيد / الحد الأدنى</th><th>الحالة</th><th>المورد الأخير</th></tr></thead>
-          <tbody id="inventoryTableBody">
-            <tr data-search="عباية حرير أسود فاخر SKU-10294 مؤسسة النسيج الذهبي"><td><strong>عباية حرير أسود فاخر</strong></td><td class="num inventory-sku" dir="rtl">SKU-10294</td><td><span class="inventory-level inventory-level--critical"><span><b class="num">2 قطعة</b><small class="num">10 قطع</small></span><i title="2 من 10"><em style="--level: .2"></em></i></span></td><td><span class="inventory-status inventory-status--critical">حرج</span></td><td>مؤسسة النسيج الذهبي</td><td><span class="inventory-quantity inventory-quantity--critical num">2</span></td></tr>
-            <tr data-search="طرحة شيفون ملكي SKU-22011 مصنع الحرير المتميز"><td><strong>طرحة شيفون ملكي</strong></td><td class="num inventory-sku" dir="rtl">SKU-22011</td><td><span class="inventory-level inventory-level--low"><span><b class="num">6 قطع</b><small class="num">15 قطعة</small></span><i title="6 من 15"><em style="--level: .4"></em></i></span></td><td><span class="inventory-status inventory-status--low">منخفض</span></td><td>مصنع الحرير المتميز</td><td><span class="inventory-quantity inventory-quantity--low num">6</span></td></tr>
-            <tr data-search="جلابية تطريز يدوي SKU-09382 مشغل غيث الخاص"><td><strong>جلابية تطريز يدوي</strong></td><td class="num inventory-sku" dir="rtl">SKU-09382</td><td><span class="inventory-level inventory-level--critical"><span><b class="num">0 قطعة</b><small class="num">5 قطع</small></span><i title="0 من 5"><em style="--level: 0"></em></i></span></td><td><span class="inventory-status inventory-status--empty">نفد تماماً</span></td><td>مشغل غيث الخاص</td><td><span class="inventory-quantity inventory-quantity--empty num">0</span></td></tr>
-          </tbody>
+          <thead><tr><th>المنتج</th><th>الباركود</th><th>المقاسات والألوان</th><th>التصنيف</th><th>سعر الشراء</th><th>قيمة المخزون</th><th>الرصيد / الحد الأدنى</th><th>الحالة</th><th>المورد</th></tr></thead>
+          <tbody id="inventoryTableBody"></tbody>
         </table>
         <div class="empty-state inventory-empty" id="inventoryEmpty" hidden><svg class="empty-state__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><h3>لا توجد أصناف مطابقة</h3><p>جرّب البحث باسم آخر أو رمز SKU مختلف.</p></div>
       </div>
       <footer class="pagination inventory-pagination">
-        <span class="pagination__info">عرض 1 إلى 3 من 42 صنف</span>
-        <div class="pagination__pages" aria-label="صفحات الجدول"><button class="page-btn" type="button" aria-label="التالي">‹</button><button class="page-btn is-active" type="button">1</button><button class="page-btn" type="button">2</button><button class="page-btn" type="button">3</button><button class="page-btn" type="button" aria-label="السابق">›</button></div>
+        <span class="pagination__info">جاري تحميل المخزون...</span>
       </footer>
     </section>
   </section>

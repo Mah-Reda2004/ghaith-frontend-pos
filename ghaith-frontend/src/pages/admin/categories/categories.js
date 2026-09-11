@@ -69,7 +69,7 @@ function filteredCategories(elements) {
 }
 
 function renderCategories(elements) {
-  document.querySelector(".categories-table thead").innerHTML = "<tr><th>المعرّف</th><th>اسم الفئة</th><th>الوصف</th><th>عدد المنتجات</th><th>تاريخ الإنشاء</th><th>النسخة</th><th>الحالة</th><th>الإجراءات</th></tr>";
+  document.querySelector(".categories-table thead").innerHTML = "<tr><th>اسم الفئة</th><th>الوصف</th><th>عدد المنتجات</th><th>تاريخ الإنشاء</th><th>النسخة</th><th>الحالة</th><th>الإجراءات</th></tr>";
   const filtered = filteredCategories(elements);
   const totalPages = Math.max(1, Math.ceil(filtered.length / UI_PAGE_SIZE));
   currentPage = Math.min(currentPage, totalPages);
@@ -77,7 +77,7 @@ function renderCategories(elements) {
   const pageCategories = filtered.slice(start, start + UI_PAGE_SIZE);
   elements.tableBody.innerHTML = pageCategories.map(category => `
     <tr data-category-id="${escapeHtml(String(category.id))}">
-      <td class="num" dir="ltr">${escapeHtml(String(category.id))}</td><td>${escapeHtml(category.name)}</td><td>${escapeHtml(category.description || "—")}</td><td class="num">${category.products.toLocaleString("en-US")}</td><td>${category.createdAt ? new Date(category.createdAt).toLocaleDateString("ar-EG") : "—"}</td><td class="num">${category.version}</td>
+      <td>${escapeHtml(category.name)}</td><td>${escapeHtml(category.description || "—")}</td><td class="num">${category.products.toLocaleString("en-US")}</td><td>${category.createdAt ? new Date(category.createdAt).toLocaleDateString("ar-EG") : "—"}</td><td class="num">${category.version}</td>
       <td><button class="status-toggle status-toggle--table${category.status === "active" ? "" : " is-inactive"}" type="button" role="switch" aria-checked="${category.status === "active"}" data-action="toggle-status"><span class="status-toggle__label">${category.status === "active" ? "نشط" : "غير نشط"}</span><span class="status-toggle__track" aria-hidden="true"><span class="status-toggle__thumb"></span></span></button></td>
       <td><div class="categories-actions"><button class="categories-action categories-action--edit" type="button" data-action="edit" aria-label="تعديل ${escapeHtml(category.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="categories-action categories-action--delete" type="button" data-action="delete" aria-label="حذف ${escapeHtml(category.name)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div></td>
     </tr>`).join("");

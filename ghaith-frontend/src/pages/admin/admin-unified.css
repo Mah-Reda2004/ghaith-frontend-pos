@@ -111,14 +111,21 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
 
 /* All admin tables follow the users-table visual rhythm. */
 .admin-content :is(.table-card, .reports-table-card) { border-radius: var(--radius-md); box-shadow: 0 10px 28px rgba(0, 0, 0, .07); }
-.admin-content .table-responsive { max-height: none; border-color: var(--color-border); scrollbar-gutter: auto; }
-.admin-content table.data-table { border-spacing: 0; }
-.admin-content table.data-table thead { background: var(--color-sidebar-bg); }
-.admin-content table.data-table th { height: 3rem; padding: var(--space-3) var(--space-4); color: var(--color-text-muted); font-weight: var(--fw-bold); letter-spacing: .01em; }
-.admin-content table.data-table td { height: 3.75rem; padding: var(--space-4); color: color-mix(in srgb, var(--color-primary) 12%, var(--color-text-muted)); }
+.admin-content .table-responsive { max-height: none; padding: 0 var(--space-3) var(--space-3); border-color: var(--color-border); scrollbar-gutter: stable; background: color-mix(in srgb, var(--color-bg) 70%, var(--color-surface)); }
+.admin-content table.data-table { border-collapse: separate; border-spacing: 0 var(--space-2); }
+.admin-content table.data-table thead { background: transparent; }
+.admin-content table.data-table th { position: sticky; top: 0; z-index: 2; height: 3.25rem; padding: var(--space-3) var(--space-4); color: var(--color-text-muted); background: color-mix(in srgb, var(--color-bg) 88%, var(--color-surface)); border-block-end: 0; font-size: var(--fs-xs); font-weight: var(--fw-bold); letter-spacing: .025em; }
+.admin-content table.data-table td { height: 4.25rem; padding: var(--space-3) var(--space-4); color: color-mix(in srgb, var(--color-primary) 12%, var(--color-text-muted)); background: var(--color-surface); border-block: 1px solid var(--color-border); }
+.admin-content table.data-table tbody td:first-child { border-inline-start: 1px solid var(--color-border); border-start-start-radius: var(--radius-md); border-end-start-radius: var(--radius-md); }
+.admin-content table.data-table tbody td:last-child { border-inline-end: 1px solid var(--color-border); border-start-end-radius: var(--radius-md); border-end-end-radius: var(--radius-md); }
 .admin-content table.data-table tbody td:first-child { color: var(--color-text); font-weight: var(--fw-medium); }
 .admin-content table.data-table tbody tr { transition: background var(--transition-fast); }
-.admin-content table.data-table tbody tr:hover { background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface-hover)); }
+.admin-content table.data-table tbody tr { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .035)); }
+.admin-content table.data-table tbody tr:hover td { background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface)); border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border)); }
+.admin-content table.data-table td[dir="ltr"],
+.admin-content table.data-table td > [dir="ltr"] { text-align: center; unicode-bidi: isolate; }
+.admin-content table.data-table td > [dir="ltr"] { display: block; }
+.admin-content :is(input, textarea)[dir="ltr"] { text-align: center; unicode-bidi: isolate; }
 .admin-content .pagination { min-height: 60px; border-block-start: var(--border-width) solid var(--color-border); }
 
 @media (max-width: 1180px) {
