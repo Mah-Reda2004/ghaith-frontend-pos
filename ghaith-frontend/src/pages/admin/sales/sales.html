@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl" data-theme="dark">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>المبيعات — غيث</title></head>
+<head><meta charset="UTF-8"><script src="../../../core/auth-guard.js"></script><meta name="viewport" content="width=device-width,initial-scale=1"><title>المبيعات — غيث</title></head>
 <body>
 <section class="sales-page">
   <header class="sales-header">
@@ -30,7 +30,7 @@
       <label class="input-search sales-search"><input class="input" id="salesSearch" type="search" placeholder="بحث برقم الفاتورة أو اسم العميل..."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></label>
       <div class="sales-select-filters">
         <select class="select" id="salesPayment" aria-label="طريقة الدفع"><option value="">طريقة الدفع</option><option value="cash">نقدي</option><option value="card">بطاقة</option></select>
-        <select class="select" id="salesStatus" aria-label="حالة الفاتورة"><option value="">حالة الفاتورة</option><option value="sale">مكتملة</option><option value="return">مرتجع</option></select>
+        <select class="select" id="salesStatus" aria-label="حالة الفاتورة"><option value="">حالة الفاتورة</option><option value="completed">مكتملة</option><option value="pending_payment">قيد الدفع</option><option value="deferred">آجل</option><option value="partially_returned">مرتجعة جزئيًا</option><option value="fully_returned">مرتجعة بالكامل</option><option value="returned">مرتجعة</option><option value="cancelled">ملغاة</option></select>
       </div>
     </div>
     <div class="table-responsive sales-table-wrap">

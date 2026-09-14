@@ -2,6 +2,7 @@
 <html lang="ar" dir="rtl" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
+  <script src="../../../core/auth-guard.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>الرئيسية — غيث</title>
   <link rel="stylesheet" href="dashboard.css" />
@@ -20,7 +21,7 @@
         </button>
         <label class="dashboard-period">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
-          <select aria-label="الفترة الزمنية"><option>هذا الشهر</option><option>هذا الأسبوع</option><option>اليوم</option></select>
+          <select id="dashboardPeriod" aria-label="الفترة الزمنية"><option value="this_month">هذا الشهر</option><option value="this_week">هذا الأسبوع</option><option value="today">اليوم</option></select>
         </label>
       </div>
     </header>

@@ -52,7 +52,10 @@ async function parseResponse(response) {
 function getErrorMessage(response, data) {
   if (Array.isArray(data?.detail)) return data.detail.map(item => item.msg).filter(Boolean).join("، ");
   if (typeof data?.detail === "string") return data.detail;
-  if (typeof data?.error?.message === "string") return data.error.message;
+  if (typeof data?.error?.message === "string") {
+    const requestId = data.error.request_id;
+    return requestId ? `${data.error.message} (رقم التتبع: ${requestId})` : data.error.message;
+  }
   if (typeof data?.message === "string") return data.message;
   if (response.status === 401) return "اسم المستخدم أو كلمة المرور غير صحيحة.";
   if (response.status === 403) return "ليس لديك صلاحية لتنفيذ هذا الإجراء.";

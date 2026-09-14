@@ -547,8 +547,10 @@
 @media (max-width: 1180px) {
   .sc-body { padding: var(--space-6) var(--space-4); }
   .sc-overview,
-  .sc-deduction-grid { grid-template-columns: minmax(0, 1.7fr) minmax(calc(var(--space-7) * 6), 1fr); }
+  .sc-deduction-grid { grid-template-columns: 1fr; }
   .sc-summary-grid__bottom { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sc-payment-section { min-width: 0; }
+  .sc-payment-header { flex-wrap: wrap; }
   .sc-pay-table th,
   .sc-pay-table td { padding-inline: var(--space-4); }
 }

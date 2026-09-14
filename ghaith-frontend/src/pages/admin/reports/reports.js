@@ -16,7 +16,7 @@ const REPORTS = {
   inventory: reportDefinition({ label: "المخزون", title: "تقرير المخزون", subtitle: "نظرة عامة على حالة المخزون وقيمته الحالية", tableTitle: "تفاصيل المنتجات", search: "بحث برمز SKU...", columns: ["المنتج / رمز SKU", "الفئة", "الكمية", "سعر الشراء", "قيمة المخزون", "الحالة"], statLabels: [["إجمالي قيمة المخزون", "ج.م", "success", "wallet"], ["عدد المنتجات", "", "info", "box"], ["منتجات منخفضة المخزون", "", "warning", "alert"], ["منتجات نفد مخزونها", "", "danger", "alert"]] }),
   debts: reportDefinition({ label: "المديونيات", title: "تقرير المديونيات", subtitle: "متابعة مديونيات العملاء والتحصيلات", tableTitle: "تفاصيل مديونيات العملاء", search: "بحث باسم العميل...", columns: ["اسم العميل", "رقم الهاتف", "الفواتير", "إجمالي الدين", "المسدد", "المتبقي", "الحالة"], statLabels: [["إجمالي المديونيات", "ج.م", "primary", "wallet"], ["عدد العملاء المدينين", "عميل", "info", "users"], ["إجمالي التحصيل", "ج.م", "success", "receipt"], ["المتبقي للتحصيل", "ج.م", "primary", "calendar"]] }),
   expenses: reportDefinition({ label: "المصروفات", title: "التقارير - تقرير المصروفات", subtitle: "نظرة عامة على المصروفات والأداء المالي", tableTitle: "تفاصيل المصروفات", search: "بحث في التفاصيل...", columns: ["التاريخ", "الوصف / البيان", "التصنيف", "المستخدم", "المبلغ"], statLabels: [["إجمالي المصروفات", "ج.م", "primary", "wallet"], ["مصروفات هذا الشهر", "ج.م", "warning", "calendar"], ["متوسط المصروف اليومي", "ج.م", "success", "chart"]] }),
-  returns: reportDefinition({ label: "المرتجعات والاستبدالات", title: "التقارير - تقرير المرتجعات والاستبدالات", subtitle: "نظرة عامة على حركات المرتجعات والاستبدالات وتأثيرها المالي", tableTitle: "سجل الحركات", search: "بحث برقم الفاتورة أو المنتج...", columns: ["رقم الحركة", "النوع", "الفاتورة المرتبطة", "التاريخ", "المنتج", "الكمية", "القيمة", "الحالة"], statLabels: [["عدد المرتجعات", "", "danger", "receipt"], ["قيمة المرتجعات", "ج.م", "danger", "wallet"], ["عدد الاستبدالات", "", "warning", "swap"], ["التأثير الصافي على المبيعات", "ج.م", "danger", "chart"]] })
+  returns: reportDefinition({ label: "المرتجعات والاستبدالات", title: "التقارير - تقرير المرتجعات والاستبدالات", subtitle: "نظرة عامة على حركات المرتجعات والاستبدالات وتأثيرها المالي", tableTitle: "سجل الحركات", search: "بحث برقم الحركة أو الفاتورة...", columns: ["رقم الحركة", "النوع", "الفاتورة الأصلية", "الفاتورة الجديدة", "التاريخ", "طريقة التسوية", "السبب / فرق السعر", "القيمة"], statLabels: [["عدد المرتجعات", "", "danger", "receipt"], ["قيمة المرتجعات", "ج.م", "danger", "wallet"], ["عدد الاستبدالات", "", "warning", "swap"], ["إجمالي فروق الاستبدال", "ج.م", "primary", "chart"]] })
 };
 
 const REPORT_ENDPOINTS = { profits: "overview", customers: "debts", suppliers: "purchases", inventory: "inventory-revaluations", returns: "returns-exchanges" };
@@ -50,7 +50,7 @@ const FIELD_LABELS = {
   category: "الفئة", product: "المنتج", supplier: "المورد", customer: "العميل", notes: "ملاحظات",
   updated_at: "آخر تحديث", due_date: "تاريخ الاستحقاق", opened_at: "وقت فتح الوردية", closed_at: "وقت إغلاق الوردية"
 };
-const SUMMARY_LABELS = { ...FIELD_LABELS, total_items: "عدد النتائج", total_products: "عدد المنتجات", total_expenses: "إجمالي المصروفات", total_debts: "إجمالي المديونيات", total_purchases: "إجمالي المشتريات", net_profit: "صافي الربح" };
+const SUMMARY_LABELS = { ...FIELD_LABELS, total_items: "عدد النتائج", total_products: "عدد المنتجات", total_expenses: "إجمالي المصروفات", total_debts: "إجمالي المديونيات", total_purchases: "إجمالي المشتريات", net_profit: "صافي الربح", return_count: "عدد المرتجعات", return_total: "قيمة المرتجعات", exchange_count: "عدد الاستبدالات", exchange_difference_total: "إجمالي فروق الاستبدال", total_discounts: "إجمالي الخصومات", total_commissions: "إجمالي العمولات", total_paid: "إجمالي المدفوع", total_remaining: "إجمالي المتبقي", out_of_stock_count: "منتجات نفدت", low_stock_count: "مخزون منخفض", gross_profit: "إجمالي الربح", net_sales: "صافي المبيعات" };
 const FIELD_WORDS = {
   total: "إجمالي", net: "صافي", gross: "إجمالي", count: "العدد", number: "رقم", name: "الاسم", date: "التاريخ", time: "الوقت",
   amount: "المبلغ", price: "السعر", cost: "التكلفة", quantity: "الكمية", qty: "الكمية", status: "الحالة", type: "النوع",
@@ -68,13 +68,28 @@ function fieldLabel(field) {
   return translated || "بيانات إضافية";
 }
 
-function getItems(response) {
+const REPORT_DATA_KEYS = {
+  sales: ["sales", "invoices", "sales_invoices", "items"],
+  profits: ["transactions", "profit_rows", "entries", "items", "top_products"],
+  products: ["products", "product_performance", "top_products", "items"],
+  suppliers: ["purchases", "suppliers", "supplier_purchases", "items"],
+  inventory: ["revaluations", "inventory_revaluations", "products", "items"],
+  debts: ["debts", "debtors", "items"],
+  expenses: ["expenses", "items"],
+  discounts: ["discounts", "items"],
+  commissions: ["commissions", "sales_users", "items"]
+};
+
+function getItems(response, reportKey) {
   const direct = listFrom(response);
   if (direct.length) return direct;
-  for (const key of ["rows", "records", "entries", "details", "invoices", "products", "purchases", "debts", "expenses", "returns", "revaluations"]) {
+  const preferred = REPORT_DATA_KEYS[reportKey] || [];
+  for (const key of [...preferred, "rows", "records", "entries", "details", "invoices", "products", "purchases", "debts", "expenses", "discounts", "commissions", "returns", "exchanges", "revaluations"]) {
     const value = response?.[key] || response?.data?.[key];
     if (Array.isArray(value)) return value;
   }
+  const nestedArrays = Object.entries(response?.data || {}).filter(([key, value]) => Array.isArray(value) && value.length && typeof value[0] === "object" && !/(series|trend|distribution|breakdown)/i.test(key));
+  if (nestedArrays.length) return nestedArrays[0][1];
   return [];
 }
 
@@ -87,16 +102,160 @@ function displayValue(value) {
   return String(value);
 }
 
-function reportFromResponse(base, response) {
-  const items = getItems(response);
+function shortDate(value) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("ar-EG", { day: "numeric", month: "short" }).format(new Date(value));
+}
+
+function returnsReportFromResponse(base, response) {
+  const data = response?.data || response || {};
+  const returns = Array.isArray(data.returns) ? data.returns : [];
+  const exchanges = Array.isArray(data.exchanges) ? data.exchanges : [];
+  const summary = data.summary || response?.summary || {};
+  const currency = response?.currency === "EGP" ? "ج.م" : response?.currency || "ج.م";
+  const methodLabels = { cash: "نقدي", card: "بطاقة", wallet: "محفظة", transfer: "تحويل", store_credit: "رصيد استبدال", exchange: "استبدال" };
+  const rows = [
+    ...returns.map(item => [
+      item.return_number || item.id || "—",
+      { text: item.refund_method === "exchange" ? "مرتجع للاستبدال" : "مرتجع", badge: item.refund_method === "exchange" ? "warning" : "danger" },
+      item.original_invoice_id || "—", "—", displayValue(item.created_at), methodLabels[item.refund_method] || item.refund_method || "—",
+      item.reason || "—", `${displayValue(Number(item.total_refund || 0))} ${currency}`
+    ]),
+    ...exchanges.map(item => [
+      item.exchange_number || item.id || "—", { text: "استبدال", badge: "warning" }, item.original_invoice_id || "—", item.new_invoice_id || "—",
+      displayValue(item.created_at), methodLabels[item.settlement_method] || item.settlement_method || "—",
+      `${item.difference_type === "due" ? "مبلغ مستحق" : "مبلغ مسترد"}: ${displayValue(Number(item.difference_amount || 0))} ${currency}`,
+      `${displayValue(Number(item.difference_amount || 0))} ${currency}`
+    ])
+  ].sort((a, b) => String(b[4]).localeCompare(String(a[4]), "ar"));
+  const daily = new Map();
+  const addDaily = (item, key, value) => {
+    const date = String(item.created_at || "").slice(0, 10);
+    if (!date) return;
+    const point = daily.get(date) || { returns: 0, exchanges: 0 };
+    point[key] += Number(value || 0);
+    daily.set(date, point);
+  };
+  returns.forEach(item => addDaily(item, "returns", item.total_refund));
+  exchanges.forEach(item => addDaily(item, "exchanges", item.difference_amount));
+  const dates = [...daily.keys()].sort();
+  return {
+    ...base,
+    columns: REPORTS.returns.columns,
+    rows,
+    total: String(returns.length + exchanges.length),
+    stats: [
+      ["عدد المرتجعات", displayValue(Number(summary.return_count ?? returns.length)), "", "danger", "", "receipt"],
+      ["قيمة المرتجعات", displayValue(Number(summary.return_total ?? returns.reduce((sum, item) => sum + Number(item.total_refund || 0), 0))), currency, "danger", "", "wallet"],
+      ["عدد الاستبدالات", displayValue(Number(summary.exchange_count ?? exchanges.length)), "", "warning", "", "swap"],
+      ["إجمالي فروق الاستبدال", displayValue(Number(summary.exchange_difference_total ?? exchanges.reduce((sum, item) => sum + Number(item.difference_amount || 0), 0))), currency, "primary", "", "chart"]
+    ],
+    chart: dates.length ? { type: "bars", title: "القيمة اليومية للمرتجعات والاستبدالات", labels: dates.map(shortDate), values: dates.map(date => daily.get(date).returns), compare: dates.map(date => daily.get(date).exchanges), valueLabel: "المرتجعات", compareLabel: "فروق الاستبدال" } : null,
+    breakdown: { title: "توزيع الحركات", returns: Number(summary.return_count ?? returns.length), exchanges: Number(summary.exchange_count ?? exchanges.length) }
+  };
+}
+
+const CHART_VALUE_FIELDS = {
+  sales: ["total_amount", "net_total", "sales_amount", "amount", "total"],
+  profits: ["net_profit", "gross_profit", "profit", "amount"],
+  products: ["sales_amount", "revenue", "net_profit", "sold_quantity", "quantity"],
+  suppliers: ["total_amount", "purchase_amount", "total_purchases", "amount"],
+  inventory: ["value_difference", "difference_amount", "inventory_value", "total_value", "amount"],
+  debts: ["remaining_amount", "total_debt", "amount"],
+  expenses: ["amount", "total_amount"], discounts: ["discount_amount", "amount"], commissions: ["commission_amount", "amount"]
+};
+
+const REPORT_STAT_FIELDS = {
+  sales: [["total_sales", "sales_total", "gross_sales", "total_amount"], ["invoice_count", "sales_count", "total_invoices", "count"], ["average_invoice", "average_order_value", "average_basket", "avg_invoice_value"], ["net_sales", "net_total"]],
+  profits: [["total_sales", "sales_total", "net_sales"], ["cost_of_goods_sold", "cogs", "total_cost", "inventory_cost"], ["total_expenses", "expenses_total"], ["net_profit", "profit", "gross_profit"]],
+  products: [["total_products", "product_count", "total_product_count"], ["sold_products", "products_sold", "sold_product_count"], ["average_profit_margin", "avg_profit_margin", "profit_margin"], ["inactive_products", "products_without_sales", "no_movement_count"]],
+  customers: [["total_customers", "customer_count"], ["active_customers", "active_customer_count"], ["average_order_value", "average_basket"], ["total_debts", "debts_total", "total_remaining"]],
+  suppliers: [["total_suppliers", "supplier_count"], ["total_purchases", "purchases_total", "total_amount"], ["total_paid", "paid_amount"], ["total_remaining", "remaining_amount", "total_payables"]],
+  inventory: [["inventory_value", "total_inventory_value", "total_stock_value", "value_difference"], ["total_products", "product_count", "total_items"], ["low_stock_count", "low_stock_products"], ["out_of_stock_count", "out_of_stock_products"]],
+  debts: [["total_debts", "debts_total", "total_amount"], ["debtor_count", "customers_count", "total_customers"], ["total_paid", "paid_amount", "collected_amount"], ["total_remaining", "remaining_amount"]],
+  expenses: [["total_expenses", "expenses_total", "total_amount"], ["month_expenses", "this_month_expenses", "monthly_total"], ["average_daily_expense", "daily_average", "avg_daily_expense"]],
+  discounts: [["total_discounts", "discounts_total", "total_amount"], ["month_discounts", "this_month_discounts", "monthly_total"], ["average_discount", "daily_average", "avg_discount"]],
+  commissions: [["total_commissions", "commissions_total", "total_amount"], ["month_commissions", "this_month_commissions", "monthly_total"], ["average_commission", "daily_average", "avg_commission"]]
+};
+
+function firstFinite(item, fields) {
+  for (const field of fields) {
+    const value = Number(item?.[field]);
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+function normalizeChart(rawChart, fallbackTitle) {
+  if (!rawChart) return null;
+  const rawValues = rawChart.values || rawChart.data || rawChart.series;
+  if (!Array.isArray(rawValues) || !rawValues.length) return null;
+  if (typeof rawValues[0] === "object") {
+    const values = rawValues.map(item => firstFinite(item, ["amount", "value", "total", "sales", "total_sales", "net_sales", "net_profit", "gross_profit", "profit", "revenue", "cost", "quantity", "count"]));
+    const labels = rawValues.map((item, index) => { const date = item.date || item.day || item.period || item.created_at; return date ? shortDate(date) : item.label || item.name || String(index + 1); });
+    return { type: rawChart.type === "bars" || rawChart.type === "bar" ? "bars" : "line", title: rawChart.title || fallbackTitle, labels, values, compare: [] };
+  }
+  return { type: rawChart.type === "bars" || rawChart.type === "bar" ? "bars" : "line", title: rawChart.title || fallbackTitle, labels: rawChart.labels || rawChart.periods || rawValues.map((_, index) => String(index + 1)), values: rawValues.map(Number), compare: (rawChart.compare || rawChart.previous || []).map(Number) };
+}
+
+function derivedChart(response, items, reportKey) {
+  const data = response?.data || response || {};
+  const explicit = response?.chart || response?.trend || response?.timeline || data.chart || data.trend || data.timeline;
+  const normalized = normalizeChart(explicit, "حركة التقرير خلال الفترة");
+  if (normalized) return normalized;
+  const seriesSources = { ...response, ...data };
+  const seriesEntry = Object.entries(seriesSources).find(([key, value]) => /(series|trend|timeline|daily|monthly|weekly)$/i.test(key) && Array.isArray(value) && value.length);
+  if (seriesEntry) {
+    const chart = normalizeChart({ series: seriesEntry[1], title: "الحركة خلال الفترة" }, "الحركة خلال الفترة");
+    if (chart) return chart;
+  }
+  if (!items.length) return null;
+  const fields = CHART_VALUE_FIELDS[reportKey] || ["amount", "total_amount", "total", "value", "count"];
+  const dated = items.filter(item => item.created_at || item.date || item.day || item.occurred_at || item.invoice_date);
+  if (dated.length) {
+    const daily = new Map();
+    dated.forEach(item => {
+      const rawDate = item.created_at || item.date || item.day || item.occurred_at || item.invoice_date;
+      const date = String(rawDate).slice(0, 10);
+      daily.set(date, (daily.get(date) || 0) + firstFinite(item, fields));
+    });
+    const dates = [...daily.keys()].sort();
+    return { type: "line", title: "الحركة اليومية خلال الفترة", labels: dates.map(shortDate), values: dates.map(date => daily.get(date)), compare: [] };
+  }
+  const named = items.filter(item => item.name || item.name_ar || item.product_name || item.supplier_name || item.customer_name || item.user_name || item.category_name || item.expense_type_name || item.description).slice(0, 10);
+  if (named.length) return { type: "bars", title: "مقارنة أعلى النتائج", labels: named.map(item => item.name || item.name_ar || item.product_name || item.supplier_name || item.customer_name || item.user_name || item.category_name || item.expense_type_name || item.description), values: named.map(item => firstFinite(item, fields)), compare: [] };
+  return null;
+}
+
+function collectSummary(response) {
+  const data = response?.data || {};
+  const scalarData = Object.fromEntries(Object.entries(data).filter(([, value]) => ["string", "number"].includes(typeof value)));
+  const scalarRoot = Object.fromEntries(Object.entries(response || {}).filter(([, value]) => ["string", "number"].includes(typeof value)));
+  return {
+    ...scalarRoot,
+    ...scalarData,
+    ...(response?.totals || {}),
+    ...(response?.kpis || {}),
+    ...(response?.summary || {}),
+    ...(data?.totals || {}),
+    ...(data?.kpis || {}),
+    ...(data?.summary || {})
+  };
+}
+
+function statValue(summary, candidates) {
+  const key = candidates.find(candidate => summary[candidate] !== undefined && summary[candidate] !== null);
+  return key ? summary[key] : 0;
+}
+
+function reportFromResponse(base, response, reportKey) {
+  const items = getItems(response, reportKey);
   const keys = items.length ? Object.keys(items[0]).filter(field => field !== "id" && !field.endsWith("_id") && !Array.isArray(items[0][field])).slice(0, 9) : [];
-  const summary = response?.summary || response?.totals || response?.data?.summary || response?.data?.totals || {};
+  const summary = collectSummary(response);
   const summaryEntries = Object.entries(summary).filter(([, value]) => ["string", "number"].includes(typeof value)).slice(0, 4);
-  const rawChart = response?.chart || response?.trend || response?.data?.chart || response?.data?.trend;
-  const chartValues = rawChart?.values || rawChart?.data || rawChart?.series;
-  const chart = rawChart && Array.isArray(chartValues) && chartValues.length
-    ? { type: rawChart.type === "bars" ? "bars" : "line", title: rawChart.title || "حركة التقرير", labels: rawChart.labels || rawChart.periods || chartValues.map((_, index) => String(index + 1)), values: chartValues.map(Number), compare: (rawChart.compare || rawChart.previous || []).map(Number) }
-    : null;
+  const chart = derivedChart(response, items, reportKey);
+  const currency = response?.currency || response?.data?.currency || "EGP";
+  const unitFor = key => /(count|quantity|products|suppliers|customers|invoices|items)$/i.test(key) ? "" : /(percent|percentage|rate|margin)$/i.test(key) ? "%" : currency === "EGP" ? "ج.م" : currency;
   return {
     ...base,
     chart,
@@ -104,8 +263,12 @@ function reportFromResponse(base, response) {
     sideRows: null,
     columns: items.length ? keys.map(fieldLabel) : base.columns,
     rows: items.map(item => keys.map(key => displayValue(item[key]))),
-    total: String(response?.total ?? response?.data?.total ?? items.length),
-    stats: summaryEntries.length ? summaryEntries.map(([key, value], index) => [SUMMARY_LABELS[key] || fieldLabel(key), displayValue(value), "", ["primary", "success", "info", "warning"][index], "", "chart"]) : base.stats.map(stat => [stat[0], "0", stat[2], stat[3], "", stat[5]])
+    total: String(response?.total ?? response?.pagination?.total ?? response?.data?.total ?? response?.data?.pagination?.total ?? items.length),
+    stats: REPORT_STAT_FIELDS[reportKey]
+      ? base.stats.map((stat, index) => [stat[0], displayValue(statValue(summary, REPORT_STAT_FIELDS[reportKey][index] || [])), stat[2], stat[3], "", stat[5]])
+      : summaryEntries.length
+        ? summaryEntries.map(([key, value], index) => [SUMMARY_LABELS[key] || fieldLabel(key), displayValue(value), unitFor(key), ["primary", "success", "info", "warning"][index], "", "chart"])
+        : base.stats.map(stat => [stat[0], "0", stat[2], stat[3], "", stat[5]])
   };
 }
 
@@ -141,7 +304,15 @@ function renderBars(chart) {
   const width = 760, height = 270, pad = 38, max = Math.max(...chart.values, ...compare, 1), group = (width - pad * 2) / chart.values.length;
   const grid = [0, 1, 2, 3].map((_, index) => { const y = pad + index * ((height - pad * 2) / 3); return `<line x1="${pad}" y1="${y}" x2="${width - pad}" y2="${y}" stroke="var(--color-border)"/>`; }).join("");
   const bars = chart.values.map((value, index) => { const h1 = value / max * (height - pad * 2), h2 = (compare[index] || 0) / max * (height - pad * 2), x = pad + index * group; return `<rect x="${x + group * .18}" y="${height - pad - h2}" width="${group * .26}" height="${h2}" rx="3" fill="var(--color-surface-hover)"/><rect x="${x + group * .48}" y="${height - pad - h1}" width="${group * .26}" height="${h1}" rx="3" fill="var(--color-primary)"/><text x="${x + group * .5}" y="${height - 8}" text-anchor="middle" fill="var(--color-text-muted)" font-size="10">${escapeHtml(chart.labels[index])}</text>`; }).join("");
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(chart.title)}">${grid}${bars}</svg>`;
+  return `<div class="reports-chart-with-legend"><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(chart.title)}">${grid}${bars}</svg>${chart.compareLabel ? `<div class="reports-chart-legend"><span><i class="is-primary"></i>${escapeHtml(chart.valueLabel || "القيمة")}</span><span><i></i>${escapeHtml(chart.compareLabel)}</span></div>` : ""}</div>`;
+}
+
+function renderBreakdown(breakdown) {
+  const returns = Math.max(0, Number(breakdown.returns || 0));
+  const exchanges = Math.max(0, Number(breakdown.exchanges || 0));
+  const total = Math.max(returns + exchanges, 1);
+  const returnPercent = returns / total * 100;
+  return `<article class="reports-side-card reports-movement-breakdown"><h3>${escapeHtml(breakdown.title)}</h3><div class="reports-donut"><svg viewBox="0 0 120 120" role="img" aria-label="${returns} مرتجع و${exchanges} استبدال"><g transform="rotate(-90 60 60)"><circle cx="60" cy="60" r="44" fill="none" stroke="var(--color-surface-hover)" stroke-width="14"/><circle cx="60" cy="60" r="44" pathLength="100" fill="none" stroke="var(--color-danger)" stroke-width="14" stroke-dasharray="${returnPercent} ${100 - returnPercent}"/><circle cx="60" cy="60" r="44" pathLength="100" fill="none" stroke="var(--color-warning)" stroke-width="14" stroke-dasharray="${100 - returnPercent} ${returnPercent}" stroke-dashoffset="-${returnPercent}"/></g><text x="60" y="57" text-anchor="middle" fill="var(--color-text-muted)" font-size="8">إجمالي الحركات</text><text x="60" y="72" text-anchor="middle" fill="var(--color-text)" font-size="16" font-weight="700">${returns + exchanges}</text></svg></div><div class="reports-legend"><span class="is-danger"><i></i><b>المرتجعات</b><strong>${returns}</strong></span><span class="is-warning"><i></i><b>الاستبدالات</b><strong>${exchanges}</strong></span></div></article>`;
 }
 
 function renderDonut() {
@@ -150,9 +321,9 @@ function renderDonut() {
 
 function renderVisual(report) {
   if (report.donut) return renderDonut();
-  if (!report.chart) return "";
+  if (!report.chart) return `<section class="reports-chart-layout reports-chart-layout--single"><article class="reports-chart-card"><h3>الرسم البياني</h3><div class="reports-chart reports-chart--empty"><div class="empty-state"><h3>لا توجد نقاط للرسم</h3><p>لم يُرجع الـAPI بيانات زمنية أو قيمًا قابلة للرسم ضمن الفترة المحددة.</p></div></div></article></section>`;
   const chart = report.chart.type === "bars" ? renderBars(report.chart) : renderLineChart(report.chart);
-  const side = report.sideRows ? `<article class="reports-side-card"><h3>تفصيل الأرباح حسب الفئة</h3>${report.sideRows.map(([label, value, percent]) => `<div class="reports-side-row"><div class="reports-side-row__head"><b>${escapeHtml(label)}</b><strong>${escapeHtml(value)}</strong></div><div class="reports-progress"><i style="width:${Number(percent)}%"></i></div><span>هامش الربح: ${Number(percent)}%</span></div>`).join("")}</article>` : "";
+  const side = report.breakdown ? renderBreakdown(report.breakdown) : report.sideRows ? `<article class="reports-side-card"><h3>تفصيل الأرباح حسب الفئة</h3>${report.sideRows.map(([label, value, percent]) => `<div class="reports-side-row"><div class="reports-side-row__head"><b>${escapeHtml(label)}</b><strong>${escapeHtml(value)}</strong></div><div class="reports-progress"><i style="width:${Number(percent)}%"></i></div><span>هامش الربح: ${Number(percent)}%</span></div>`).join("")}</article>` : "";
   return `<section class="reports-chart-layout${side ? "" : " reports-chart-layout--single"}"><article class="reports-chart-card"><h3>${escapeHtml(report.chart.title)}</h3><div class="reports-chart">${chart}</div></article>${side}</section>`;
 }
 
@@ -181,7 +352,7 @@ function bindReportInteractions(reportKey, cleanup, reload) {
   const filter = debounce(() => { const term = search.value.trim().toLowerCase(); let visible = 0; body.querySelectorAll("tr").forEach((row) => { const show = row.dataset.search.includes(term); row.hidden = !show; if (show) visible += 1; }); empty.hidden = visible > 0; body.hidden = visible === 0; }, 300);
   const reportTable = document.querySelector(".reports-table");
   const exportReport = () => window.GhaithPrint?.exportTableExcel({ title: report.title, table: reportTable, fileName: `ghaith-${reportKey}` });
-  const printReport = () => window.GhaithPrint?.printTable({ title: report.title, subtitle: report.subtitle, table: reportTable, summary: report.stats.map(([label,value,unit]) => ({ label, value: `${value} ${unit}`.trim() })) });
+  const printReport = () => window.GhaithPrint?.exportTablePdf({ title: report.title, subtitle: report.subtitle, table: reportTable, summary: report.stats.map(([label,value,unit]) => ({ label, value: `${value} ${unit}`.trim() })), fileName: `ghaith-${reportKey}` });
   const applyFilters = () => {
     const period = document.getElementById("reportsPeriod").value;
     const fromDate = document.getElementById("reportsFromDate")?.value || "";
@@ -212,9 +383,11 @@ export function initReports() {
     while (cleanups.length) cleanups.pop()(); tabs.querySelectorAll("button").forEach(button => button.classList.toggle("is-active", button.dataset.report === active));
     view.innerHTML = '<div class="view-loading"><span class="spinner"></span><span>جاري تحميل التقرير...</span></div>';
     try {
-      const response = await api.get(`/api/v1/admin/reports/${REPORT_ENDPOINTS[active] || active}`, { query: { period: state.period, from_date: state.period === "custom" ? state.fromDate : undefined, to_date: state.period === "custom" ? state.toDate : undefined, page: state.page, page_size: state.pageSize } });
+      const response = await api.get(`/api/v1/admin/reports/${REPORT_ENDPOINTS[active] || active}`, { query: { period: state.period, group_by: "day", from_date: state.period === "custom" ? state.fromDate : undefined, to_date: state.period === "custom" ? state.toDate : undefined, page: state.page, page_size: state.pageSize } });
       if (current !== requestId) return;
-      REPORTS[active] = reportFromResponse(REPORTS[active], response);
+      const returnsData = response?.data || response;
+      const hasReturnsShape = active === "returns" && (Array.isArray(returnsData?.returns) || Array.isArray(returnsData?.exchanges));
+      REPORTS[active] = hasReturnsShape ? returnsReportFromResponse(REPORTS[active], response) : reportFromResponse(REPORTS[active], response, active);
       Object.assign(REPORTS[active], state);
       view.innerHTML = renderReport(active); bindReportInteractions(active, cleanups, changes => load(active, changes));
     } catch (error) { if (current === requestId) view.innerHTML = `<section class="admin-view__error"><h2>تعذّر تحميل التقرير</h2><p>${escapeHtml(error.message)}</p></section>`; }

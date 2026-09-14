@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl" data-theme="dark">
 <head>
-<meta charset="UTF-8" />
+  <meta charset="UTF-8" />
+  <script src="../../../core/auth-guard.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
 <title>المصروفات — غيث</title>
 
@@ -86,7 +87,7 @@
         </div>
         <div class="exp-stat-card__info">
           <span class="exp-stat-card__label">إجمالي مصروفات اليوم</span>
-          <span class="exp-stat-card__value" id="statToday">450<small>جنيه</small></span>
+          <span class="exp-stat-card__value" id="statToday">0<small>جنيه</small></span>
         </div>
       </div>
       <!-- عدد المصروفات -->
@@ -96,7 +97,7 @@
         </div>
         <div class="exp-stat-card__info">
           <span class="exp-stat-card__label">عدد المصروفات</span>
-          <span class="exp-stat-card__value" id="statCount">4<small>عمليات</small></span>
+          <span class="exp-stat-card__value" id="statCount">0<small>عمليات</small></span>
         </div>
       </div>
       <!-- مصروفات الوردية الحالية -->
@@ -106,7 +107,7 @@
         </div>
         <div class="exp-stat-card__info">
           <span class="exp-stat-card__label">مصروفات الوردية الحالية</span>
-          <span class="exp-stat-card__value" id="statShift">150<small>جنيه</small></span>
+          <span class="exp-stat-card__value" id="statShift">0<small>جنيه</small></span>
         </div>
       </div>
       <!-- النقدية المتاحة -->
@@ -116,7 +117,7 @@
         </div>
         <div class="exp-stat-card__info">
           <span class="exp-stat-card__label">النقدية المتاحة</span>
-          <span class="exp-stat-card__value" id="statCash">4,850<small>جنيه</small></span>
+          <span class="exp-stat-card__value" id="statCash">0<small>جنيه</small></span>
         </div>
       </div>
     </div>
@@ -137,7 +138,6 @@
         <table class="exp-table">
           <thead>
             <tr>
-              <th>رقم المصروف</th>
               <th>نوع المصروف</th>
               <th>الوصف</th>
               <th>الملاحظات</th>
@@ -243,12 +243,12 @@
           <span class="exp-info-item__label">الكاشير</span>
           <span class="exp-info-item__value" id="infoCashier">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            أحمد محمد
+            —
           </span>
         </div>
         <div class="exp-info-item">
           <span class="exp-info-item__label">رقم الوردية</span>
-          <span class="exp-info-item__value" id="infoShift"># SHF-1024</span>
+          <span class="exp-info-item__value" id="infoShift">—</span>
         </div>
       </div>
     </div>

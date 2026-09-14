@@ -45,6 +45,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     shiftExpenses: 0,
     availableCash: 0,
     currentShift: null,
+    currentUser: null,
   };
 
   /* ------------------------------------------------------------------ */
@@ -119,6 +120,12 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     return { date, time };
   }
 
+  function personName(person, ...fallbacks) {
+    const profile = person?.user || person?.profile || person?.data || person;
+    if (typeof profile === "string") return profile;
+    return profile?.name || profile?.full_name || profile?.username || fallbacks.find(Boolean) || "—";
+  }
+
   function showToast(msg, type = "success") {
     const el = document.createElement("div");
     el.className = "toast" + (type === "error" ? " is-error" : "");
@@ -145,13 +152,20 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
 
   function normalizeExpense(item) {
     const type = item.expense_type || {}, cashier = item.cashier || item.created_by || {};
-    return { ...item, id: String(item.id), type: type.name || item.expense_type_name || item.type || "مصروف", description: item.description || "—", notes: item.notes || "—", shiftId: item.shift_id || item.shift?.id || "—", amount: Number(item.amount || 0), date: item.created_at || item.date || new Date().toISOString(), cashier: cashier.name || cashier.username || item.cashier_name || "—", status: item.status || "مسجل" };
+    const currentUserId = state.currentUser?.id || state.currentUser?.user_id;
+    const cashierId = item.cashier_id || item.created_by_id || cashier?.id || cashier?.user_id;
+    const currentCashier = !cashierId || !currentUserId || String(cashierId) === String(currentUserId) ? personName(state.currentUser) : "—";
+    return { ...item, id: String(item.id), type: type.name || item.expense_type_name || item.type || "مصروف", description: item.description || "—", notes: item.notes || "—", shiftId: item.shift_id || item.shift?.id || "—", amount: Number(item.amount || 0), date: item.created_at || item.date || new Date().toISOString(), cashier: personName(cashier, item.cashier_name, item.created_by_name, item.user_name, currentCashier), status: item.status || "مسجل" };
   }
 
   async function loadExpenses() {
     try {
-      const shiftResponse = await api.get("/api/v1/shifts/current");
+      const [shiftResponse, userResponse] = await Promise.all([
+        api.get("/api/v1/shifts/current"),
+        api.get("/api/v1/users/me")
+      ]);
       state.currentShift = shiftResponse?.shift || shiftResponse?.data || shiftResponse;
+      state.currentUser = userResponse?.user || userResponse?.profile || userResponse?.data || userResponse;
       const shiftId = state.currentShift?.id || state.currentShift?.shift_id;
       if (!shiftId) throw new Error("لا توجد وردية مفتوحة");
       const [expensesResponse, cashResponse] = await Promise.all([api.get("/api/v1/expenses", { query: { shift_id: shiftId, page: 1, page_size: 100 } }), api.get("/api/v1/expenses/available-cash", { query: { shift_id: shiftId } })]);
@@ -206,7 +220,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     if (total === 0) {
       els.tableBody.innerHTML = `
         <tr>
-          <td colspan="9">
+          <td colspan="8">
             <div class="exp-empty">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -229,7 +243,6 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
         const { date, time } = formatDate(exp.date);
         return `
         <tr>
-          <td><span class="exp-no">#${escapeHtml(exp.id)}</span></td>
           <td><span class="exp-type-badge">${escapeHtml(exp.type)}</span></td>
           <td><span class="exp-desc">${escapeHtml(exp.description)}</span></td>
           <td><span class="exp-desc">${escapeHtml(exp.notes)}</span></td>
@@ -262,8 +275,9 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
 
     // Previous
     const prev = document.createElement("button");
-    prev.className = "page-btn";
-    prev.textContent = "السابق";
+    prev.className = "page-btn exp-page-btn--arrow";
+    prev.setAttribute("aria-label", "الصفحة السابقة");
+    prev.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>';
     prev.disabled = state.page === 1;
     prev.addEventListener("click", () => {
       if (state.page > 1) {
@@ -287,8 +301,9 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
 
     // Next
     const next = document.createElement("button");
-    next.className = "page-btn";
-    next.textContent = "التالي";
+    next.className = "page-btn exp-page-btn--arrow";
+    next.setAttribute("aria-label", "الصفحة التالية");
+    next.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
     next.disabled = state.page === totalPages;
     next.addEventListener("click", () => {
       if (state.page < totalPages) {
@@ -341,8 +356,8 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
         minute: "2-digit",
       })}`;
     }
-    if (els.infoCashier) els.infoCashier.textContent = "أحمد محمد";
-    if (els.infoShift) els.infoShift.textContent = "# SHF-1024";
+    if (els.infoCashier) els.infoCashier.textContent = personName(state.currentUser);
+    if (els.infoShift) els.infoShift.textContent = state.currentShift?.number || state.currentShift?.shift_number || state.currentShift?.code || `#${state.currentShift?.id || state.currentShift?.shift_id || "—"}`;
 
     els.addOverlay.style.display = "flex";
   }

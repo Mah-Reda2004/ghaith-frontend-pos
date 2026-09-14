@@ -78,10 +78,10 @@
 }
 
 .debts-list {
-  max-width: 62%;
+  max-width: 100%;
   margin-inline-end: auto;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-4);
 }
 
@@ -192,9 +192,13 @@
 
 @media (max-width: 1180px) {
   .debts-page { padding: var(--space-5); }
-  .debts-list { max-width: 76%; }
+  .debts-page__header { align-items: flex-start; gap: var(--space-4); }
+  .debts-toolbar { flex-wrap: wrap; justify-content: flex-start; }
+  .debts-search { flex: 1 1 calc(var(--space-7) * 5); }
+  .debts-list { width: 100%; max-width: 100%; }
   .debt-detail-modal { max-width: 90%; }
-  .debt-payment-modal { max-width: 62%; }
+  .debt-payment-modal { width: calc(100% - (var(--space-5) * 2)); max-width: calc(var(--space-7) * 13); }
+  .debt-detail__meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 767px) {

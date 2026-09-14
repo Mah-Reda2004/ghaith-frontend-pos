@@ -93,6 +93,8 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
   };
 
   let selectedDiscountPct = 0;
+  let activeVariantGroup = [];
+  let selectedVariantSize = "";
 
   /* ------------------------------------------------------------------ */
   /* 5) أدوات مساعدة                                                     */
@@ -384,10 +386,13 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
           (item) => `
         <div class="cart-item" data-id="${item.id}">
           <div class="cart-item__top">
-            <button class="cart-item__remove" type="button" data-action="remove" aria-label="حذف">
+            <div class="cart-item__name">
+              <span>${escapeHtml(item.name)}</span>
+              ${(visibleVariantValue(item.size) || visibleVariantValue(item.color)) ? `<small class="cart-item__variant">${visibleVariantValue(item.size) ? `<b class="cart-item__size" title="المقاس" aria-label="المقاس ${escapeHtml(visibleVariantValue(item.size))}">${escapeHtml(visibleVariantValue(item.size))}</b>` : ""}${visibleVariantValue(item.color) ? `<span class="cart-item__color"><i aria-hidden="true"></i>${escapeHtml(visibleVariantValue(item.color))}</span>` : ""}</small>` : ""}
+            </div>
+            <button class="cart-item__remove" type="button" data-action="remove" aria-label="حذف ${escapeHtml(item.name)}">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
             </button>
-            <div class="cart-item__name">${escapeHtml(item.name)}${item.badge ? `<small>${escapeHtml(item.badge)}</small>` : ""}</div>
           </div>
           <div class="cart-item__bottom">
             <div class="qty-stepper">
@@ -504,7 +509,7 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
         <div class="product-card__name">${escapeHtml(group.name)}</div>
         ${colors.length || sizes.length ? `<div class="product-card__details">
           ${colors.length ? `<span><b>الألوان</b>${escapeHtml(colors.join("، "))}</span>` : ""}
-          ${sizes.length ? `<span><b>المقاسات</b>${escapeHtml(sizes.join("، "))}</span>` : ""}
+          ${sizes.length ? `<span><b>المقاسات</b><span class="product-card__size-list">${sizes.map(size => `<strong class="product-card__size" title="المقاس ${escapeHtml(size)}">${escapeHtml(size)}</strong>`).join("")}</span></span>` : ""}
         </div>` : ""}
         <div class="product-card__footer">
           <span class="product-card__price num">${priceLabel} <small>ج.م</small></span>
@@ -519,28 +524,45 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
   function closeVariantPicker() {
     els.variantOverlay.hidden = true;
     document.body.classList.remove("modal-open");
+    activeVariantGroup = [];
+    selectedVariantSize = "";
+  }
+
+  function variantSize(item) {
+    return visibleVariantValue(item.size) || "غير محدد";
+  }
+
+  function renderVariantPicker() {
+    const sizes = [...new Set(activeVariantGroup.map(variantSize))];
+    const matchingVariants = selectedVariantSize ? activeVariantGroup.filter(item => variantSize(item) === selectedVariantSize) : [];
+    els.variantPickerGrid.innerHTML = `
+      <section class="variant-step" aria-labelledby="variantSizeHeading">
+        <div class="variant-step__heading"><span>1</span><div><h3 id="variantSizeHeading">اختر المقاس</h3><small>${sizes.length} مقاسات متاحة</small></div></div>
+        <div class="variant-size-options">${sizes.map(size => {
+          const available = activeVariantGroup.filter(item => variantSize(item) === size).reduce((sum, item) => sum + item.stock, 0);
+          return `<button class="variant-size-choice${selectedVariantSize === size ? " is-active" : ""}" type="button" data-variant-size="${escapeHtml(size)}"><strong>${escapeHtml(size)}</strong><small class="num">${available} قطعة</small></button>`;
+        }).join("")}</div>
+      </section>
+      <section class="variant-step${selectedVariantSize ? " is-ready" : " is-waiting"}" aria-labelledby="variantColorHeading">
+        <div class="variant-step__heading"><span>2</span><div><h3 id="variantColorHeading">اختر اللون</h3><small>${selectedVariantSize ? `الألوان المتاحة لمقاس ${escapeHtml(selectedVariantSize)}` : "اختر المقاس أولاً"}</small></div></div>
+        ${selectedVariantSize ? `<div class="variant-color-options">${matchingVariants.map(item => {
+          const color = visibleVariantValue(item.color) || "غير محدد";
+          return `<button class="variant-color-choice" type="button" data-variant-id="${escapeHtml(item.id)}" ${item.stock <= 0 ? "disabled" : ""}><span class="variant-color-choice__name"><i aria-hidden="true"></i><strong>${escapeHtml(color)}</strong></span><span class="variant-option__stock"><i></i><b class="num">${item.stock}</b><small>قطعة</small></span><span class="variant-option__price num">${formatMoney(item.price)} <small>ج.م</small></span><span class="variant-option__select">إضافة للسلة ←</span></button>`;
+        }).join("")}</div>` : '<div class="variant-step__empty">حدد المقاس لعرض ألوانه وكمياتها.</div>'}
+      </section>`;
+    requestAnimationFrame(() => els.variantPickerGrid.querySelector(selectedVariantSize ? "[data-variant-id]:not(:disabled)" : "[data-variant-size]")?.focus());
   }
 
   function openVariantPicker(group) {
+    activeVariantGroup = group;
+    const sizes = [...new Set(group.map(variantSize))];
+    selectedVariantSize = sizes.length === 1 ? sizes[0] : "";
     els.variantPickerTitle.textContent = group[0].name;
     const hint = els.variantOverlay.querySelector(".variant-picker__hint");
-    if (hint) hint.textContent = `${group.length} اختيارات متاحة — اختر المقاس واللون المناسبين`;
-    els.variantPickerGrid.innerHTML = `<div class="variant-picker__columns" aria-hidden="true"><span>#</span><span>المقاس</span><span>اللون</span><span>المتاح</span><span>السعر</span><span></span></div>` + group.map((item, index) => {
-      const color = visibleVariantValue(item.color);
-      const size = visibleVariantValue(item.size);
-      return `
-      <button class="variant-option" type="button" data-variant-id="${escapeHtml(item.id)}" ${item.stock <= 0 ? "disabled" : ""}>
-        <span class="variant-option__number">${index + 1}</span>
-        <span class="variant-option__cell" data-label="المقاس"><strong>${escapeHtml(size || "غير محدد")}</strong></span>
-        <span class="variant-option__cell" data-label="اللون"><b>${escapeHtml(color || "غير محدد")}</b></span>
-        <span class="variant-option__stock"><i></i><b class="num">${item.stock}</b><small>قطعة</small></span>
-        <span class="variant-option__price num">${formatMoney(item.price)} <small>ج.م</small></span>
-        <span class="variant-option__select">اختيار <b aria-hidden="true">←</b></span>
-      </button>`;
-    }).join("");
+    if (hint) hint.textContent = "اختيار يدوي بديل للسكانر — حدد المقاس ثم اللون";
+    renderVariantPicker();
     els.variantOverlay.hidden = false;
     document.body.classList.add("modal-open");
-    requestAnimationFrame(() => els.variantPickerGrid.querySelector("button:not(:disabled)")?.focus());
   }
 
   els.productGrid.addEventListener("click", (e) => {
@@ -553,9 +575,15 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
   });
 
   els.variantPickerGrid.addEventListener("click", event => {
+    const sizeOption = event.target.closest("[data-variant-size]");
+    if (sizeOption) {
+      selectedVariantSize = sizeOption.dataset.variantSize;
+      renderVariantPicker();
+      return;
+    }
     const option = event.target.closest("[data-variant-id]");
     if (!option) return;
-    const product = products.find(item => item.id === option.dataset.variantId) || categoryProducts?.find(item => item.id === option.dataset.variantId);
+    const product = activeVariantGroup.find(item => item.id === option.dataset.variantId) || products.find(item => item.id === option.dataset.variantId) || categoryProducts?.find(item => item.id === option.dataset.variantId);
     if (!product) return;
     addToCart(product);
     closeVariantPicker();
@@ -725,7 +753,7 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
       <div class="modal-cart-item">
         <div class="mci-info">
           <span class="mci-name">${escapeHtml(item.name)}</span>
-          <span class="mci-qty">${item.qty} قطعة</span>
+          <span class="mci-qty">${visibleVariantValue(item.size) ? `<b class="cart-item__size" title="المقاس">${escapeHtml(visibleVariantValue(item.size))}</b>` : ""}${visibleVariantValue(item.color) ? `<span class="cart-item__color">${escapeHtml(visibleVariantValue(item.color))}</span>` : ""}<span>${item.qty} قطعة</span></span>
         </div>
         <div class="mci-price-act">
           <span class="mci-price num">${formatMoney(item.price * item.qty)}</span>
@@ -871,15 +899,18 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     }
     const activeMethod = els.paymentMethodGroup.querySelector(".method-btn.is-active")?.dataset.method || "نقدي";
     const paymentMethod = PAYMENT_METHODS[activeMethod] || "cash";
-    const { total } = getCartTotals();
-    const paidAmount = paymentMethod === "deferred" ? Number(els.paidAmount?.value || 0) : total;
+    const cartItems = state.cart.map(item => ({ variant_id: item.id, qty: item.qty, expected_version: item.version }));
     const originalLabel = els.confirmPaymentBtn.innerHTML;
     els.confirmPaymentBtn.disabled = true;
     els.confirmPaymentBtn.textContent = "جاري تسجيل البيع...";
     try {
       const customerId = await resolveCustomerId();
+      const quoteResponse = await api.post("/api/v1/pos/sales/quote", { items: cartItems, customer_id: customerId });
+      const quote = quoteResponse?.quote || quoteResponse?.data || quoteResponse || {};
+      const quotedTotal = Number(quote.total_amount ?? quote.total ?? getCartTotals().total);
+      const paidAmount = paymentMethod === "deferred" ? Number(els.paidAmount?.value || 0) : quotedTotal;
       const sale = await api.post("/api/v1/sales/checkout", {
-        items: state.cart.map(item => ({ variant_id: item.id, qty: item.qty, expected_version: item.version })),
+        items: cartItems,
         customer_id: customerId,
         sales_person_id: els.salesSelect.value,
         payment_method: paymentMethod,

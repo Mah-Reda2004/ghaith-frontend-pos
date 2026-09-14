@@ -45,13 +45,14 @@ function formatMoney(value) {
 }
 
 function normalizeDebt(item) {
-  const customer = item.customer || {}, invoice = item.invoice || {}, cashier = invoice.cashier || item.cashier || {};
+  const customer = item.customer || {}, invoice = typeof item.invoice === "object" && item.invoice ? item.invoice : {}, cashier = invoice.cashier || item.cashier || {};
   const created = item.created_at || invoice.created_at || new Date().toISOString();
   return {
     ...item,
     id: String(item.id),
     customerId: customer.id || item.customer_id || invoice.customer_id,
-    invoiceId: invoice.invoice_number || item.invoice_number || item.invoice_id || "—",
+    invoiceId: item.invoice_id || item.sales_invoice_id || invoice.id || "",
+    invoiceNumber: item.invoice_number || item.sales_invoice_number || item.sale_invoice_number || invoice.invoice_number || invoice.number || item.invoiceNumber || "—",
     customer: customer.name || item.customer_name || "عميل",
     date: created.slice(0, 10),
     time: new Date(created).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
@@ -84,7 +85,7 @@ async function loadDebts() {
 function getVisibleDebts() {
   const query = state.query.trim().toLowerCase();
   return state.debts.filter(debt => {
-    const matchesSearch = !query || debt.customer.toLowerCase().includes(query) || debt.invoiceId.toLowerCase().includes(query);
+    const matchesSearch = !query || debt.customer.toLowerCase().includes(query) || debt.invoiceNumber.toLowerCase().includes(query);
     const matchesCashier = state.cashierFilter === "all" || debt.cashier === state.cashierFilter;
     return debt.remaining > 0 && matchesSearch && matchesCashier && matchesDateFilter(debt.date);
   });
@@ -129,7 +130,7 @@ function renderDebts() {
     card.className = "debt-card";
     card.dataset.debtId = debt.id;
     card.innerHTML = `
-      <div class="debt-card__head"><h2>${escapeHtml(debt.customer)}</h2><p>رقم الفاتورة: <span class="num">#${escapeHtml(debt.invoiceId)}</span></p></div>
+      <div class="debt-card__head"><h2>${escapeHtml(debt.customer)}</h2><p>رقم الفاتورة: <span class="num">#${escapeHtml(debt.invoiceNumber)}</span></p></div>
       <div class="debt-card__row"><span>إجمالي الفاتورة:</span><strong class="num">${formatMoney(debt.total)} ج.م</strong></div>
       <div class="debt-card__row"><span>المبلغ المدفوع:</span><strong class="num">${formatMoney(debt.paid)} ج.م</strong></div>
       <div class="debt-card__row is-remaining"><span>المبلغ المتبقي:</span><strong class="num">${formatMoney(debt.remaining)} ج.م</strong></div>
@@ -159,7 +160,7 @@ function showToast(message, type = "success") {
 async function openDetail(debt) {
   try {
     const response = await api.get(`/api/v1/debts/${encodeURIComponent(debt.id)}`);
-    debt = normalizeDebt(response?.debt || response?.data || response);
+    debt = normalizeDebt({ ...debt, ...(response?.debt || response?.data || response) });
     if (debt.customerId) debt.customerSummary = await api.get(`/api/v1/debtors/${encodeURIComponent(debt.customerId)}/summary`);
   } catch (error) { showToast(error.message, "error"); return; }
   state.currentDebt = debt;
@@ -171,7 +172,7 @@ async function openDetail(debt) {
       <div class="debt-detail__meta">
         <div><span>التاريخ</span><strong class="num">${escapeHtml(debt.date)}</strong></div>
         <div><span>الوقت</span><strong class="num">${escapeHtml(debt.time)}</strong></div>
-        <div><span>رقم الفاتورة</span><strong class="num">#${escapeHtml(debt.invoiceId)}</strong></div>
+        <div><span>رقم الفاتورة</span><strong class="num">#${escapeHtml(debt.invoiceNumber)}</strong></div>
         <div><span>اسم العميل</span><strong>${escapeHtml(debt.customer)}</strong></div>
       </div>
       <div class="debt-items">
@@ -202,7 +203,7 @@ function renderPayment() {
   const debt = state.currentDebt;
   if (!debt) return;
   els.paymentBody.innerHTML = `
-    <div class="debt-payment__customer"><h3>${escapeHtml(debt.customer)}</h3><p>رقم الفاتورة: <span class="num">#${escapeHtml(debt.invoiceId)}</span></p></div>
+    <div class="debt-payment__customer"><h3>${escapeHtml(debt.customer)}</h3><p>رقم الفاتورة: <span class="num">#${escapeHtml(debt.invoiceNumber)}</span></p></div>
     <div class="debt-payment__stats">
       <div class="debt-payment__stat"><span>المبلغ الإجمالي</span><strong class="num">${formatMoney(debt.total)} ج.م</strong></div>
       <div class="debt-payment__stat"><span>المدفوع سابقًا</span><strong class="num">${formatMoney(debt.paid)} ج.م</strong></div>
@@ -250,10 +251,10 @@ async function confirmPayment() {
 
 function printDebt(debt) {
   if (window.GhaithPrint) {
-    window.GhaithPrint.printReceipt({title:"فاتورة مديونية",number:debt.invoiceId,customer:debt.customer,items:debt.items.map(item=>({name:item.name,qty:item.qty,price:item.price})),totals:[{label:"الإجمالي",value:debt.total},{label:"المدفوع",value:debt.paid},{label:"المتبقي",value:debt.remaining,final:true}],note:"يرجى سداد المبلغ المتبقي في الموعد المتفق عليه"});
+    window.GhaithPrint.printReceipt({title:"فاتورة مديونية",number:debt.invoiceNumber,customer:debt.customer,items:debt.items.map(item=>({name:item.name,qty:item.qty,price:item.price})),totals:[{label:"الإجمالي",value:debt.total},{label:"المدفوع",value:debt.paid},{label:"المتبقي",value:debt.remaining,final:true}],note:"يرجى سداد المبلغ المتبقي في الموعد المتفق عليه"});
     return;
   }
-  els.printArea.innerHTML = `<section class="debt-print"><h1>غيث</h1><h2>فاتورة رقم #${escapeHtml(debt.invoiceId)}</h2><p>${escapeHtml(debt.customer)}</p>${debt.items.map(item => `<div><span>${escapeHtml(item.name)} × ${item.qty}</span><strong>${formatMoney(item.price * item.qty)} ج.م</strong></div>`).join("")}<hr><div><span>الإجمالي</span><strong>${formatMoney(debt.total)} ج.م</strong></div><div><span>المدفوع</span><strong>${formatMoney(debt.paid)} ج.م</strong></div><div><span>المتبقي</span><strong>${formatMoney(debt.remaining)} ج.م</strong></div></section>`;
+  els.printArea.innerHTML = `<section class="debt-print"><h1>غيث</h1><h2>فاتورة رقم #${escapeHtml(debt.invoiceNumber)}</h2><p>${escapeHtml(debt.customer)}</p>${debt.items.map(item => `<div><span>${escapeHtml(item.name)} × ${item.qty}</span><strong>${formatMoney(item.price * item.qty)} ج.م</strong></div>`).join("")}<hr><div><span>الإجمالي</span><strong>${formatMoney(debt.total)} ج.م</strong></div><div><span>المدفوع</span><strong>${formatMoney(debt.paid)} ج.م</strong></div><div><span>المتبقي</span><strong>${formatMoney(debt.remaining)} ج.م</strong></div></section>`;
   window.print();
 }
 

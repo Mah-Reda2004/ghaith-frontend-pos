@@ -7,6 +7,7 @@ import "../../components/printing/printing.js";
 // Resolve routed assets from this module instead of the browser URL. This keeps
 // the admin views working when the server rewrites or nests admin.html URLs.
 const ADMIN_BASE_URL = new URL("./", import.meta.url);
+const SUPPLIERS_BUILD = "20260913-11";
 
 const ROUTES = {
   settings: { html: "settings/settings.html", css: "settings/settings.css", load: () => import("./settings/settings.js"), init: "initSettings", title: "إعدادات التكاملات", selector: ".settings-page" },
@@ -75,9 +76,9 @@ const ROUTES = {
     selector: ".products-page"
   },
   suppliers: {
-    html: "suppliers/suppliers.html",
-    css: "suppliers/suppliers-layout.css",
-    load: () => import("./suppliers/suppliers.js"),
+    html: `suppliers/suppliers.html?v=${SUPPLIERS_BUILD}`,
+    css: `suppliers/suppliers-layout.css?v=${SUPPLIERS_BUILD}`,
+    load: () => import(`./suppliers/suppliers.js?v=${SUPPLIERS_BUILD}`),
     init: "initSuppliers",
     title: "إدارة الموردين",
     selector: ".suppliers-page"

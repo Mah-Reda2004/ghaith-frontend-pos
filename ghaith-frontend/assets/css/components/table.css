@@ -118,10 +118,14 @@ table.data-table tbody tr:hover {
 .page-btn {
   width: 32px;
   height: 32px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
   border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
+  line-height: 1;
 }
 
 .page-btn:hover { background: var(--color-surface-hover); }
@@ -246,16 +250,18 @@ table.data-table tbody tr:hover {
   content: "";
   width: 8px;
   height: 8px;
-  border-block-start: 2px solid var(--color-text-muted);
-  border-inline-start: 2px solid var(--color-text-muted);
+  box-sizing: border-box;
+  border: solid var(--color-text-muted);
+  border-width: 0 2px 2px 0;
+  transform-origin: center;
 }
 
 .pagination__pages > .page-btn:first-child::before {
-  transform: rotate(-45deg);
+  transform: translateX(-1px) rotate(-45deg);
 }
 
 .pagination__pages > .page-btn:last-child::before {
-  transform: rotate(135deg);
+  transform: translateX(1px) rotate(135deg);
 }
 
 .pagination__pages > .page-btn:first-child:hover,

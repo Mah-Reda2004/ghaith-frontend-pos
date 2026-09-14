@@ -28,6 +28,13 @@
 
 .cashier-shell.is-loading .cashier-view { pointer-events: none; }
 
+@media (max-width: 1180px) {
+  .cashier-view > * { min-width: 0; max-width: 100%; }
+  .cashier-view :is(.table-responsive, .modal__body) { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .cashier-view .table-responsive { max-width: 100%; overflow-x: auto; }
+  .cashier-view :is(.modal, [role="dialog"]) { max-width: calc(100vw - (var(--space-4) * 2)); }
+}
+
 @media (max-width: 767px) {
   .pos-topbar__nav {
     display: flex;

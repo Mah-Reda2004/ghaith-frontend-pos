@@ -132,6 +132,13 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
   :root { --admin-page-gutter: var(--space-4); }
   .admin-sidebar__logo { align-self: center; margin-inline: 0; }
   .admin-sidebar .nav-link { max-height: 3.1rem; }
+  .admin-topbar { padding-inline: var(--space-4); }
+  #view-root > [class$="-page"] { min-width: 0; padding: var(--space-4) var(--admin-page-gutter) var(--space-6); }
+  #view-root > [class$="-page"] > * { min-width: 0; max-width: 100%; }
+  .admin-content :is(.table-responsive, [class$="-table-wrap"], [class*="-table-wrap "]) { max-width: 100%; overflow-x: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .admin-content :is(.modal, [role="dialog"], [class$="-dialog"]) { max-width: calc(100vw - var(--sidebar-width-collapsed) - (var(--space-4) * 2)); }
+  .admin-content :is(.content__header, .dashboard-header, .sales-header, .products-header, .categories-header, .inventory-header, .suppliers-header, .users-header, .reports-header, .zakat-header, .purchase-header) { flex-wrap: wrap; gap: var(--space-3); }
+  .admin-content :is(.categories-toolbar, .products-toolbar) { grid-template-columns: minmax(0, 1fr) repeat(2, minmax(calc(var(--space-7) * 2), auto)); gap: var(--space-3); }
 }
 @media (max-width: 767px) {
   :root { --admin-page-gutter: var(--space-3); }

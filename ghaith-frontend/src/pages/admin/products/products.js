@@ -63,8 +63,32 @@ function normalizeProductRows(item) {
   return [product];
 }
 
+function colorTone(value) {
+  const color = String(value || "").trim().toLowerCase();
+  const tones = {
+    "أبيض": "white", white: "white", "ابيض": "white",
+    "أسود": "black", black: "black", "اسود": "black",
+    "أحمر": "red", red: "red", "احمر": "red",
+    "أزرق": "blue", blue: "blue", "ازرق": "blue", navy: "navy", "كحلي": "navy",
+    "أخضر": "green", green: "green", "اخضر": "green",
+    "أصفر": "yellow", yellow: "yellow", "اصفر": "yellow",
+    "بني": "brown", brown: "brown", beige: "beige", "بيج": "beige",
+    "رمادي": "gray", grey: "gray", gray: "gray",
+    "وردي": "pink", pink: "pink", "بنفسجي": "purple", purple: "purple",
+    "برتقالي": "orange", orange: "orange"
+  };
+  return tones[color] || "other";
+}
+
 function renderVariantBadges(variants) {
-  return `<div class="product-variant-badges">${variants.map(variant => `<span class="product-variant-badge"><span>المقاس: <b>${escapeHtml(variant.size || "غير محدد")}</b></span><span>اللون: <b>${escapeHtml(variant.color || "غير محدد")}</b></span><small>${variant.quantity.toLocaleString("en-US")} قطعة</small></span>`).join("")}</div>`;
+  return `<div class="product-variant-badges">${variants.map(variant => {
+    const size = variant.size || "غير محدد", color = variant.color || "غير محدد";
+    return `<span class="product-variant-badge" title="المقاس: ${escapeHtml(size)} — اللون: ${escapeHtml(color)} — ${variant.quantity.toLocaleString("en-US")} قطعة">
+      <span class="product-variant-size"><em>المقاس:</em><b>${escapeHtml(size)}</b></span>
+      <span class="product-variant-color"><i class="product-color-swatch product-color-swatch--${colorTone(color)}" aria-hidden="true"></i><em>اللون:</em><b>${escapeHtml(color)}</b></span>
+      <small title="الكمية المتاحة">${variant.quantity.toLocaleString("en-US")}</small>
+    </span>`;
+  }).join("")}</div>`;
 }
 
 function stockState(product) {
@@ -131,7 +155,7 @@ function renderProducts(elements) {
     const state = stockState(product);
     return `<tr data-product-id="${escapeHtml(String(product.id))}">
       <td><span class="product-name-cell"><strong>${escapeHtml(product.nameAr)}</strong><small>${escapeHtml(product.nameEn)}</small></span></td>
-      <td><span class="product-barcode-cell"><b class="num" dir="ltr">${escapeHtml(product.barcode)}</b><small class="num" dir="ltr">SKU: ${escapeHtml(product.sku)}</small></span></td>
+      <td><span class="product-barcode-cell"><b class="num" dir="ltr">${escapeHtml(product.sku)}</b></span></td>
       <td>${escapeHtml(product.category)}</td><td>${renderVariantBadges(product.variants || [product])}</td><td>${escapeHtml(product.supplierName || "—")}</td>
       <td class="num">${money(product.costPrice)}</td><td class="num">${money(product.salePrice)}</td><td class="num">${product.salesPercentage}%</td><td class="num">${product.quantity}</td><td class="num">${product.minimum}</td>
       <td><span class="product-stock product-stock--${state}">${stockLabel(product)}</span></td>
