@@ -2,7 +2,10 @@ import { bindThemeToggle, initTheme } from "../../core/theme.js";
 import { getCurrentUser, getUserRole, isAuthenticated, logout } from "../../core/auth.js";
 import { initStatusToggles } from "../../components/status-toggle/status-toggle.js";
 import { initAppSelects } from "../../components/cashier-select/cashier-select.js";
+import { initNotificationCenter } from "../../components/notifications/notifications.js";
 import "../../components/printing/printing.js";
+
+initNotificationCenter();
 
 // Resolve routed assets from this module instead of the browser URL. This keeps
 // the admin views working when the server rewrites or nests admin.html URLs.
@@ -93,8 +96,8 @@ const ROUTES = {
   },
   reports: {
     html: "reports/reports.html",
-    css: "reports/reports.css",
-    load: () => import("./reports/reports.js"),
+    css: "reports/reports.css?v=20260916-12",
+    load: () => import("./reports/reports.js?v=20260916-12"),
     init: "initReports",
     title: "التقارير",
     selector: ".reports-page"

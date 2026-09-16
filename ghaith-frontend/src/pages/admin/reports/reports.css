@@ -22,6 +22,7 @@
 .reports-filter-apply { margin-inline-start: auto; }
 .reports-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
 .reports-stat-grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.reports-stat-grid--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .reports-stat { min-height: calc(var(--space-7) * 3); display: flex; flex-direction: column; justify-content: space-between; gap: var(--space-4); padding: var(--space-5); border: var(--border-width) solid color-mix(in srgb, var(--stat-tone, var(--color-primary)) 22%, var(--color-border)); border-radius: var(--radius-md); background: var(--color-surface); overflow: hidden; position: relative; }
 .reports-stat::after { content: ""; position: absolute; inset-block-start: 0; inset-inline-end: 0; width: calc(var(--space-7) * 1.7); height: calc(var(--space-7) * 1.7); border-end-start-radius: 100%; background: color-mix(in srgb, var(--stat-tone, var(--color-primary)) 8%, transparent); }
 .reports-stat--success { --stat-tone: var(--color-success); }.reports-stat--danger { --stat-tone: var(--color-danger); }.reports-stat--warning { --stat-tone: var(--color-warning); }.reports-stat--info { --stat-tone: var(--color-info); }.reports-stat--primary { --stat-tone: var(--color-primary); }

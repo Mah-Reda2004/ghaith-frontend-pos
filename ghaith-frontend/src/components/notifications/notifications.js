@@ -1,4 +1,6 @@
 import { escapeHtml } from "../../core/utils.js";
+import { api, listFrom } from "../../core/api.js";
+import { getUserRole } from "../../core/auth.js";
 
 const STORAGE_KEY = "ghaith-notifications-v1";
 const CHANNEL_NAME = "ghaith-notifications";
@@ -9,6 +11,18 @@ function isLegacyDemo(item){return["product:2","product:3"].includes(item?.entit
 function readItems(){try{const items=JSON.parse(localStorage.getItem(STORAGE_KEY))||[];const clean=items.filter(item=>!isLegacyDemo(item));if(clean.length!==items.length)saveItems(clean);return clean}catch{return []}}
 function saveItems(items){localStorage.setItem(STORAGE_KEY,JSON.stringify(items.slice(0,MAX_ITEMS)))}
 function normalize(item={}){return{id:item.id||`${Date.now()}-${Math.random().toString(16).slice(2)}`,type:item.type||"info",priority:item.priority||"info",title:String(item.title||"إشعار جديد"),message:String(item.message||""),createdAt:item.createdAt||new Date().toISOString(),read:Boolean(item.read),action:item.action||null,entityId:item.entityId||null}}
+
+async function syncServerNotifications(){
+  if(getUserRole()!=="admin")return;
+  try{
+    const response=await api.get("/api/v1/admin/notifications");
+    const serverItems=listFrom(response).map(item=>normalize({...item,title:item.title||item.subject||item.notification_type,message:item.message||item.body||item.description,createdAt:item.created_at||item.createdAt,read:item.is_read??item.read,entityId:item.entity_id||item.entityId||`server:${item.id}`}));
+    if(!serverItems.length)return;
+    const localItems=readItems(),merged=[...serverItems];
+    localItems.forEach(item=>{if(!merged.some(entry=>String(entry.id)===String(item.id)||entry.entityId&&entry.entityId===item.entityId))merged.push(item)});
+    saveItems(merged);emitChange();
+  }catch{/* صلاحيات الكاشير لا تسمح بمسار إشعارات الإدارة */}
+}
 
 function emitChange(item){window.dispatchEvent(new CustomEvent("ghaith:notifications-changed",{detail:item}));try{const channel=new BroadcastChannel(CHANNEL_NAME);channel.postMessage(item);channel.close()}catch{}}
 
@@ -37,7 +51,7 @@ export function initNotificationCenter(){
   const onStorage=e=>{if(e.key===STORAGE_KEY){render();const latest=readItems()[0];if(latest&&!latest.read)playTone(latest.priority)}};
   let channel;try{channel=new BroadcastChannel(CHANNEL_NAME);channel.onmessage=e=>{render();if(e.data&&!e.data.read)playTone(e.data.priority)}}catch{}
   trigger.addEventListener("click",e=>{e.stopPropagation();unlockAudio();setOpen(panel.hidden)});root.addEventListener("click",onRoot);document.addEventListener("click",onDocument);document.addEventListener("keydown",onKey);window.addEventListener("ghaith:notifications-changed",onChange);window.addEventListener("storage",onStorage);
-  document.getElementById("notificationMarkAll").addEventListener("click",()=>{const items=readItems().map(item=>({...item,read:true}));saveItems(items);emitChange();render()});document.getElementById("notificationClear").addEventListener("click",()=>{saveItems(readItems().filter(item=>!item.read));emitChange();render()});render();
+  document.getElementById("notificationMarkAll").addEventListener("click",()=>{const items=readItems().map(item=>({...item,read:true}));saveItems(items);emitChange();render()});document.getElementById("notificationClear").addEventListener("click",()=>{saveItems(readItems().filter(item=>!item.read));emitChange();render()});render();syncServerNotifications();
   window.ghaithNotifications={publish:publishNotification,lowStock:product=>publishNotification({type:"low_stock",priority:"warning",title:"مخزون المنتج منخفض",message:`متبقي ${product.quantity} فقط من ${product.name}.`,entityId:`product:${product.id}`})};
   return()=>{channel?.close();root.removeEventListener("click",onRoot);document.removeEventListener("click",onDocument);document.removeEventListener("keydown",onKey);window.removeEventListener("ghaith:notifications-changed",onChange);window.removeEventListener("storage",onStorage)};
 }

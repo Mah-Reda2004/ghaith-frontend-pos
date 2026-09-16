@@ -1,19 +1,20 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl" data-theme="dark"><head><meta charset="UTF-8"><script src="../../../core/auth-guard.js"></script><meta name="viewport" content="width=device-width,initial-scale=1"><title>إدارة الزكاة — غيث</title></head>
+<html lang="ar" dir="rtl" data-theme="dark"><head><meta charset="UTF-8"><script src="../../../core/auth-guard.js"></script><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="../../../../assets/favicon.svg"><title>إدارة الزكاة — غيث</title></head>
 <body>
 <section class="zakat-page">
-  <header class="zakat-header"><div><h1 class="page-title">إدارة الزكاة</h1><p class="page-subtitle">تقييم وحساب الزكاة على المخزون الراكد والحول المالي الكامل</p></div></header>
+  <header class="zakat-header"><div><h1 class="page-title">إدارة الزكاة</h1><p class="page-subtitle">تقييم وحساب الزكاة على المخزون الراكد والحول المالي الكامل</p></div><div class="zakat-actions"><button class="btn btn-outline" id="zakatReminders" type="button">تشغيل التنبيهات</button><button class="btn btn-primary" id="zakatCalculate" type="button">حساب الزكاة</button></div></header>
 
   <div class="zakat-stats">
-    <article><span class="zakat-stat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h12v16H6zM9 4v3h6V4"/></svg></span><div><small>البضاعة التي حال عليها الحول</small><strong dir="ltr">—</strong></div></article>
-    <article><span class="zakat-stat__icon"><b>%</b></span><div><small>نسبة الزكاة المقررة</small><strong dir="ltr">2.5 <em>%</em></strong></div></article>
-    <article class="is-highlight"><span class="zakat-stat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h6M8 16h8"/></svg></span><div><small>إجمالي مبلغ الزكاة المستحق</small><strong dir="ltr">—</strong></div></article>
-    <article><span class="zakat-stat__icon is-warning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5M12 18h.01"/></svg></span><div><small>عدد الأصناف الراكدة</small><strong>—</strong></div></article>
+    <article><span class="zakat-stat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h12v16H6zM9 4v3h6V4"/></svg></span><div><small>البضاعة التي حال عليها الحول</small><strong id="zakatEligibleValue" dir="ltr">—</strong></div></article>
+    <article><span class="zakat-stat__icon"><b>%</b></span><div><small>نسبة الزكاة المقررة</small><strong id="zakatRate" dir="ltr">2.5 <em>%</em></strong></div></article>
+    <article class="is-highlight"><span class="zakat-stat__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h6M8 16h8"/></svg></span><div><small>إجمالي مبلغ الزكاة المستحق</small><strong id="zakatDueValue" dir="ltr">—</strong></div></article>
+    <article><span class="zakat-stat__icon is-warning"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5M12 18h.01"/></svg></span><div><small>عدد الأصناف الراكدة</small><strong id="zakatStaleCount">—</strong></div></article>
   </div>
 
   <div class="zakat-layout">
     <section class="table-card zakat-table-card"><header><h2>تفاصيل المخزون الخاضع للزكاة</h2><label class="input-search"><input class="input" id="zakatSearch" type="search" placeholder="بحث برقم أو اسم الصنف..."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></label></header><div class="table-responsive"><table class="data-table zakat-table"><thead><tr><th>اسم الصنف</th><th>الفئة</th><th>الكمية</th><th>تكلفة الوحدة</th><th>تاريخ الوصول</th><th>أيام بالمخزن</th><th>القيمة الإجمالية</th><th>الزكاة المستحقة</th></tr></thead><tbody id="zakatTableBody">
     </tbody></table><div class="zakat-empty" id="zakatEmpty" hidden><h3>لا توجد أصناف مطابقة</h3><p>جرّب البحث باسم أو فئة أخرى.</p></div></div><footer class="pagination"><span class="pagination__info" id="zakatInfo">جاري التحقق من الخدمة...</span></footer></section>
+    <aside class="zakat-side"><section class="zakat-alerts"><header><h2>إعدادات دورة الزكاة</h2></header><p id="zakatCycleLabel">جاري تحميل الدورة الحالية...</p><label class="field"><span>سعر جرام الذهب</span><input class="input" id="zakatGoldPrice" type="number" min="0.01" step="0.01"></label><button class="btn btn-outline" id="zakatSaveSettings" type="button">حفظ السعر</button><button class="btn btn-outline" id="zakatOpenReport" type="button">عرض تقرير الدورة</button><small id="zakatFeedback">يتم جلب البيانات من الخادم.</small></section></aside>
 
   </div>
 </section></body></html>

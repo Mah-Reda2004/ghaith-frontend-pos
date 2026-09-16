@@ -15,7 +15,8 @@ const assert = require('node:assert/strict');
       if (url.pathname === '/api/v1/expenses/available-cash') return route.fulfill({ json: { available_cash: 900 } });
       if (url.pathname === '/api/v1/expenses') return route.fulfill({ json: { items: [{ id: 'expense-1', amount: 100, description: 'اختبار', expense_type_name: 'صيانة', created_at: new Date().toISOString() }] } });
       if (url.pathname === '/api/v1/expense-types') return route.fulfill({ json: { items: [{ id: 'type-1', name: 'صيانة' }] } });
-      if (url.pathname === '/api/v1/commissions/me') return route.fulfill({ json: { items: [], summary: { total_commission: 25, total_sales: 500, invoice_count: 2 } } });
+      if (url.pathname === '/api/v1/commissions/me') return route.fulfill({ json: { items: [{ invoice_number: 'INV-COM-1', commission_amount: 25, quantity: 2, created_at: '2026-09-16T10:00:00Z' }], summary: { total_commission: 25, total_sales: 500, invoice_count: 2 } } });
+      if (url.pathname === '/api/v1/commissions/me/dashboard') return route.fulfill({ json: { summary: { total_commission: 25, total_sales: 500, invoice_count: 2 }, today: { commission_amount: 25, total_sales: 500, invoice_count: 2 }, this_week: { commission_amount: 80, total_sales: 1600, invoice_count: 6 }, this_month: { commission_amount: 200, total_sales: 4000, invoice_count: 15 }, daily_commissions: [{ day_name: 'الأحد', commission_amount: 30 }, { day_name: 'الاثنين', commission_amount: 50 }] } });
       if (url.pathname === '/api/v1/admin/settings/integrations') return route.fulfill({ json: { whatsapp_enabled: true, whatsapp_api_url: 'https://api.example.com', whatsapp_api_key: 'secret', email_enabled: true, manager_whatsapp_phone: '+201000000000', manager_email: 'manager@example.com' } });
       if (url.pathname === '/api/v1/returns') return route.fulfill({ json: { items: [] } });
       return route.fulfill({ json: { items: [] } });
@@ -30,10 +31,20 @@ const assert = require('node:assert/strict');
     await page.locator('#cancelAddExpenseBtn').click();
     assert.ok(calls.includes('GET /api/v1/users/me'));
     await page.evaluate(() => { location.hash = 'profile'; });
-    await page.getByText('EGP 25.00').waitFor();
+    await page.locator('[data-period-card="today"]').getByText('EGP 25.00').waitFor();
+    await page.locator('[data-period-card="week"]').getByText('EGP 80.00').waitFor();
+    await page.locator('[data-period-card="month"]').getByText('EGP 200.00').waitFor();
+    assert.match(await page.locator('[data-week-legend]').textContent(), /الأحد/);
+    await page.getByText('INV-COM-1').waitFor();
+    assert.equal((await page.locator('[data-profile-name]').textContent()).trim(), 'مستخدم');
+    for (const viewport of [{ width: 1024, height: 900 }, { width: 768, height: 900 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, `profile overflows at ${viewport.width}px`);
+    }
     assert.ok(calls.includes('GET /api/v1/expenses'));
     assert.ok(calls.includes('GET /api/v1/expenses/available-cash'));
     assert.ok(calls.includes('GET /api/v1/commissions/me'));
+    assert.ok(calls.includes('GET /api/v1/commissions/me/dashboard'));
 
     await page.addInitScript(() => sessionStorage.setItem('ghaith-current-user', JSON.stringify({ id: 'admin-1', name: 'مدير', role: 'admin' })));
     await page.goto('http://127.0.0.1:8765/src/pages/admin/admin.html#settings');

@@ -145,10 +145,15 @@
 .inventory-code { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
 .inventory-code b { color: var(--color-text); font-size: var(--fs-sm); }
 .inventory-code small { color: var(--color-text-faint); font-size: var(--fs-xs); }
-.inventory-variants { min-width: 11rem; display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.inventory-variant { display: inline-grid; gap: .2rem; padding: .45rem .65rem; border: var(--border-width) solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface-alt)); color: var(--color-text-muted); font-size: var(--fs-xs); white-space: nowrap; }
-.inventory-variant b { color: var(--color-text); }
-.inventory-variant small { padding-inline-start: .35rem; border-inline-start: var(--border-width) solid var(--color-border); color: var(--color-primary); }
+.inventory-variants { width: 13rem; max-width: 100%; max-height: 8.5rem; display: grid; gap: .35rem; padding-inline-end: .2rem; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; }
+.inventory-variant { width: 100%; min-width: 0; display: grid; grid-template-columns: minmax(0,.7fr) minmax(0,1fr) auto; align-items: center; gap: .45rem; padding: .4rem .5rem; border: var(--border-width) solid color-mix(in srgb, var(--color-primary) 22%, var(--color-border)); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface-alt)); color: var(--color-text-muted); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; }
+.inventory-variant:hover { border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border)); background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface-alt)); }
+.inventory-variant__size, .inventory-variant__color { min-width: 0; display: flex; align-items: center; gap: .3rem; }
+.inventory-variant em { color: var(--color-text-faint); font-size: .65rem; font-style: normal; }
+.inventory-variant b { max-width: 4.5rem; overflow: hidden; color: var(--color-text); text-overflow: ellipsis; }
+.inventory-variant small { min-width: 1.55rem; height: 1.55rem; display: grid; place-items: center; padding-inline: .25rem; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--color-primary) 13%, var(--color-surface)); color: var(--color-primary); font-weight: var(--fw-bold); }
+.inventory-color-swatch { width: .72rem; height: .72rem; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--color-text) 20%, var(--color-border)); border-radius: 50%; box-shadow: 0 0 0 2px var(--color-surface); background: linear-gradient(135deg,#94a3b8,#64748b); }
+.inventory-color-swatch--white { background:#fff; }.inventory-color-swatch--black { background:#111827; }.inventory-color-swatch--red { background:#ef4444; }.inventory-color-swatch--blue { background:#3b82f6; }.inventory-color-swatch--navy { background:#172554; }.inventory-color-swatch--green { background:#22c55e; }.inventory-color-swatch--yellow { background:#facc15; }.inventory-color-swatch--brown { background:#92400e; }.inventory-color-swatch--beige { background:#d6c6a5; }.inventory-color-swatch--gray { background:#94a3b8; }.inventory-color-swatch--pink { background:#ec4899; }.inventory-color-swatch--purple { background:#a855f7; }.inventory-color-swatch--orange { background:#f97316; }
 
 .inventory-level { width: 100%; min-width: 8.5rem; max-width: 11rem; display: inline-flex; flex-direction: column; gap: var(--space-2); }
 .inventory-level > span { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); direction: rtl; color: var(--color-text-muted); font-size: var(--fs-xs); }

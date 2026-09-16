@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <script src="../../core/auth-guard.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="../../../assets/favicon.svg" />
   <title>الرئيسية — غيث</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa+Ink:wght@400;700&family=Tajawal:wght@400;500;700;900&display=swap" rel="stylesheet" />
@@ -23,6 +24,7 @@
   <link rel="stylesheet" id="adminRouteStyle" />
   <link rel="stylesheet" href="admin-unified.css" />
   <link rel="stylesheet" href="../../components/cashier-select/cashier-select.css" />
+  <link rel="stylesheet" href="../../components/notifications/notifications.css" />
 </head>
 <body>
   <div class="app-shell admin-shell">
@@ -53,6 +55,7 @@
           <div><span class="admin-topbar__eyebrow">لوحة الإدارة</span><strong id="adminPageTitle">الرئيسية</strong></div>
         </div>
         <div class="admin-topbar__actions">
+          <div class="notification-center" id="notificationCenter"><button class="pos-topbar__icon-btn notification-trigger" id="notificationTrigger" type="button" aria-label="الإشعارات" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="notification-count" id="notificationCount" hidden>0</span></button><section class="notification-panel" id="notificationPanel" aria-label="مركز الإشعارات" hidden><header><div><h2>الإشعارات</h2><span id="notificationUnreadLabel">لا توجد إشعارات جديدة</span></div><button type="button" id="notificationMarkAll">تحديد الكل كمقروء</button></header><div class="notification-list" id="notificationList"></div><footer><button type="button" id="notificationClear">مسح الإشعارات المقروءة</button></footer></section></div>
           <button class="theme-toggle" id="adminThemeToggle" type="button" aria-label="تبديل الثيم">
             <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
             <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
@@ -77,6 +80,6 @@
       </section>
     </main>
   </div>
-  <script type="module" src="admin.js"></script>
+  <script type="module" src="admin.js?v=20260916-12"></script>
 </body>
 </html>

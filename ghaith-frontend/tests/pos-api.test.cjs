@@ -2,15 +2,16 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'C:/Users/sw/.cache/
 const assert = require('node:assert/strict');
 
 (async () => {
+  const baseUrl = process.env.TEST_BASE_URL || 'http://127.0.0.1:8765';
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const pageErrors = [];
-    let checkoutBody; let quoteBody; let checkoutAttempts = 0; let productLoads = 0;
+    let checkoutBody; let quoteBody; let customerBody; let checkoutAttempts = 0; let productLoads = 0;
     page.on('pageerror', error => pageErrors.push(error.message));
     await page.addInitScript(() => {
       sessionStorage.setItem('ghaith-access-token', 'ui-test-token');
-      sessionStorage.setItem('ghaith-current-user', JSON.stringify({ id: '11111111-1111-4111-8111-111111111111', name: 'سيلز الاختبار', role: 'sales' }));
+      sessionStorage.setItem('ghaith-current-user', JSON.stringify({ id: 'cashier-test', name: 'كاشير الاختبار', role: 'cashier' }));
     });
     await page.route('https://test-3f530955.fastapicloud.dev/**', async route => {
       const request = route.request();
@@ -21,6 +22,7 @@ const assert = require('node:assert/strict');
       if (path === '/api/v1/customer-types') return route.fulfill({ json: { items: [{ id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', name: 'عادي', discount_percent: 0 }, { id: '12121212-1212-4121-8121-121212121212', name: 'قريب', discount_percent: 10 }] } });
       if (path === '/api/v1/admin/users') return route.fulfill({ json: { items: [{ id: '11111111-1111-4111-8111-111111111111', name: 'سيلز الاختبار', role: 'sales', is_active: true }], total: 1 } });
       if (path === '/api/v1/shifts/current') return route.fulfill({ json: { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', status: 'open' } });
+      if (path === '/api/v1/customers' && request.method() === 'POST') { customerBody = request.postDataJSON(); return route.fulfill({ status: 201, json: { id: '34343434-3434-4343-8343-343434343434', ...customerBody } }); }
       if (path === '/api/v1/pos/sales/quote') { quoteBody = request.postDataJSON(); return route.fulfill({ json: { subtotal: 700, discount_amount: 70, total_amount: 630 } }); }
       if (path === '/api/v1/sales/checkout') {
         checkoutAttempts += 1;
@@ -31,7 +33,7 @@ const assert = require('node:assert/strict');
       return route.fulfill({ status: 404, json: { detail: 'not mocked' } });
     });
 
-    await page.goto('http://127.0.0.1:8765/src/pages/cashier/cashier.html#pos');
+    await page.goto(`${baseUrl}/src/pages/cashier/cashier.html#pos`);
     await page.getByText('ثوب API').waitFor();
     const card = page.locator('#productGrid .product-card', { hasText: 'ثوب API' });
     assert.equal(await card.locator('.product-card__details span', { hasText: 'أبيض' }).count(), 1);
@@ -73,6 +75,10 @@ const assert = require('node:assert/strict');
     assert.doesNotMatch(await page.locator('#discountBadge').textContent(), /12121212/);
     await page.locator('#salesSelect').selectOption('11111111-1111-4111-8111-111111111111');
     await page.locator('#confirmPaymentBtn').click();
+    await page.getByText('أدخل اسم العميل لتطبيق خصم فئة العميل على الفاتورة.', { exact: true }).waitFor();
+    assert.equal(quoteBody, undefined);
+    await page.locator('#customerName').fill('عميل قريب');
+    await page.locator('#confirmPaymentBtn').click();
     await page.getByText(/تم تحديث المخزون والسلة/).waitFor();
     assert.equal(await page.locator('#paymentOverlay').evaluate(node => getComputedStyle(node).display !== 'none'), true);
     await page.locator('#confirmPaymentBtn').click();
@@ -84,6 +90,9 @@ const assert = require('node:assert/strict');
     assert.equal(checkoutBody.items[0].expected_version, 8);
     assert.equal(checkoutBody.items[0].qty, 2);
     assert.equal(checkoutBody.sales_person_id, '11111111-1111-4111-8111-111111111111');
+    assert.deepEqual(customerBody, { name: 'عميل قريب', phone: null, address: null, customer_type_id: '12121212-1212-4121-8121-121212121212' });
+    assert.equal(quoteBody.customer_id, '34343434-3434-4343-8343-343434343434');
+    assert.equal(checkoutBody.customer_id, '34343434-3434-4343-8343-343434343434');
     assert.equal(checkoutBody.payment_method, 'cash');
     assert.equal(checkoutBody.paid_amount, 630);
     assert.equal(checkoutBody.shift_id, 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');

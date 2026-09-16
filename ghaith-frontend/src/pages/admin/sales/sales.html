@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl" data-theme="dark">
-<head><meta charset="UTF-8"><script src="../../../core/auth-guard.js"></script><meta name="viewport" content="width=device-width,initial-scale=1"><title>المبيعات — غيث</title></head>
+<head><meta charset="UTF-8"><script src="../../../core/auth-guard.js"></script><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" type="image/svg+xml" href="../../../../assets/favicon.svg"><title>المبيعات — غيث</title></head>
 <body>
 <section class="sales-page">
   <header class="sales-header">
@@ -13,7 +13,13 @@
   </header>
 
   <div class="sales-periods" role="group" aria-label="الفترة الزمنية">
-    <button type="button" data-period="today">اليوم</button><button type="button" data-period="yesterday">أمس</button><button type="button" data-period="this_week">هذا الأسبوع</button><button class="is-active" type="button" data-period="this_month">هذا الشهر</button><button type="button" data-period="last_30_days">آخر 30 يوم</button>
+    <button type="button" data-period="today">اليوم</button><button type="button" data-period="yesterday">أمس</button><button type="button" data-period="this_week">هذا الأسبوع</button><button class="is-active" type="button" data-period="this_month">هذا الشهر</button><button type="button" data-period="last_30_days">آخر 30 يوم</button><button type="button" data-period="custom">فترة مخصصة</button>
+  </div>
+
+  <div class="sales-custom-dates" id="salesCustomDates" hidden>
+    <label>من <input class="input" id="salesFromDate" type="date"></label>
+    <label>إلى <input class="input" id="salesToDate" type="date"></label>
+    <button class="btn btn-primary" id="salesApplyDates" type="button">تطبيق</button>
   </div>
 
   <div class="sales-stats">
@@ -29,8 +35,11 @@
     <div class="sales-toolbar">
       <label class="input-search sales-search"><input class="input" id="salesSearch" type="search" placeholder="بحث برقم الفاتورة أو اسم العميل..."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></label>
       <div class="sales-select-filters">
-        <select class="select" id="salesPayment" aria-label="طريقة الدفع"><option value="">طريقة الدفع</option><option value="cash">نقدي</option><option value="card">بطاقة</option></select>
-        <select class="select" id="salesStatus" aria-label="حالة الفاتورة"><option value="">حالة الفاتورة</option><option value="completed">مكتملة</option><option value="pending_payment">قيد الدفع</option><option value="deferred">آجل</option><option value="partially_returned">مرتجعة جزئيًا</option><option value="fully_returned">مرتجعة بالكامل</option><option value="returned">مرتجعة</option><option value="cancelled">ملغاة</option></select>
+        <select class="select" id="salesPayment" aria-label="طريقة الدفع"><option value="">كل طرق الدفع</option><option value="cash">نقدي</option><option value="card">بطاقة</option><option value="wallet">محفظة</option><option value="instapay">إنستا باي</option><option value="transfer">تحويل</option><option value="deferred">آجل</option><option value="exchange_credit">رصيد استبدال</option></select>
+        <select class="select" id="salesStatus" aria-label="حالة الفاتورة"><option value="">كل الحالات</option><option value="completed">مكتملة</option><option value="pending_payment">قيد الدفع</option><option value="partially_returned">مرتجعة جزئيًا</option><option value="returned">مرتجعة</option><option value="exchanged">مستبدلة</option></select>
+        <select class="select" id="salesCashier" aria-label="الكاشير"><option value="">كل الكاشيرين</option></select>
+        <select class="select" id="salesPerson" aria-label="موظف المبيعات"><option value="">كل موظفي المبيعات</option></select>
+        <button class="btn btn-outline sales-reset" id="salesResetFilters" type="button">مسح الفلاتر</button>
       </div>
     </div>
     <div class="table-responsive sales-table-wrap">

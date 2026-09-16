@@ -41,7 +41,8 @@ export function getHomeUrl(user, fromLogin = false) {
   const prefix = fromLogin ? "../../" : "../";
   const role = getUserRole(user);
   if (role === "admin") return `${prefix}admin/admin.html`;
-  if (role === "cashier" || role === "sales") return `${prefix}cashier/cashier.html`;
+  if (role === "cashier") return `${prefix}cashier/cashier.html`;
+  if (role === "sales") return `${prefix}cashier/cashier.html#profile`;
   throw new Error("تعذّر تحديد صلاحية الحساب. تواصل مع مسؤول النظام.");
 }
 

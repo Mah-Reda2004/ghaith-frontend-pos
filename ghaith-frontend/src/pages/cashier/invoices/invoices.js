@@ -170,6 +170,24 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     return items.reduce((total, line) => total + Number(line.quantity ?? line.qty ?? 1), 0);
   }
 
+  function invoiceItemSpecifications(item) {
+    const variantId = String(item.variant_id || item.product_variant_id || item.variant?.id || item.product_variant?.id || "");
+    const nestedVariants = item.product_variants || item.product?.product_variants || item.product?.variants || [];
+    const nestedVariant = Array.isArray(nestedVariants) ? nestedVariants.find(entry => String(entry.id || entry.variant_id) === variantId) || nestedVariants[0] || {} : nestedVariants;
+    const variant = item.product_variant || item.variant || nestedVariant || {};
+    const size = item.size || item.variant_size || item.product_size || item.size_name || variant.size || variant.variant_size || variant.size_name;
+    const color = item.color || item.variant_color || item.product_color || item.color_name || variant.color || variant.variant_color || variant.color_name;
+    return [size && `المقاس: ${size}`, color && `اللون: ${color}`].filter(Boolean).join(" | ") || item.sku || variant.sku || "—";
+  }
+
+  function operationInvoiceReference(operation) {
+    const linkedInvoice = operation.invoice || operation.return_invoice || operation.exchange_invoice || {};
+    const invoiceNumber = operation.return_invoice_number || operation.exchange_invoice_number || operation.invoice_number || operation.related_invoice_number || linkedInvoice.invoice_number || operation.return_number || operation.exchange_number || operation.number || operation.operation_number;
+    if (invoiceNumber) return { label: "رقم الفاتورة", value: invoiceNumber };
+    const barcode = operation.return_invoice_barcode || operation.exchange_invoice_barcode || operation.invoice_barcode || operation.operation_barcode || operation.barcode || operation.reference_barcode || linkedInvoice.barcode;
+    return { label: barcode ? "باركود الفاتورة" : "رقم الفاتورة", value: barcode || "—" };
+  }
+
   function personName(person, ...fallbacks) {
     if (typeof person === "string") return person;
     return person?.name || person?.full_name || person?.username || fallbacks.find(Boolean) || "—";
@@ -264,7 +282,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     const customer = { ...linkedCustomer, ...(typeof item.customer === "object" && item.customer ? item.customer : {}) };
     const cashier = item.cashier || item.cashier_user || item.created_by;
     const sales = item.sales_person || item.sales_user || item.sales;
-    const items = invoiceItems(item).map(line => ({ ...state.variantsById.get(String(line.variant_id || line.product_variant_id || line.variant?.id || "")), ...line }));
+    const items = invoiceItems(item).map(line => ({ ...state.variantsById.get(String(line.variant_id || line.product_variant_id || line.variant?.id || line.product_variant?.id || "")), ...line }));
     const discountRecord = typeof item.discount === "object" && item.discount ? item.discount : {};
     const customerType = customer.customer_type || state.customerTypesById.get(String(customer.customer_type_id || item.customer_type_id || "")) || {};
     const discountValue = Number(item.discount_amount ?? discountRecord.amount ?? (typeof item.discount === "number" ? item.discount : 0));
@@ -936,8 +954,9 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
       const rawType = operation.type || operation.operation_type || "";
       const type = rawType === "exchange" || (operation.number || "").startsWith("EXC") ? "exchange" : "return";
       const label = type === "exchange" ? "استبدال" : "مرتجع";
+      const invoiceReference = operationInvoiceReference(operation);
       const operationDetails = [operation.reason && `السبب: ${operation.reason}`, operation.refund_method && `الاسترداد: ${REFUND_LABELS[operation.refund_method] || operation.refund_method}`].filter(Boolean).join(" · ");
-      return `<article class="related-operation${type === "exchange" ? " is-exchange" : ""}"><span>${label}</span><strong class="num">#${escapeHtml(operation.return_number || operation.exchange_number || operation.number || operation.operation_number || operation.id || "—")}</strong><small>${escapeHtml(operationDetails || STATUS_LABELS[operation.status] || operation.status || "مكتملة")} · ${formatMoney(operation.total_refund ?? operation.total_amount ?? operation.return_total ?? operation.difference_amount ?? 0)} ج.م</small></article>`;
+      return `<article class="related-operation${type === "exchange" ? " is-exchange" : ""}"><span>${label} · ${invoiceReference.label}</span><strong class="num">#${escapeHtml(invoiceReference.value)}</strong><small>${escapeHtml(operationDetails || STATUS_LABELS[operation.status] || operation.status || "مكتملة")} · ${formatMoney(operation.total_refund ?? operation.total_amount ?? operation.return_total ?? operation.difference_amount ?? 0)} ج.م</small></article>`;
     }).join("") : '<article class="related-operation"><span>لا توجد عمليات مرتبطة</span><strong>—</strong><small>حتى الآن</small></article>';
     els.detailTitle.innerHTML = `<span>تفاصيل الفاتورة <b class="num">#${escapeHtml(inv.number)}</b></span><span class="inv-detail-status">${escapeHtml(st.label)}</span>`;
 
@@ -968,7 +987,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
             <section class="detail-info-card"><h3>بيانات العميل</h3><div><span>الاسم:</span><strong>${escapeHtml(inv.customer)}</strong></div><div><span>الجوال:</span><strong class="num">${escapeHtml(inv.phone || "—")}</strong></div><div><span>العنوان:</span><strong>${escapeHtml(customer.address || inv.customer_address || "—")}</strong></div><div><span>الفئة:</span><em>${escapeHtml(customer.customer_type?.name || customer.type_name || inv.customer_type_name || "عميل نقدي")}</em></div></section>
             <section class="detail-info-card"><h3>بيانات الفاتورة</h3><div><span>التاريخ:</span><strong>${escapeHtml(date)}</strong></div><div><span>الوقت:</span><strong>${escapeHtml(time)}</strong></div><div><span>الكاشير:</span><strong>${escapeHtml(inv.cashier)}</strong></div><div><span>السيلز:</span><strong>${escapeHtml(inv.sales || "—")}</strong></div><div><span>طريقة الدفع:</span><strong>${escapeHtml(inv.payment_method)}</strong></div></section>
           </div>
-          <div class="detail-products-table"><div class="detail-product-row is-head"><span>المنتج</span><span>التصنيف</span><span>المواصفات</span><span>الكمية</span><span>السعر</span><span>الإجمالي</span></div>${(inv.items || []).map(item => `<div class="detail-product-row"><span>${escapeHtml(item.product_name || item.name || item.product?.name || "منتج")}</span><span>${escapeHtml(item.category?.name || item.category_name || "—")}</span><span>${escapeHtml([item.size || item.variant?.size, item.color || item.variant?.color].filter(Boolean).join(" | ") || item.sku || "—")}</span><span class="num">${Number(item.quantity ?? item.qty ?? 0)}</span><span class="num">${formatMoney(item.unit_price ?? item.price ?? 0)}</span><span class="num">${formatMoney(item.line_total ?? Number(item.unit_price ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 0))}</span></div>`).join("") || '<div class="detail-product-row"><span>لا توجد أصناف</span></div>'}</div>
+          <div class="detail-products-table"><div class="detail-product-row is-head"><span>المنتج</span><span>التصنيف</span><span>المواصفات</span><span>الكمية</span><span>السعر</span><span>الإجمالي</span></div>${(inv.items || []).map(item => `<div class="detail-product-row"><span>${escapeHtml(item.product_name || item.name || item.product?.name || "منتج")}</span><span>${escapeHtml(item.category?.name || item.category_name || "—")}</span><span>${escapeHtml(invoiceItemSpecifications(item))}</span><span class="num">${Number(item.quantity ?? item.qty ?? 0)}</span><span class="num">${formatMoney(item.unit_price ?? item.price ?? 0)}</span><span class="num">${formatMoney(item.line_total ?? Number(item.unit_price ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 0))}</span></div>`).join("") || '<div class="detail-product-row"><span>لا توجد أصناف</span></div>'}</div>
           <section class="related-operations"><h3>العمليات المرتبطة</h3><div class="related-operations__list"><article class="related-operation is-original"><span>الفاتورة الأصلية</span><strong class="num">#${escapeHtml(inv.number)}</strong><small>${escapeHtml(date)} | ${escapeHtml(inv.cashier)}</small></article>${operationsMarkup}</div></section>
         </main>
       </div>

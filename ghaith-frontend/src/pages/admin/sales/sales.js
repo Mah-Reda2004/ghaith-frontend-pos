@@ -3,10 +3,10 @@ import { debounce, escapeHtml } from "../../../core/utils.js";
 
 const money = value => `${Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} EGP`;
 const dateLabel = value => value ? new Date(value).toLocaleString("ar-EG", { dateStyle: "medium", timeStyle: "short" }) : "—";
-const PERIOD_LABELS = { today: "اليوم", yesterday: "أمس", this_week: "هذا الأسبوع", this_month: "هذا الشهر", last_30_days: "آخر 30 يومًا" };
+const PERIOD_LABELS = { today: "اليوم", yesterday: "أمس", this_week: "هذا الأسبوع", this_month: "هذا الشهر", last_30_days: "آخر 30 يومًا", custom: "فترة مخصصة" };
 const PAYMENT_LABELS = { cash: "نقدي", card: "بطاقة", wallet: "محفظة", transfer: "تحويل", bank: "تحويل بنكي", instapay: "إنستا باي", deferred: "آجل", mixed: "دفع مختلط", store_credit: "رصيد متجر", exchange_credit: "رصيد استبدال" };
 const STATUS_LABELS = { completed: "مكتملة", pending: "قيد الانتظار", pending_payment: "قيد الدفع", deferred: "آجل", cancelled: "ملغاة", void: "ملغاة", returned: "مرتجعة", partially_returned: "مرتجعة جزئيًا", fully_returned: "مرتجعة بالكامل", refunded: "تم رد المبلغ" };
-const references = { users: new Map(), customers: new Map(), variants: new Map(), customerTypes: new Map(), promise: null };
+const references = { users: new Map(), userEntries: [], customers: new Map(), variants: new Map(), customerTypes: new Map(), promise: null };
 
 const personName = person => typeof person === "string" ? person : person?.name || person?.full_name || person?.username || "";
 
@@ -21,7 +21,10 @@ async function loadReferenceData() {
   references.promise = Promise.allSettled([
     paged("/api/v1/admin/users"), paged("/api/v1/customers"), paged("/api/v1/pos/catalog"), api.get("/api/v1/customer-types")
   ]).then(([users, customers, catalog, customerTypes]) => {
-    if (users.status === "fulfilled") references.users = new Map(users.value.map(entry => { const user = entry.user || entry; return [String(user.id || user.user_id || entry.user_id), personName(user)]; }).filter(([id, name]) => id && name));
+    if (users.status === "fulfilled") {
+      references.userEntries = users.value.map(entry => entry.user || entry);
+      references.users = new Map(references.userEntries.map(user => [String(user.id || user.user_id), personName(user)]).filter(([id, name]) => id && name));
+    }
     if (customers.status === "fulfilled") references.customers = new Map(customers.value.map(customer => [String(customer.id), customer]));
     if (catalog.status === "fulfilled") {
       const variants = catalog.value.flatMap(product => (product.variants || product.product_variants || [product]).map(variant => ({ ...variant, name: product.name_ar || product.name || variant.name_ar || variant.name, category_name: product.category?.name || product.category_name, product })));
@@ -119,17 +122,20 @@ function createExportTable(invoices) {
 
 export function initSales() {
   window.bindAdminThemeToggle?.(document.getElementById("salesThemeToggle"));
-  const body = document.getElementById("salesTableBody"), search = document.getElementById("salesSearch"), payment = document.getElementById("salesPayment"), status = document.getElementById("salesStatus"), modal = document.getElementById("salesModal"), info = document.getElementById("salesResultInfo"), empty = document.getElementById("salesEmpty");
+  const body = document.getElementById("salesTableBody"), search = document.getElementById("salesSearch"), payment = document.getElementById("salesPayment"), status = document.getElementById("salesStatus"), cashier = document.getElementById("salesCashier"), salesPerson = document.getElementById("salesPerson"), modal = document.getElementById("salesModal"), info = document.getElementById("salesResultInfo"), empty = document.getElementById("salesEmpty"), customDates = document.getElementById("salesCustomDates"), fromDate = document.getElementById("salesFromDate"), toDate = document.getElementById("salesToDate"), applyDates = document.getElementById("salesApplyDates"), resetFilters = document.getElementById("salesResetFilters");
   let activeInvoice = null, period = "this_month", sequence = 0, currentSummary = {};
-  const queryFor = (page = 1, pageSize = 50) => {
-    const statusMap = { sale: "completed", return: "returned" };
-    return { period, search: search.value.trim() || undefined, payment_method: payment.value || undefined, status: statusMap[status.value] || status.value || undefined, page, page_size: pageSize };
+  const queryFor = (page = 1, pageSize = 50, paginate = true) => {
+    const query = { period, search: search.value.trim() || undefined, payment_method: payment.value || undefined, status: status.value || undefined, cashier_id: cashier.value || undefined, sales_person_id: salesPerson.value || undefined, from_date: period === "custom" ? fromDate.value || undefined : undefined, to_date: period === "custom" ? toDate.value || undefined : undefined };
+    return paginate ? { ...query, page, page_size: pageSize } : query;
   };
   const load = async () => {
     const request = ++sequence;
     try {
+      if (period === "custom" && (!fromDate.value || !toDate.value || fromDate.value > toDate.value)) {
+        empty.hidden = false; body.hidden = true; info.textContent = "حدد فترة صحيحة ثم اضغط تطبيق"; return;
+      }
       const query = queryFor();
-      const [response, summary] = await Promise.all([api.get("/api/v1/admin/sales", { query }), api.get("/api/v1/admin/sales/summary", { query })]);
+      const [response, summary] = await Promise.all([api.get("/api/v1/admin/sales", { query }), api.get("/api/v1/admin/sales/summary", { query: queryFor(1, 50, false) })]);
       if (request !== sequence) return;
       await loadReferenceData();
       const invoices = (await hydrateInvoices(listFrom(response))).map(enrichInvoice);
@@ -143,14 +149,26 @@ export function initSales() {
   const close = () => { modal.hidden = true; document.body.style.overflow = ""; };
   const onBody = event => { const button = event.target.closest(".sales-view"); if (button) open(button.closest("tr").dataset.id); };
   const periods = document.querySelector(".sales-periods");
-  const onPeriods = event => { const button = event.target.closest("[data-period]"); if (!button) return; period = button.dataset.period; periods.querySelectorAll("button").forEach(item => item.classList.toggle("is-active", item === button)); load(); };
+  const onPeriods = event => { const button = event.target.closest("[data-period]"); if (!button) return; period = button.dataset.period; periods.querySelectorAll("button").forEach(item => item.classList.toggle("is-active", item === button)); customDates.hidden = period !== "custom"; if (period !== "custom") load(); };
+  const populateUserFilters = async () => {
+    await loadReferenceData();
+    const addOptions = (select, roles) => {
+      const options = references.userEntries.filter(user => roles.includes(user.role?.name || user.role || user.role_name)).map(user => `<option value="${escapeHtml(user.id || user.user_id)}">${escapeHtml(personName(user))}</option>`).join("");
+      select.insertAdjacentHTML("beforeend", options);
+    };
+    addOptions(cashier, ["cashier", "admin"]); addOptions(salesPerson, ["sales"]);
+  };
+  const reset = () => {
+    search.value = ""; payment.value = ""; status.value = ""; cashier.value = ""; salesPerson.value = ""; fromDate.value = ""; toDate.value = ""; period = "this_month"; customDates.hidden = true;
+    periods.querySelectorAll("button").forEach(button => button.classList.toggle("is-active", button.dataset.period === period)); load();
+  };
   const loadExportRows = async () => {
     const pageSize = 100, first = await api.get("/api/v1/admin/sales", { query: queryFor(1, pageSize) }), rows = listFrom(first), total = Number(first.total ?? rows.length), pages = Math.ceil(total / pageSize);
     for (let page = 2; page <= pages; page += 1) rows.push(...listFrom(await api.get("/api/v1/admin/sales", { query: queryFor(page, pageSize) })));
     await loadReferenceData();
     return (await hydrateInvoices(rows)).map(enrichInvoice);
   };
-  const exportSubtitle = () => [`الفترة: ${PERIOD_LABELS[period] || period}`, payment.value ? `طريقة الدفع: ${payment.selectedOptions[0]?.textContent}` : "", status.value ? `الحالة: ${status.selectedOptions[0]?.textContent}` : "", search.value.trim() ? `البحث: ${search.value.trim()}` : ""].filter(Boolean).join(" · ");
+  const exportSubtitle = () => [`الفترة: ${PERIOD_LABELS[period] || period}`, period === "custom" ? `${fromDate.value} — ${toDate.value}` : "", payment.value ? `طريقة الدفع: ${payment.selectedOptions[0]?.textContent}` : "", status.value ? `الحالة: ${status.selectedOptions[0]?.textContent}` : "", cashier.value ? `الكاشير: ${cashier.selectedOptions[0]?.textContent}` : "", salesPerson.value ? `موظف المبيعات: ${salesPerson.selectedOptions[0]?.textContent}` : "", search.value.trim() ? `البحث: ${search.value.trim()}` : ""].filter(Boolean).join(" · ");
   const exportSummary = () => [["إجمالي المبيعات", currentSummary.total_sales], ["صافي المبيعات", currentSummary.net_sales], ["عدد الفواتير", currentSummary.invoice_count], ["إجمالي الخصومات", currentSummary.total_discounts]].filter(([, value]) => value !== undefined).map(([label, value]) => ({ label, value: label === "عدد الفواتير" ? Number(value).toLocaleString("en-US") : money(value) }));
   const runExport = async (button, type) => {
     const original = button.innerHTML; button.disabled = true; button.textContent = "جاري تجهيز الملف...";
@@ -161,7 +179,7 @@ export function initSales() {
     } catch (error) { window.alert(error.message); }
     finally { button.disabled = false; button.innerHTML = original; }
   };
-  search.addEventListener("input", delayedLoad); payment.addEventListener("change", load); status.addEventListener("change", load); body.addEventListener("click", onBody); periods.addEventListener("click", onPeriods); modal.addEventListener("click", event => { if (event.target.closest("[data-close-modal]")) close(); });
+  search.addEventListener("input", delayedLoad); payment.addEventListener("change", load); status.addEventListener("change", load); cashier.addEventListener("change", load); salesPerson.addEventListener("change", load); applyDates.addEventListener("click", load); resetFilters.addEventListener("click", reset); body.addEventListener("click", onBody); periods.addEventListener("click", onPeriods); modal.addEventListener("click", event => { if (event.target.closest("[data-close-modal]")) close(); });
   document.getElementById("printInvoice").addEventListener("click", async () => {
     if (!activeInvoice) return;
     try {
@@ -171,6 +189,6 @@ export function initSales() {
   });
   document.getElementById("salesExportPdf").addEventListener("click", event => runExport(event.currentTarget, "pdf"));
   document.getElementById("salesExportExcel").addEventListener("click", event => runExport(event.currentTarget, "excel"));
-  load();
-  return () => { sequence++; document.body.style.overflow = ""; search.removeEventListener("input", delayedLoad); payment.removeEventListener("change", load); status.removeEventListener("change", load); body.removeEventListener("click", onBody); periods.removeEventListener("click", onPeriods); };
+  populateUserFilters(); load();
+  return () => { sequence++; document.body.style.overflow = ""; search.removeEventListener("input", delayedLoad); payment.removeEventListener("change", load); status.removeEventListener("change", load); cashier.removeEventListener("change", load); salesPerson.removeEventListener("change", load); applyDates.removeEventListener("click", load); resetFilters.removeEventListener("click", reset); body.removeEventListener("click", onBody); periods.removeEventListener("click", onPeriods); };
 }

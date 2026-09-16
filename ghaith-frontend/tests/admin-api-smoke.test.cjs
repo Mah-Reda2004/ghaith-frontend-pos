@@ -2,14 +2,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'C:/Users/sw/.cache/
 const assert = require('node:assert/strict');
 
 (async () => {
+  const baseUrl = process.env.TEST_BASE_URL || 'http://127.0.0.1:8765';
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   try {
     const page = await browser.newPage({ viewport: { width: 1024, height: 768 } });
-    const errors = [], calls = [];
+    const errors = [], calls = [], reportCalls = [], salesCalls = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => { sessionStorage.setItem('ghaith-access-token', 'admin-test'); sessionStorage.setItem('ghaith-current-user', JSON.stringify({ id: '11111111-1111-4111-8111-111111111111', name: 'مدير الاختبار', role: 'admin' })); });
     await page.route('https://test-3f530955.fastapicloud.dev/**', route => {
-      const path = new URL(route.request().url()).pathname; calls.push(path);
+      const url = new URL(route.request().url()), path = url.pathname; calls.push(path);
+      if (path === '/api/v1/admin/reports/purchases' || path === '/api/v1/admin/reports/sales') reportCalls.push(`${path}?${url.searchParams}`);
+      if (path === '/api/v1/admin/sales') salesCalls.push(`${path}?${url.searchParams}`);
       if (path === '/api/v1/categories') return route.fulfill({ json: { items: [{ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', name: 'رجالي' }] } });
       if (path === '/api/v1/customer-types') return route.fulfill({ json: { items: [{ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'عادي', discount_percent: 0 }] } });
       if (path === '/api/v1/admin/dashboard') return route.fulfill({ json: { summary: { net_profit: 55, expenses_total: 10, total_purchases: 75, total_debts: 20 }, sales_trend: { labels: ['1', '2'], values: [40, 100] }, sales_by_category: [{ category_name: 'رجالي', sales_amount: 100 }] } });
@@ -25,7 +28,7 @@ const assert = require('node:assert/strict');
       if (path.includes('/purchase-invoices')) return route.fulfill({ json: { items: [] } });
       return route.fulfill({ json: { items: [], total: 0 } });
     });
-    await page.goto('http://127.0.0.1:8765/src/pages/admin/admin.html#dashboard');
+    await page.goto(`${baseUrl}/src/pages/admin/admin.html#dashboard`);
     for (const route of ['dashboard', 'categories', 'products', 'inventory', 'suppliers', 'users', 'discounts', 'sales', 'reports', 'purchase-invoice', 'zakat', 'settings']) {
       await page.evaluate(name => { location.hash = name; }, route);
       await page.waitForTimeout(350);
@@ -50,6 +53,8 @@ const assert = require('node:assert/strict');
         assert.match(await page.locator('#productsTableBody').textContent(), /المقاس:\s*L/);
         assert.match(await page.locator('#productsTableBody').textContent(), /اللون:\s*أبيض/);
         assert.match(await page.locator('#productsTableBody tr').textContent(), /مورد API/);
+        const productsOverflow = await page.locator('.products-table-wrap').evaluate(node => getComputedStyle(node).overflowX);
+        assert.equal(productsOverflow, 'auto');
         await page.locator('#addProductBtn').click();
         assert.equal(await page.locator('#productImageUrl').count(), 0);
         assert.equal(await page.locator('#productSupplier option', { hasText: 'مورد API' }).count(), 1);
@@ -60,9 +65,21 @@ const assert = require('node:assert/strict');
         assert.deepEqual(stats.map(value => value.trim()), ['4', '400 EGP', '0']);
         assert.equal(await page.locator('#inventoryTableBody tr').count(), 1);
         assert.equal(await page.locator('#inventoryTableBody .inventory-variant').count(), 2);
+        const variantsOverflow = await page.locator('#inventoryTableBody .inventory-variants').evaluate(node => ({ x: getComputedStyle(node).overflowX, y: getComputedStyle(node).overflowY, fitsWidth: node.scrollWidth <= node.clientWidth }));
+        assert.deepEqual(variantsOverflow, { x: 'hidden', y: 'auto', fitsWidth: true });
+        assert.equal(await page.locator('#inventoryTableBody .inventory-color-swatch').count(), 2);
+        assert.match(await page.locator('#inventoryDistributionLegend').textContent(), /رجالي/);
+        assert.match(await page.locator('#inventoryDistributionChart svg').getAttribute('aria-label'), /4/);
         assert.match(await page.locator('#inventoryTableBody').textContent(), /المقاس:\s*XL/);
         assert.match(await page.locator('#inventoryTableBody').textContent(), /اللون:\s*أسود/);
         assert.match(await page.locator('#inventoryTableBody tr').textContent(), /مورد API/);
+        assert.equal(await page.locator('#inventoryMovementChart svg').count(), 1);
+        await page.locator('#inventoryChartPeriod').selectOption('week');
+        await page.waitForTimeout(100);
+        assert.ok(reportCalls.some(call => call.includes('group_by=week')));
+        await page.locator('#inventoryChartPeriod').selectOption('month');
+        await page.waitForTimeout(100);
+        assert.ok(reportCalls.some(call => call.includes('group_by=month') && call.includes('period=custom')));
       }
       if (route === 'sales') {
         const row = page.locator('#salesTableBody tr');
@@ -74,6 +91,26 @@ const assert = require('node:assert/strict');
         assert.equal((await row.locator('td').nth(4).textContent()).trim(), 'عميل API');
         assert.equal((await row.locator('td').nth(5).textContent()).trim(), '01111111111');
         assert.equal((await row.locator('td').nth(13).textContent()).trim(), 'مرتجعة جزئيًا');
+        await page.locator('#salesPayment + .cashier-select__trigger').click();
+        const selectMenu = page.locator('.cashier-select-menu');
+        await selectMenu.hover();
+        await page.mouse.wheel(0, 180);
+        assert.equal(await selectMenu.isVisible(), true, 'dropdown closed while using the mouse wheel');
+        await selectMenu.evaluate(node => { node.scrollTop = node.scrollHeight; node.dispatchEvent(new Event('scroll', { bubbles: false })); });
+        assert.equal(await selectMenu.isVisible(), true, 'dropdown closed while dragging its scrollbar');
+        await page.keyboard.press('Escape');
+        await page.locator('#salesPayment').selectOption('instapay');
+        await page.locator('#salesStatus').selectOption('returned');
+        await page.locator('#salesCashier').selectOption('11111111-1111-4111-8111-111111111111');
+        await page.locator('#salesPerson').selectOption('sales-1');
+        await page.locator('[data-period="custom"]').click();
+        await page.locator('#salesFromDate').fill('2026-09-01');
+        await page.locator('#salesToDate').fill('2026-09-15');
+        await page.locator('#salesApplyDates').click();
+        await page.waitForTimeout(100);
+        assert.ok(salesCalls.some(call => call.includes('period=custom') && call.includes('payment_method=instapay') && call.includes('status=returned') && call.includes('cashier_id=11111111-1111-4111-8111-111111111111') && call.includes('sales_person_id=sales-1') && call.includes('from_date=2026-09-01') && call.includes('to_date=2026-09-15')));
+        await page.locator('#salesResetFilters').click();
+        assert.equal(await page.locator('#salesPayment').inputValue(), '');
       }
     }
     assert.ok(calls.includes('/api/v1/admin/dashboard'));

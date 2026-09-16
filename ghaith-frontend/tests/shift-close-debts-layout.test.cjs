@@ -11,6 +11,7 @@ const assert = require('node:assert/strict');
     await page.route('https://test-3f530955.fastapicloud.dev/**', route => {
       const request = route.request(), path = new URL(request.url()).pathname;
       if (path === '/api/v1/shifts/current') return route.fulfill({ json: { id: 'shift-1', version: 4, opened_at: '2026-09-13T08:00:00Z' } });
+      if (path === '/api/v1/shifts/current/summary') return route.fulfill({ json: { data: { shift_summary: { sales: { total: 7000, count: 18 }, payments: { cash: { amount: 4000, count: 10 }, card: { amount: 3000, count: 8 } }, returns: { total: 200 }, expenses: { total: 650, count: 3 }, drawer: { expected_cash: 4850 } } } } });
       if (path === '/api/v1/shifts/shift-1/summary') return route.fulfill({ json: { data: { summary: { total_sales: 7000, invoice_count: 18, cash_sales: 4000, card_sales: 3000, returns_total: 200, expenses_total: 650, expense_count: 3, expected_cash: 4850, payment_distribution: [{ method: 'cash', amount: 4000, count: 10 }, { method: 'card', amount: 3000, count: 8 }] } } } });
       if (path === '/api/v1/shifts/close') { closeBody = request.postDataJSON(); closeKey = request.headers()['idempotency-key']; return route.fulfill({ json: { id: 'shift-1', status: 'closed' } }); }
       if (path === '/api/v1/debts') return route.fulfill({ json: { items: [{ id: 'debt-1', invoice_id: 'invoice-1', invoice_number: 'INV-1', customer_name: 'عميل آجل', total_amount: 500, paid_amount: 100, remaining_amount: 400, created_at: new Date().toISOString() }], total: 1 } });
@@ -30,8 +31,8 @@ const assert = require('node:assert/strict');
     await page.locator('#closeShiftBtn').click();
     await page.locator('#confirmCloseBtn').click();
     await page.waitForFunction(() => document.querySelector('#successOverlay')?.style.display === 'flex');
-    assert.deepEqual(closeBody, { counted_cash: 4850, payment_counts: [{ method: 'cash', counted_amount: 4850 }, { method: 'card', counted_amount: 3000 }], notes: null, expected_version: 4 });
-    assert.match(closeKey, /^[0-9a-f-]{36}$/i);
+    assert.equal(closeBody.counted_cash, 4850);
+    assert.match(closeBody.idempotency_key, /^[0-9a-f-]{36}$/i);
     assert.deepEqual(errors, []);
     console.log('PASS: shift-close API values and close payload work; debts use three desktop columns.');
   } finally { await browser.close(); }

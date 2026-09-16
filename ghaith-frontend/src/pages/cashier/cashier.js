@@ -2,7 +2,7 @@ import { bindThemeToggle, initTheme } from "../../core/theme.js";
 import "../../components/printing/printing.js";
 import { initNotificationCenter } from "../../components/notifications/notifications.js";
 import { initCashierSelects } from "../../components/cashier-select/cashier-select.js";
-import { getCurrentUser, isAuthenticated, logout } from "../../core/auth.js";
+import { getCurrentUser, getUserRole, isAuthenticated, logout } from "../../core/auth.js";
 
 const ROUTES = {
   pos: { html: "pos/pos.html", script: "pos/pos.js", module: true, title: "نقطة البيع", selector: ".pos-body", extras: [".pos-cart-fab", "#variantOverlay", "#paymentOverlay", ".toast-stack", "#printArea"] },
@@ -31,12 +31,21 @@ if (!isAuthenticated()) {
   throw new Error("authentication-required");
 }
 bindThemeToggle(document.getElementById("themeToggleBtn"));
-initNotificationCenter();
 initCashierSelects(document);
 const currentUser = getCurrentUser();
+const currentUserRole = getUserRole(currentUser);
+const isSalesUser = currentUserRole === "sales";
 const displayName = currentUser?.name || currentUser?.username || userMenu.dataset.userName;
 currentUserName.textContent = displayName;
 userMenu.dataset.userName = displayName;
+document.querySelector(".pos-user-menu__identity span").textContent = isSalesUser ? "موظف مبيعات" : "كاشير";
+if (isSalesUser) {
+  nav.remove();
+  document.getElementById("notificationCenter").remove();
+  document.querySelector(".pos-topbar__brand span").textContent = "البروفايل";
+} else {
+  initNotificationCenter();
+}
 window.addEventListener("ghaith:session-expired", () => window.location.replace(loginUrl));
 
 function setUserMenuOpen(isOpen) {
@@ -70,7 +79,12 @@ document.addEventListener("keydown", event => {
 });
 
 function getRouteName() {
-  return window.location.hash.replace(/^#/, "") || "pos";
+  const requestedRoute = window.location.hash.replace(/^#/, "") || "pos";
+  if (!isSalesUser) return requestedRoute;
+  if (requestedRoute !== "profile") {
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#profile`);
+  }
+  return "profile";
 }
 
 function setActiveNav(routeName) {
@@ -149,5 +163,11 @@ function renderRouteError() {
   document.getElementById("retryCashierRoute").addEventListener("click", loadRoute);
 }
 
-window.addEventListener("hashchange", loadRoute);
+window.addEventListener("hashchange", () => {
+  if (isSalesUser && window.location.hash !== "#profile") {
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#profile`);
+    return;
+  }
+  loadRoute();
+});
 loadRoute();

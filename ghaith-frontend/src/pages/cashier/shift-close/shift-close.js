@@ -7,8 +7,33 @@ let currentShift = null, summary = null;
 
 function toast(message, error = false) { const stack = document.getElementById("toastStack"); const node = document.createElement("div"); node.className = `toast${error ? " is-error" : ""}`; node.textContent = message; stack.append(node); setTimeout(() => node.remove(), 3000); }
 
+function normalizeSummary(data) {
+  const root = data?.data?.summary || data?.summary || data?.data?.shift_summary || data?.shift_summary || data?.data?.shift || data?.shift || data?.data || data || {};
+  const sales = root.sales || root.sales_summary || {}, expenses = root.expenses || root.expense_summary || {}, returns = root.returns || root.return_summary || {};
+  const payments = root.payment_breakdown || root.payment_distribution || root.payment_methods || root.payments || sales.payment_breakdown || sales.payments || [];
+  const paymentRows = Array.isArray(payments) ? payments : Object.entries(payments).map(([method, value]) => ({ method, ...(typeof value === "object" ? value : { amount: value }) }));
+  const paymentAmount = method => Number(paymentRows.find(item => item.method === method || item.payment_method === method)?.amount || 0);
+  return {
+    ...root,
+    total_sales: root.total_sales ?? root.sales_total ?? sales.total_sales ?? sales.total ?? sales.amount,
+    invoice_count: root.invoice_count ?? root.sales_count ?? sales.invoice_count ?? sales.count,
+    cash_total: root.cash_total ?? root.cash_sales ?? root.cash_payments ?? sales.cash_total ?? sales.cash_sales ?? paymentAmount("cash"),
+    card_total: root.card_total ?? root.card_sales ?? root.card_payments ?? sales.card_total ?? sales.card_sales ?? paymentAmount("card"),
+    returns_total: root.returns_total ?? root.total_returns ?? returns.total ?? returns.amount,
+    total_expenses: root.total_expenses ?? root.expenses_total ?? root.cash_expenses ?? expenses.total_expenses ?? expenses.total ?? expenses.amount,
+    expense_count: root.expense_count ?? root.expenses_count ?? expenses.expense_count ?? expenses.count,
+    expected_cash: root.expected_cash ?? root.cash_expected ?? root.drawer?.expected_cash,
+    payment_breakdown: paymentRows
+  };
+}
+
+function hasSummaryData(data) {
+  const value = normalizeSummary(data);
+  return [value.total_sales, value.invoice_count, value.expected_cash, value.total_expenses].some(item => item !== undefined && item !== null) || value.payment_breakdown.length > 0;
+}
+
 function render(data) {
-  summary = data?.summary || data?.data?.summary || data?.data || data;
+  summary = normalizeSummary(data);
   const metrics = document.querySelectorAll(".sc-overview .sc-metric strong");
   const values = [summary.total_sales ?? summary.sales_total ?? 0, summary.invoice_count ?? summary.sales_count ?? 0, summary.cash_total ?? summary.cash_sales ?? summary.cash_payments ?? 0, summary.card_total ?? summary.card_sales ?? summary.card_payments ?? 0, summary.returns_total ?? summary.total_returns ?? 0];
   metrics.forEach((node, index) => { node.innerHTML = index === 1 ? String(values[index]) : `${money(values[index])} <small>ج.م</small>`; });
@@ -29,7 +54,10 @@ async function loadShift() {
     currentShift = response?.shift || response?.data || response;
     if (!currentShift?.id) throw new Error("لا توجد وردية مفتوحة حاليًا.");
     document.getElementById("shiftDate").textContent = new Date(currentShift.opened_at || currentShift.created_at || Date.now()).toLocaleDateString("ar-EG", { dateStyle: "long" });
-    render(await api.get(`/api/v1/shifts/${encodeURIComponent(currentShift.id)}/summary`));
+    let summaryResponse;
+    try { summaryResponse = await api.get("/api/v1/shifts/current/summary"); } catch { summaryResponse = null; }
+    if (!hasSummaryData(summaryResponse)) summaryResponse = await api.get(`/api/v1/shifts/${encodeURIComponent(currentShift.id)}/summary`);
+    render(summaryResponse);
     const countedCash = document.getElementById("countedCash");
     if (countedCash && summary?.expected_cash != null) countedCash.value = Number(summary.expected_cash).toFixed(2);
   } catch (error) { document.getElementById("closeShiftBtn").disabled = true; toast(error.message, true); }
@@ -45,11 +73,7 @@ document.getElementById("confirmCloseBtn")?.addEventListener("click", async even
   if (input.value === "" || amount < 0) { error.textContent = "أدخل النقدية الفعلية في الدرج."; input.focus(); return; }
   confirmButton.disabled = true; error.textContent = "";
   try {
-    const breakdown = summary?.payment_breakdown || summary?.payment_distribution || summary?.payments || [];
-    const paymentRows = Array.isArray(breakdown) ? breakdown : Object.entries(breakdown).map(([method, value]) => ({ method, ...(typeof value === "object" ? value : { amount: value }) }));
-    const paymentCounts = paymentRows.map(item => ({ method: item.method, counted_amount: item.method === "cash" ? amount : Number(item.counted_amount ?? item.amount ?? item.total ?? 0) }));
-    if (!paymentCounts.some(item => item.method === "cash")) paymentCounts.unshift({ method: "cash", counted_amount: amount });
-    await api.post("/api/v1/shifts/close", { counted_cash: amount, payment_counts: paymentCounts, notes: null, expected_version: Number(currentShift.version || summary?.version || 1) }, { headers: { "Idempotency-Key": idempotencyKey() } });
+    await api.post("/api/v1/shifts/close", { counted_cash: amount, idempotency_key: idempotencyKey() });
     document.getElementById("confirmModal").style.display = "none";
     document.getElementById("successOverlay").style.display = "flex";
     window.setTimeout(() => { logout(); window.location.replace(new URL("../auth/login/login.html", window.location.href).href); }, 900);

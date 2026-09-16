@@ -871,12 +871,12 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     const name = els.customerName?.value.trim();
     const phone = els.customerPhone?.value.trim();
     const address = els.customerAddress?.value.trim();
-    if (!name && !phone && !address) return null;
-    if (!name) throw new Error("اسم العميل مطلوب عند تسجيل بيانات العميل.");
     const customerTypeValue = String(els.customerTypeSelect?.value || "").trim();
     const customerTypeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(customerTypeValue)
       ? customerTypeValue
       : null;
+    if (!name && !phone && !address && selectedDiscountPct <= 0) return null;
+    if (!name) throw new Error(selectedDiscountPct > 0 ? "أدخل اسم العميل لتطبيق خصم فئة العميل على الفاتورة." : "اسم العميل مطلوب عند تسجيل بيانات العميل.");
     const customer = await api.post("/api/v1/customers", {
       name,
       phone: phone || null,

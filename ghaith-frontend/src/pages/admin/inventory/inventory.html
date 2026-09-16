@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <script src="../../../core/auth-guard.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="../../../../assets/favicon.svg" />
   <title>المخزون — غيث</title>
   <link rel="stylesheet" href="inventory.css" />
 </head>
@@ -21,7 +22,7 @@
         </button>
         <label class="inventory-period">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
-          <select aria-label="الفترة الزمنية"><option>هذا الشهر</option><option>الشهر الماضي</option><option>هذه السنة</option></select>
+          <select id="inventoryChartPeriod" aria-label="تجميع حركة المخزون"><option value="day">يومي</option><option value="week">أسبوعي</option><option value="month">شهري</option></select>
         </label>
       </div>
     </header>
@@ -42,7 +43,7 @@
 
     <div class="inventory-charts">
       <section class="card inventory-chart inventory-chart--movement">
-        <div class="inventory-chart__header"><div><h2>حركة المخزون</h2><p>الوارد والمنصرف خلال 30 يوم</p></div><div class="inventory-chart__key"><span><i class="is-in"></i>وارد</span><span><i class="is-out"></i>منصرف</span></div></div>
+        <div class="inventory-chart__header"><div><h2>حركة المخزون</h2><p id="inventoryMovementPeriodLabel">الوارد والمنصرف يوميًا خلال هذا الأسبوع</p></div><div class="inventory-chart__key"><span><i class="is-in"></i>وارد</span><span><i class="is-out"></i>منصرف</span></div></div>
         <div class="inventory-bar-chart" id="inventoryMovementChart" aria-label="رسم حركة المخزون"></div>
       </section>
       <section class="card inventory-chart inventory-chart--distribution">

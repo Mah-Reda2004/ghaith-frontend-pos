@@ -109,10 +109,24 @@ export function initCashierSelects(root = document) {
   scan(root);
   const observer = new MutationObserver(records => records.forEach(record => record.addedNodes.forEach(scan)));
   observer.observe(root, { childList: true, subtree: true });
-  document.addEventListener("pointerdown", event => { if (active && !active.button.contains(event.target) && !menu.contains(event.target)) closeMenu(); });
+  const onOutsidePointerDown = event => {
+    if (!active || active.button.contains(event.target) || menu.contains(event.target) || menu.matches(":hover")) return;
+    closeMenu();
+  };
+  const onWindowScroll = event => {
+    // Scrolling the options (wheel, touch or scrollbar drag) must not close them.
+    if (!active || event.target === menu || menu.contains(event.target)) return;
+    closeMenu();
+  };
+  document.addEventListener("pointerdown", onOutsidePointerDown);
   window.addEventListener("resize", closeMenu);
-  window.addEventListener("scroll", closeMenu, true);
-  return () => { observer.disconnect(); closeMenu(); };
+  window.addEventListener("scroll", onWindowScroll, true);
+  return () => {
+    observer.disconnect(); closeMenu();
+    document.removeEventListener("pointerdown", onOutsidePointerDown);
+    window.removeEventListener("resize", closeMenu);
+    window.removeEventListener("scroll", onWindowScroll, true);
+  };
 }
 
 export const initAppSelects = initCashierSelects;

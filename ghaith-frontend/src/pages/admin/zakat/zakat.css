@@ -6,5 +6,6 @@
 @media(max-width:1200px){.zakat-stats{grid-template-columns:repeat(2,1fr)}.zakat-layout{grid-template-columns:1fr}.zakat-side{grid-template-columns:1fr 1fr}.zakat-history{align-self:start}}
 @media(max-width:767px){.zakat-page{padding:var(--space-4) var(--space-3)}.zakat-header{flex-direction:column}.zakat-actions{width:100%}.zakat-actions .btn{flex:1}.zakat-stats{grid-template-columns:1fr}.zakat-stats article{min-height:120px}.zakat-table-card>header{align-items:stretch;flex-direction:column}.zakat-table-card .input-search{max-width:none}.zakat-side{grid-template-columns:1fr}}
 
-/* الشاشة المبسطة: الكروت والجدول فقط */
-.zakat-layout{display:block}
+.zakat-side{position:sticky;inset-block-start:calc(var(--topbar-height) + var(--space-4))}.zakat-alerts>.btn{width:100%;margin-block-start:var(--space-2)}.zakat-alerts>small{margin-block-start:var(--space-4)}.zakat-alerts>small.is-error{border-inline-start-color:var(--color-danger);color:var(--color-danger);background:var(--color-danger-bg)}
+.zakat-alerts .input:disabled{cursor:not-allowed;opacity:.55;background:var(--color-surface-hover)}
+@media(max-width:1200px){.zakat-side{position:static}}
