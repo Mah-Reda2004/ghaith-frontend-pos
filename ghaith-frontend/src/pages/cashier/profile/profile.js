@@ -1,6 +1,6 @@
 import { api, listFrom } from "../../../core/api.js";
 import { getCurrentUser, getUserRole } from "../../../core/auth.js";
-import { escapeHtml } from "../../../core/utils.js";
+import { escapeHtml, formatMoney } from "../../../core/utils.js";
 
 const PERIOD_FIELDS = {
   today: ["today", "daily", "current_day"],
@@ -10,7 +10,7 @@ const PERIOD_FIELDS = {
 const CHART_COLORS = ["#f97316", "#fb923c", "#fbbf24", "#22c55e", "#06b6d4", "#3b82f6", "#a855f7"];
 
 const unwrap = response => response?.data || response || {};
-const money = value => `EGP ${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = value => `EGP ${formatMoney(value)}`;
 const numberFrom = (source, fields) => {
   for (const field of fields) {
     const value = Number(source?.[field]);

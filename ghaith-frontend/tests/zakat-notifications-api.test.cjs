@@ -23,6 +23,8 @@ const assert = require('node:assert/strict');
     assert.match(await page.locator('#zakatDueValue').textContent(), /250\.00/);
     await page.locator('#notificationTrigger').click();
     await page.getByText('تنبيه زكاة', { exact: true }).waitFor();
+    await page.locator('.notification-item[data-id="notice-1"] [data-read]').click();
+    await page.locator('#notificationMarkAll').click();
     await page.locator('#zakatGoldPrice').fill('5200'); await page.locator('#zakatSaveSettings').click();
     await page.locator('#zakatCalculate').click(); await page.locator('#zakatOpenReport').click(); await page.locator('#zakatReminders').click();
     await page.getByText('تم إرسال التذكيرات', { exact: true }).waitFor();
@@ -30,6 +32,9 @@ const assert = require('node:assert/strict');
     assert.deepEqual(settings, { cycle_id: '11111111-1111-4111-8111-111111111111', gold_price_per_gram: 5200 });
     assert.equal(calculate.cycle_id, '11111111-1111-4111-8111-111111111111'); assert.match(calculate.idempotency_key, /^[0-9a-f-]{36}$/i);
     for (const expected of ['GET /api/v1/admin/zakat/inventory', 'GET /api/v1/admin/zakat/reports/11111111-1111-4111-8111-111111111111', 'POST /api/v1/admin/zakat/reminders/run']) assert.ok(calls.includes(expected));
+    assert.ok(calls.includes('PATCH /api/v1/admin/notifications/notice-1'));
+    assert.ok(calls.includes('POST /api/v1/admin/notifications/read-all'));
+    assert.deepEqual(bodies.find(entry => entry.path.endsWith('/notifications/notice-1')).body, { read: true });
     assert.deepEqual(errors, []);
     console.log('PASS: zakat endpoints and server notifications are connected.');
   } finally { await browser.close(); }

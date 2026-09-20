@@ -14,16 +14,29 @@ export function debounce(fn, delay = 350) {
   };
 }
 
-/** تنسيق الأرقام كعملة (جنيه / ريال..) حسب اللوكال العربي */
-export function formatCurrency(value, currency = "") {
-  const num = Number(value ?? 0).toLocaleString("ar-EG", {
+/**
+ * تنسيق المبالغ بشكل واضح وثابت:
+ * 1000.23 للأرقام ذات الأربع خانات، و120,230 للأرقام الأكبر.
+ */
+export function formatMoney(value) {
+  const number = Number(value ?? 0);
+  if (!Number.isFinite(number)) return "0";
+
+  const formatted = number.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   });
+
+  return Math.abs(number) < 10000 ? formatted.replace(",", "") : formatted;
+}
+
+export function formatCurrency(value, currency = "") {
+  const num = formatMoney(value);
   return currency ? `${num} ${currency}` : num;
 }
 
 export function formatNumber(value) {
-  return Number(value ?? 0).toLocaleString("ar-EG");
+  return Number(value ?? 0).toLocaleString("en-US");
 }
 
 export function formatDate(dateStr) {

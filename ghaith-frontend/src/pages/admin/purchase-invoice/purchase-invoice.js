@@ -1,8 +1,8 @@
 import { api, idempotencyKey, listFrom } from "../../../core/api.js";
-import { escapeHtml } from "../../../core/utils.js";
+import { escapeHtml, formatMoney } from "../../../core/utils.js";
 import { productVariantsMarkup, readProductVariants, setupProductVariants } from "../../../core/product-variants-form.js";
 
-const money = value => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = formatMoney;
 const today = () => new Date().toISOString().slice(0, 10);
 
 export function initPurchaseInvoice() {

@@ -1,7 +1,7 @@
 import { api, idempotencyKey, listFrom } from "../../../core/api.js";
-import { debounce, escapeHtml } from "../../../core/utils.js";
+import { debounce, escapeHtml, formatMoney } from "../../../core/utils.js";
 
-const money = value => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = formatMoney;
 const valueOf = (source, ...keys) => keys.map(key => source?.[key]).find(value => value !== undefined && value !== null);
 const friendlyError = error => {
   const message = String(error?.message || error || "حدث خطأ غير متوقع.");

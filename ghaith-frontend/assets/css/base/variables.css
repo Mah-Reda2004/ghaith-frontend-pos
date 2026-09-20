@@ -35,6 +35,16 @@
   --color-warning-bg: rgba(245, 166, 35, 0.12);
   --color-info: #3b82f6;
   --color-info-bg: rgba(59, 130, 246, 0.12);
+  --color-status-paid: #14b8a6;
+  --color-status-paid-bg: rgba(20, 184, 166, 0.12);
+  --color-status-partial: #fb7185;
+  --color-status-partial-bg: rgba(251, 113, 133, 0.12);
+  --color-status-exchange: #a78bfa;
+  --color-status-exchange-bg: rgba(167, 139, 250, 0.14);
+  --color-status-partial-exchange: #818cf8;
+  --color-status-partial-exchange-bg: rgba(129, 140, 248, 0.14);
+  --color-status-draft: #9ca3af;
+  --color-status-draft-bg: rgba(156, 163, 175, 0.12);
 
   --shadow-modal: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
@@ -68,6 +78,16 @@
   --color-warning-bg: rgba(217, 119, 6, 0.1);
   --color-info: #2563eb;
   --color-info-bg: rgba(37, 99, 235, 0.1);
+  --color-status-paid: #0f766e;
+  --color-status-paid-bg: rgba(15, 118, 110, 0.1);
+  --color-status-partial: #e11d48;
+  --color-status-partial-bg: rgba(225, 29, 72, 0.1);
+  --color-status-exchange: #7c3aed;
+  --color-status-exchange-bg: rgba(124, 58, 237, 0.1);
+  --color-status-partial-exchange: #4f46e5;
+  --color-status-partial-exchange-bg: rgba(79, 70, 229, 0.1);
+  --color-status-draft: #6b7280;
+  --color-status-draft-bg: rgba(107, 114, 128, 0.1);
 
   --shadow-modal: 0 20px 50px rgba(20, 20, 30, 0.15);
 }

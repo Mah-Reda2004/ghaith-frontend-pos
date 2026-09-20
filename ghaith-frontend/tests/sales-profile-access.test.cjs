@@ -49,9 +49,9 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('[data-period-card="today"] .profile-stat__value').textContent(), 'EGP 48.56');
     assert.equal(await page.locator('[data-period-card="week"] .profile-stat__value').textContent(), 'EGP 48.56');
     assert.equal(await page.locator('[data-period-card="month"] .profile-stat__value').textContent(), 'EGP 48.56');
-    assert.match(await page.locator('[data-period-card="week"] [data-period-details]').textContent(), /EGP 1,371.00.*٢ فاتورة/);
+    assert.match(await page.locator('[data-period-card="week"] [data-period-details]').textContent(), /EGP 1371(?:\.00)?.*٢ فاتورة/);
     assert.equal(await page.locator('.profile-transactions tbody tr').count(), 2);
-    assert.match(await page.locator('.profile-transactions tbody tr').first().textContent(), /INV100000534.*رتلا × 1، جلبيه × 1.*EGP 720.00.*EGP 36.00/s);
+    assert.match(await page.locator('.profile-transactions tbody tr').first().textContent(), /INV100000534.*رتلا × 1، جلبيه × 1.*EGP 720(?:\.00)?.*EGP 36(?:\.00)?/s);
     for (const viewport of [{ width: 1440, height: 900 }, { width: 900, height: 900 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, `profile overflows at ${viewport.width}px`);

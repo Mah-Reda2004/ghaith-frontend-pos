@@ -7,11 +7,15 @@ const assert = require('node:assert/strict');
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
     const pageErrors = [];
-    let checkoutBody; let quoteBody; let customerBody; let checkoutAttempts = 0; let productLoads = 0;
+    let checkoutBody; let quoteBody; let customerBody; let printBody; let checkoutAttempts = 0; let productLoads = 0;
     page.on('pageerror', error => pageErrors.push(error.message));
     await page.addInitScript(() => {
       sessionStorage.setItem('ghaith-access-token', 'ui-test-token');
       sessionStorage.setItem('ghaith-current-user', JSON.stringify({ id: 'cashier-test', name: 'كاشير الاختبار', role: 'cashier' }));
+    });
+    await page.route('http://127.0.0.1:17891/api/print/receipt', async route => {
+      printBody = route.request().postDataJSON();
+      return route.fulfill({ status: 202, json: { ok: true, queued: true } });
     });
     await page.route('https://test-3f530955.fastapicloud.dev/**', async route => {
       const request = route.request();
@@ -73,16 +77,22 @@ const assert = require('node:assert/strict');
     await page.locator('#customerTypeSelect').selectOption('12121212-1212-4121-8121-121212121212');
     assert.match(await page.locator('#discountBadge').textContent(), /خصم قريب 10%/);
     assert.doesNotMatch(await page.locator('#discountBadge').textContent(), /12121212/);
+    await page.locator('#manualDiscountAmount').fill('70');
+    assert.match(await page.locator('#discountBadge').textContent(), /خصم يدوي/);
     await page.locator('#salesSelect').selectOption('11111111-1111-4111-8111-111111111111');
     await page.locator('#confirmPaymentBtn').click();
     await page.getByText('أدخل اسم العميل لتطبيق خصم فئة العميل على الفاتورة.', { exact: true }).waitFor();
     assert.equal(quoteBody, undefined);
     await page.locator('#customerName').fill('عميل قريب');
+    await page.locator('#customerPhone').fill('01012345678');
+    await page.locator('#customerAddress').fill('القاهرة');
     await page.locator('#confirmPaymentBtn').click();
     await page.getByText(/تم تحديث المخزون والسلة/).waitFor();
     assert.equal(await page.locator('#paymentOverlay').evaluate(node => getComputedStyle(node).display !== 'none'), true);
+    await page.locator('.method-btn[data-method="محفظة"]').click();
     await page.locator('#confirmPaymentBtn').click();
     await page.waitForFunction(() => document.querySelector('#cartCount')?.textContent.includes('0'));
+    await page.waitForFunction(() => performance.getEntriesByType('resource').length >= 0);
 
     assert.equal(checkoutBody.items[0].variant_id, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
     assert.deepEqual(quoteBody.items, checkoutBody.items);
@@ -90,12 +100,25 @@ const assert = require('node:assert/strict');
     assert.equal(checkoutBody.items[0].expected_version, 8);
     assert.equal(checkoutBody.items[0].qty, 2);
     assert.equal(checkoutBody.sales_person_id, '11111111-1111-4111-8111-111111111111');
-    assert.deepEqual(customerBody, { name: 'عميل قريب', phone: null, address: null, customer_type_id: '12121212-1212-4121-8121-121212121212' });
+    assert.deepEqual(customerBody, { name: 'عميل قريب', phone: '01012345678', address: 'القاهرة', customer_type_id: '12121212-1212-4121-8121-121212121212' });
     assert.equal(quoteBody.customer_id, '34343434-3434-4343-8343-343434343434');
+    assert.equal(quoteBody.discount_amount, undefined);
+    assert.equal(quoteBody.discount_type, undefined);
     assert.equal(checkoutBody.customer_id, '34343434-3434-4343-8343-343434343434');
-    assert.equal(checkoutBody.payment_method, 'cash');
+    assert.equal(checkoutBody.discount_amount, 70);
+    assert.equal(checkoutBody.discount_type, undefined);
+    assert.equal(checkoutBody.payment_method, 'transfer');
     assert.equal(checkoutBody.paid_amount, 630);
     assert.equal(checkoutBody.shift_id, 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+    assert.equal(printBody.number, 'INV-API-1');
+    assert.equal(printBody.cashier, 'كاشير الاختبار');
+    assert.equal(printBody.customer, 'عميل قريب');
+    assert.equal(printBody.customer_phone, '01012345678');
+    assert.equal(printBody.customer_address, 'القاهرة');
+    assert.equal(printBody.payment, 'محفظة');
+    assert.equal(printBody.barcode, '1');
+    assert.deepEqual(printBody.items.map(({ name, sku, qty, price, size, color }) => ({ name, sku, qty, price, size, color })), [{ name: 'ثوب API', sku: 'API-SKU-L', qty: 2, price: 350, size: 'L', color: 'أبيض' }]);
+    assert.deepEqual(printBody.totals.slice(-2).map(({ label, value }) => ({ label, value })), [{ label: 'المدفوع', value: 630 }, { label: 'المتبقي', value: 0 }]);
     assert.deepEqual(pageErrors, []);
     console.log('PASS: POS details, repeated-click quantity, sales users and checkout match the live OpenAPI contract.');
   } finally {

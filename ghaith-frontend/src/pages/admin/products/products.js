@@ -1,11 +1,11 @@
 import { api } from "../../../core/api.js";
-import { debounce, escapeHtml } from "../../../core/utils.js";
+import { debounce, escapeHtml, formatMoney } from "../../../core/utils.js";
 import { publishNotification } from "../../../components/notifications/notifications.js";
 import { productVariantsMarkup, readProductVariants, setupProductVariants } from "../../../core/product-variants-form.js";
 
 const API_PAGE_SIZE = 100;
 const UI_PAGE_SIZE = 20;
-const money = value => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = formatMoney;
 let products = [];
 let categories = [];
 let suppliers = [];
@@ -14,6 +14,7 @@ let summary = { total: 0, low: 0, empty: 0, value: 0 };
 let currentPage = 1;
 let requestSequence = 0;
 let pricingPreviewSequence = 0;
+let barcodeProduct = null;
 
 function addApiFields() {
   if (document.getElementById("productSupplier")) return;
@@ -24,6 +25,7 @@ function addApiFields() {
     <p class="products-api-note">ينشئ الخادم متغير المخزون الافتراضي تلقائيًا. المقاس واللون غير متاحين حاليًا في API إنشاء المنتجات.</p>`);
   document.querySelector(".products-form-section:nth-of-type(2)")?.insertAdjacentHTML("beforeend", productVariantsMarkup("productVariant"));
   document.querySelector(".products-page")?.insertAdjacentHTML("beforeend", '<div class="modal-overlay products-modal" id="productRevaluationsModal" hidden><section class="modal products-dialog" role="dialog" aria-modal="true" aria-labelledby="productRevaluationsTitle"><header class="modal__header products-dialog__header"><h2 class="modal__title" id="productRevaluationsTitle">سجل إعادة تقييم المنتج</h2><button class="btn-icon" id="closeProductRevaluations" type="button" aria-label="إغلاق">×</button></header><div class="products-dialog__body"><div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>السعر السابق</th><th>السعر الجديد</th><th>السبب</th></tr></thead><tbody id="productRevaluationsBody"></tbody></table></div></div></section></div>');
+  document.querySelector(".products-page")?.insertAdjacentHTML("beforeend", '<div class="modal-overlay products-modal" id="productBarcodeModal" hidden><section class="modal products-dialog products-barcode-dialog" role="dialog" aria-modal="true" aria-labelledby="productBarcodeTitle"><header class="modal__header products-dialog__header"><h2 class="modal__title" id="productBarcodeTitle">طباعة باركود المنتج</h2><button class="btn-icon" id="closeProductBarcode" type="button" aria-label="إغلاق">×</button></header><div class="products-dialog__body"><p class="products-barcode-hint">اختر المقاس واللون المطلوبين وحدد عدد الملصقات لكل نسخة.</p><div class="products-barcode-list" id="productBarcodeList"></div><p class="products-field-error" id="productBarcodeError" hidden></p></div><footer class="modal__actions products-dialog__actions"><button class="btn btn-outline" id="cancelProductBarcode" type="button">إلغاء</button><button class="btn btn-primary" id="confirmProductBarcode" type="button">طباعة المحدد</button></footer></section></div>');
 }
 
 function getElements() {
@@ -155,12 +157,12 @@ function renderProducts(elements) {
     const state = stockState(product);
     return `<tr data-product-id="${escapeHtml(String(product.id))}">
       <td><span class="product-name-cell"><strong>${escapeHtml(product.nameAr)}</strong><small>${escapeHtml(product.nameEn)}</small></span></td>
-      <td><span class="product-barcode-cell"><b class="num" dir="ltr">${escapeHtml(product.sku)}</b></span></td>
+      <td><span class="product-barcode-cell"><b class="num" dir="ltr">${escapeHtml(product.barcode !== "—" ? product.barcode : product.sku)}</b></span></td>
       <td>${escapeHtml(product.category)}</td><td>${renderVariantBadges(product.variants || [product])}</td><td>${escapeHtml(product.supplierName || "—")}</td>
       <td class="num">${money(product.costPrice)}</td><td class="num">${money(product.salePrice)}</td><td class="num">${product.salesPercentage}%</td><td class="num">${product.quantity}</td><td class="num">${product.minimum}</td>
       <td><span class="product-stock product-stock--${state}">${stockLabel(product)}</span></td>
       <td><button class="status-toggle status-toggle--table${product.status === "active" ? "" : " is-inactive"}" type="button" role="switch" aria-checked="${product.status === "active"}" data-action="toggle-status"><span class="status-toggle__label">${product.status === "active" ? "نشط" : "غير نشط"}</span><span class="status-toggle__track" aria-hidden="true"><span class="status-toggle__thumb"></span></span></button></td>
-      <td><div class="products-actions"><button class="products-action" type="button" data-action="revaluations" aria-label="سجل تقييم ${escapeHtml(product.nameAr)}">↻</button><button class="products-action products-action--edit" type="button" data-action="edit" aria-label="تعديل ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="products-action products-action--delete" type="button" data-action="delete" aria-label="أرشفة ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div></td>
+      <td><div class="products-actions"><button class="products-action products-action--barcode" type="button" data-action="barcode" aria-label="طباعة باركود ${escapeHtml(product.nameAr)}" title="طباعة باركود">▥</button><button class="products-action" type="button" data-action="revaluations" aria-label="سجل تقييم ${escapeHtml(product.nameAr)}">↻</button><button class="products-action products-action--edit" type="button" data-action="edit" aria-label="تعديل ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="products-action products-action--delete" type="button" data-action="delete" aria-label="أرشفة ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div></td>
     </tr>`;
   }).join("");
   elements.empty.hidden = pageProducts.length > 0;
@@ -194,8 +196,13 @@ async function loadProducts(elements) {
   elements.paginationInfo.textContent = "جاري تحميل المنتجات...";
   try {
     const stockMap = { low: "limited", empty: "out_of_stock" };
-    const query = { search: elements.search.value.trim(), category_id: elements.categoryFilter.value === "all" ? undefined : elements.categoryFilter.value, stock_status: elements.stockFilter.value === "all" ? undefined : stockMap[elements.stockFilter.value] || elements.stockFilter.value };
-    const [items, summaryResponse] = await Promise.all([fetchAllProducts(query), api.get("/api/v1/admin/products/summary")]);
+    const scannedSearch = elements.search.value.trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
+    const query = { search: scannedSearch, category_id: elements.categoryFilter.value === "all" ? undefined : elements.categoryFilter.value, stock_status: elements.stockFilter.value === "all" ? undefined : stockMap[elements.stockFilter.value] || elements.stockFilter.value };
+    const [initialItems, summaryResponse] = await Promise.all([fetchAllProducts(query), api.get("/api/v1/admin/products/summary")]);
+    let items = initialItems;
+    if (!items.length && /^\d+$/.test(scannedSearch)) {
+      items = await fetchAllProducts({ ...query, search: `PRD${scannedSearch}` });
+    }
     if (sequence !== requestSequence) return;
     products = items.flatMap(normalizeProductRows);
     summary = { total: Number(summaryResponse.total_product_count || products.length), low: Number(summaryResponse.low_stock_count || 0), empty: Number(summaryResponse.out_of_stock_count || 0), value: Number(summaryResponse.inventory_value || 0) };
@@ -249,7 +256,42 @@ async function openProductModal(elements, product = null) {
 }
 
 function closeProductModal(elements) { elements.modal.hidden = true; elements.form.reset(); elements.nameError.hidden = true; }
-function closeSuccess(elements) { elements.successModal.hidden = true; }
+function closeSuccess(elements) { elements.successModal.hidden = true; elements.successModal.style.display = ""; }
+
+function closeBarcodeModal() {
+  const modal = document.getElementById("productBarcodeModal");
+  modal.hidden = true; barcodeProduct = null;
+}
+
+function openBarcodeModal(product) {
+  barcodeProduct = product;
+  const variants = (product.variants || [product]).map((variant, index) => ({ variant, index })).filter(({ variant }) => variant.barcode !== "—" || variant.sku !== "—");
+  document.getElementById("productBarcodeTitle").textContent = `طباعة باركود «${product.nameAr}»`;
+  document.getElementById("productBarcodeList").innerHTML = variants.map(({ variant, index }) => `<div class="products-barcode-row" data-variant-index="${index}">
+    <input type="checkbox" data-barcode-select value="${index}" aria-label="اختيار ${escapeHtml(variant.size)} ${escapeHtml(variant.color)}">
+    <span><strong>${escapeHtml(variant.size === "—" ? "بدون مقاس" : variant.size)}</strong><small>${escapeHtml(variant.color === "—" ? "بدون لون" : variant.color)} · <b dir="ltr">${escapeHtml(variant.barcode !== "—" ? variant.barcode : variant.sku)}</b></small></span>
+    <em>المتاح: ${Math.max(0, Number(variant.quantity) || 0)}</em>
+    <label class="products-barcode-count">عدد الملصقات<input class="input num" type="number" min="1" max="10000" value="1" data-barcode-copies disabled></label>
+  </div>`).join("") || '<div class="empty-state"><h3>لا توجد نسخ قابلة للطباعة</h3><p>أضف باركودًا أو SKU للمنتج أولًا.</p></div>';
+  document.getElementById("productBarcodeError").hidden = true;
+  document.getElementById("productBarcodeModal").hidden = false;
+}
+
+async function printSelectedBarcodes(button) {
+  const modal = document.getElementById("productBarcodeModal"), rows = [...modal.querySelectorAll(".products-barcode-row")];
+  const variants = barcodeProduct?.variants || (barcodeProduct ? [barcodeProduct] : []);
+  const printable = rows.flatMap(row => {
+    if (!row.querySelector("[data-barcode-select]").checked) return [];
+    const variant = variants[Number(row.dataset.variantIndex)], copies = Math.floor(Number(row.querySelector("[data-barcode-copies]").value));
+    if (!variant || copies < 1) return [];
+    return [{ name: barcodeProduct.nameAr, barcode: variant.barcode !== "—" ? variant.barcode : variant.sku, sku: variant.sku !== "—" ? variant.sku : variant.barcode, price: variant.salePrice ?? barcodeProduct.salePrice, size: variant.size === "—" ? "" : variant.size, color: variant.color === "—" ? "" : variant.color, copies }];
+  });
+  const error = document.getElementById("productBarcodeError");
+  if (!printable.length) { error.textContent = "اختر مقاسًا ولونًا واحدًا على الأقل وحدد عدد الملصقات."; error.hidden = false; return; }
+  error.hidden = true; button.disabled = true;
+  try { const result = await window.GhaithPrint?.printBarcodes(printable); if (result?.ok) closeBarcodeModal(); }
+  finally { button.disabled = false; }
+}
 
 async function showRevaluations(product) {
   const modal = document.getElementById("productRevaluationsModal"), body = document.getElementById("productRevaluationsBody"); modal.hidden = false; document.getElementById("productRevaluationsTitle").textContent = `سجل إعادة تقييم «${product.nameAr}»`; body.innerHTML = '<tr><td colspan="4">جاري التحميل...</td></tr>';
@@ -261,6 +303,7 @@ function showSuccess(elements, product, edited = false) {
   elements.successName.textContent = product.nameAr; elements.successSku.textContent = product.sku; elements.successCategory.textContent = product.category; elements.successQuantity.textContent = product.quantity.toLocaleString("en-US");
   elements.successModal.dataset.productId = String(product.id || "");
   elements.successModal.hidden = false;
+  elements.successModal.style.display = "flex";
 }
 
 async function printSavedProductBarcodes(elements, button) {
@@ -307,7 +350,9 @@ async function saveProduct(elements) {
       }, { headers: { "Idempotency-Key": idempotencyKey() } });
     }
     closeProductModal(elements); currentPage = 1; await loadProducts(elements);
-    const saved = products.find(product => product.id === response?.id) || products.find(product => product.nameAr === nameAr) || normalizeProduct(response || { name_ar: nameAr, category_id: categoryId });
+    const responseProduct = response?.product || response?.data || response;
+    const savedId = responseProduct?.id;
+    const saved = products.find(product => String(product.id) === String(savedId || "")) || products.find(product => product.nameAr === nameAr) || normalizeProduct(responseProduct || { name_ar: nameAr, category_id: categoryId });
     showSuccess(elements, saved, Boolean(existing));
     const state = stockState(saved);
     if (state !== "available") publishNotification({ type: state === "empty" ? "out_of_stock" : "low_stock", priority: state === "empty" ? "critical" : "warning", title: state === "empty" ? "نفد المنتج من المخزون" : "مخزون المنتج منخفض", message: `${saved.nameAr}: الكمية الحالية ${saved.quantity}.`, entityId: `product:${saved.id}` });
@@ -324,6 +369,7 @@ export function initProducts() {
     const action = event.target.closest("[data-action]"); const row = action?.closest("[data-product-id]"); if (!action || !row) return;
     const product = products.find(item => String(item.id) === row.dataset.productId); if (!product) return;
     if (action.dataset.action === "edit") await openProductModal(elements, product);
+    if (action.dataset.action === "barcode") openBarcodeModal(product);
     if (action.dataset.action === "revaluations") await showRevaluations(product);
     if (action.dataset.action === "toggle-status") {
       action.disabled = true;
@@ -338,9 +384,12 @@ export function initProducts() {
   };
   const handleSubmit = event => { event.preventDefault(); saveProduct(elements); };
   const handlePagination = event => { const button = event.target.closest("[data-page]"); if (!button || button.disabled) return; currentPage = Number(button.dataset.page); renderProducts(elements); };
-  const handleEscape = event => { if (event.key !== "Escape") return; if (!elements.successModal.hidden) closeSuccess(elements); else if (!elements.modal.hidden) closeProductModal(elements); };
+  const handleEscape = event => { if (event.key !== "Escape") return; if (!document.getElementById("productBarcodeModal").hidden) closeBarcodeModal(); else if (!elements.successModal.hidden) closeSuccess(elements); else if (!elements.modal.hidden) closeProductModal(elements); };
   document.getElementById("addProductBtn").addEventListener("click", () => openProductModal(elements));
   document.getElementById("closeProductRevaluations").addEventListener("click", () => { document.getElementById("productRevaluationsModal").hidden = true; });
+  document.getElementById("closeProductBarcode").addEventListener("click", closeBarcodeModal); document.getElementById("cancelProductBarcode").addEventListener("click", closeBarcodeModal);
+  document.getElementById("confirmProductBarcode").addEventListener("click", event => printSelectedBarcodes(event.currentTarget));
+  document.getElementById("productBarcodeList").addEventListener("change", event => { if (!event.target.matches("[data-barcode-select]")) return; const count = event.target.closest(".products-barcode-row").querySelector("[data-barcode-copies]"); count.disabled = !event.target.checked; if (event.target.checked) count.focus(); });
   document.getElementById("closeProductModal").addEventListener("click", () => closeProductModal(elements)); document.getElementById("cancelProductModal").addEventListener("click", () => closeProductModal(elements));
   document.getElementById("addAnotherProduct").addEventListener("click", () => { closeSuccess(elements); openProductModal(elements); }); document.getElementById("backToProducts").addEventListener("click", () => closeSuccess(elements));
   document.getElementById("printProductBarcode").addEventListener("click", event => printSavedProductBarcodes(elements, event.currentTarget));

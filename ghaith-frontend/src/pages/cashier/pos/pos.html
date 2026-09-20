@@ -169,7 +169,7 @@
           <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> بيانات العميل</label>
           <div class="row-fields">
             <div class="field">
-              <span class="sub-label">نوع العميل</span>
+              <span class="sub-label">نوع خصم العميل</span>
               <select class="input" id="customerTypeSelect" style="padding-inline-start: 12px;">
                 <option value="عادي" data-discount="0">عادي</option>
                 <option value="قريب" data-discount="10">قريب</option>
@@ -198,6 +198,19 @@
               <div class="input-with-icon">
                 <input type="text" class="input" id="customerAddress" placeholder="أدخل العنوان..." />
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> الخصم اليدوي <small>(اختياري)</small></label>
+          <div class="row-fields">
+            <div class="field">
+              <span class="sub-label">قيمة الخصم</span>
+              <div class="input-with-icon">
+                <input type="number" class="input num" id="manualDiscountAmount" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
               </div>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { debounce, escapeHtml } from "../../../core/utils.js";
+import { debounce, escapeHtml, formatMoney } from "../../../core/utils.js";
 import { api, listFrom } from "../../../core/api.js";
 
 const reportDefinition = ({ label, title, subtitle, tableTitle, search, columns, statLabels = [] }) => ({
@@ -113,7 +113,7 @@ function displayValue(value) {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "نعم" : "لا";
   if (typeof value === "object") return value.name || value.name_ar || value.username || value.invoice_number || value.id || "—";
-  if (typeof value === "number") return value.toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+  if (typeof value === "number") return formatMoney(value);
   if (typeof value === "string" && /^\d{4}-\d\d-\d\dT/.test(value)) return new Date(value).toLocaleString("ar-EG");
   return String(value);
 }
@@ -381,7 +381,7 @@ function reportFromResponse(base, response, reportKey) {
     suppliers: ["supplier_name", "invoice_number", "created_at", "total_amount", "paid_amount", "remaining_amount", "status"],
     debts: ["customer_name", "customer_phone", "invoice_number", "total_amount", "paid_amount", "remaining_amount", "status", "due_date"],
     expenses: ["created_at", "description", "category_name", "recorded_by_name", "amount"],
-    discounts: ["invoice_number", "customer_name", "discount_type_name", "discount_percent", "discount", "created_at"],
+    discounts: ["invoice_number", "customer_name", "discount_type_name", "discount_type", "discount_percent", "discount_amount", "discount", "created_at"],
     commissions: ["sales_person_name", "sales_person", "user_name", "invoice_number", "invoice_count", "total_invoices", "total_sales", "commission_rate", "commission_amount", "total_commission", "earned_at", "created_at"],
     inventory: ["product_name", "sku", "category_name", "quantity", "old_value", "new_value", "value_difference", "created_at"]
   }[reportKey] || [];

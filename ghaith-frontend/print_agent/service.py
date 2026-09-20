@@ -26,7 +26,7 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Ghaith Print Agent", version="2.0.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origin_regex=r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|null)$", allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "X-Ghaith-Print-Key"])
+app.add_middleware(CORSMiddleware, allow_origin_regex=r"^(https?://.+|null)$", allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Content-Type", "X-Ghaith-Print-Key"], expose_headers=["Access-Control-Allow-Private-Network"])
 
 
 @app.middleware("http")
@@ -34,9 +34,12 @@ async def secure_local_api(request: Request, call_next):
     client_host = request.client.host if request.client else ""
     if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
         return HTMLResponse("Local access only", status_code=403)
-    if request.url.path.startswith("/api/print") and request.headers.get("X-Ghaith-Print-Key") != config.api_key:
+    if request.method != "OPTIONS" and request.url.path.startswith("/api/print") and request.headers.get("X-Ghaith-Print-Key") != config.api_key:
         return HTMLResponse("Unauthorized", status_code=401)
-    return await call_next(request)
+    response = await call_next(request)
+    if request.headers.get("Access-Control-Request-Private-Network", "").lower() == "true":
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
 
 
 @app.get("/health")

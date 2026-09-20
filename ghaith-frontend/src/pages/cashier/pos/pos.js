@@ -5,6 +5,7 @@
 
 import { api } from "../../../core/api.js";
 import { getCurrentUser, getUserRole } from "../../../core/auth.js";
+import { formatMoney } from "../../../core/utils.js";
 
 (function () {
   "use strict";
@@ -86,6 +87,7 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     customerName: document.getElementById("customerName"),
     customerPhone: document.getElementById("customerPhone"),
     customerAddress: document.getElementById("customerAddress"),
+    manualDiscountAmount: document.getElementById("manualDiscountAmount"),
     variantOverlay: document.getElementById("variantOverlay"),
     variantPickerTitle: document.getElementById("variantPickerTitle"),
     variantPickerGrid: document.getElementById("variantPickerGrid"),
@@ -99,10 +101,6 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
   /* ------------------------------------------------------------------ */
   /* 5) أدوات مساعدة                                                     */
   /* ------------------------------------------------------------------ */
-  function formatMoney(n) {
-    return Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
-  }
-
   function escapeHtml(str = "") {
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
@@ -364,9 +362,17 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
 
   function getCartTotals() {
     const subtotal = state.cart.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const discountValue = (subtotal * selectedDiscountPct) / 100;
+    const categoryDiscountValue = (subtotal * selectedDiscountPct) / 100;
+    const enteredDiscount = Number(els.manualDiscountAmount?.value);
+    const hasManualDiscount = els.manualDiscountAmount?.value !== "" && Number.isFinite(enteredDiscount) && enteredDiscount >= 0;
+    const discountValue = Math.min(hasManualDiscount ? enteredDiscount : categoryDiscountValue, subtotal);
     const total = subtotal - discountValue;
-    return { subtotal, discountValue, total };
+    return { subtotal, discountValue, total, hasManualDiscount };
+  }
+
+  function invoiceBarcodeValue(invoiceNumber) {
+    const digits = String(invoiceNumber || "").replace(/\D/g, "");
+    return digits || String(invoiceNumber || "");
   }
 
   function renderCart() {
@@ -608,14 +614,26 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
   let globalScanResetTimer = null;
 
   function normalizeScannedCode(value) {
-    return String(value || "").replace(/[\r\n\t]/g, "").trim();
+    const arabicKeyboardToEnglish = {
+      "ض":"q", "ص":"w", "ث":"e", "ق":"r", "ف":"t", "غ":"y", "ع":"u", "ه":"i", "خ":"o", "ح":"p",
+      "ج":"[", "د":"]", "ش":"a", "س":"s", "ي":"d", "ب":"f", "ل":"g", "ا":"h", "ت":"j", "ن":"k",
+      "م":"l", "ك":";", "ط":"'", "ئ":"z", "ء":"x", "ؤ":"c", "ر":"v", "ى":"n", "ة":"m", "و":",", "ز":".", "ظ":"/"
+    };
+    return String(value || "")
+      .replace(/[\r\n\t]/g, "")
+      .replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+      .replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+      .replace(/[ضصثقفغعهخحجدشسيبلاتنمكطئءؤرىةوزظ]/g, character => arabicKeyboardToEnglish[character] || character)
+      .trim();
   }
 
   function findProductByCode(code) {
     const normalizedCode = normalizeScannedCode(code).toLowerCase();
     return products.find(product =>
       product.barcode.toLowerCase() === normalizedCode ||
-      product.sku.toLowerCase() === normalizedCode
+      product.sku.toLowerCase() === normalizedCode ||
+      product.barcode.replace(/\D/g, "") === normalizedCode ||
+      product.sku.replace(/\D/g, "") === normalizedCode
     );
   }
 
@@ -784,7 +802,7 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
   }
 
   function updatePaymentTotals() {
-    const { subtotal, discountValue, total } = getCartTotals();
+    const { subtotal, discountValue, total, hasManualDiscount } = getCartTotals();
     // عمود الملخص
     if (els.modalSubtotal) els.modalSubtotal.textContent = formatMoney(subtotal) + " ج.م";
     if (els.modalTotalVal) els.modalTotalVal.textContent = formatMoney(total);
@@ -792,13 +810,16 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     if (els.confirmTotalLabel) els.confirmTotalLabel.textContent = formatMoney(total);
     // صف الخصم
     if (els.discountHintRow) {
-      if (selectedDiscountPct > 0) {
+      if (discountValue > 0) {
         els.discountHintRow.style.display = "flex";
         if (els.discountBadge) {
           const selectedOption = els.customerTypeSelect ? els.customerTypeSelect.options[els.customerTypeSelect.selectedIndex] : null;
           const typeName = selectedOption?.textContent?.trim() || "";
-          els.discountBadge.querySelector ? 
-            (els.discountBadge.lastChild.textContent = ` خصم ${typeName} ${selectedDiscountPct}%`) :
+          const discountLabel = hasManualDiscount
+            ? " خصم يدوي"
+            : ` خصم ${typeName} ${selectedDiscountPct}%`;
+          els.discountBadge.querySelector ?
+            (els.discountBadge.lastChild.textContent = discountLabel) :
             null;
         }
         if (els.discountValue) els.discountValue.textContent = `-${formatMoney(discountValue)} ج.م`;
@@ -835,6 +856,10 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     });
   }
 
+  els.manualDiscountAmount?.addEventListener("input", () => {
+    renderCart();
+    updatePaymentTotals();
+  });
   els.paymentMethodGroup.addEventListener("click", (e) => {
     const btn = e.target.closest(".method-btn");
     if (!btn) return;
@@ -865,7 +890,10 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     });
   }
 
-  const PAYMENT_METHODS = { "نقدي": "cash", "محفظة": "wallet", "انستا باي": "instapay", "آجل": "deferred" };
+  // The backend reserves `wallet` for spending the customer's internal store credit.
+  // POS "محفظة" means an external electronic-wallet collection, represented by
+  // the supported non-credit `transfer` method to avoid debiting customer credit.
+  const PAYMENT_METHODS = { "نقدي": "cash", "محفظة": "transfer", "انستا باي": "instapay", "آجل": "deferred" };
 
   async function resolveCustomerId() {
     const name = els.customerName?.value.trim();
@@ -900,6 +928,19 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     const activeMethod = els.paymentMethodGroup.querySelector(".method-btn.is-active")?.dataset.method || "نقدي";
     const paymentMethod = PAYMENT_METHODS[activeMethod] || "cash";
     const cartItems = state.cart.map(item => ({ variant_id: item.id, qty: item.qty, expected_version: item.version }));
+    const enteredDiscount = Number(els.manualDiscountAmount?.value || 0);
+    const subtotal = state.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+    if (!Number.isFinite(enteredDiscount) || enteredDiscount < 0 || enteredDiscount > subtotal) {
+      showToast("قيمة الخصم يجب أن تكون بين صفر وإجمالي المنتجات.", "error");
+      els.manualDiscountAmount?.focus();
+      return;
+    }
+    const totals = getCartTotals();
+    const discountAmount = totals.discountValue;
+    // Persist customer-category discounts as well as manual discounts. The
+    // customer type alone gives invoice history its label, but the checkout
+    // also needs the calculated amount or the saved invoice shows zero.
+    const discountPayload = discountAmount > 0 ? { discount_amount: discountAmount } : {};
     const originalLabel = els.confirmPaymentBtn.innerHTML;
     els.confirmPaymentBtn.disabled = true;
     els.confirmPaymentBtn.textContent = "جاري تسجيل البيع...";
@@ -907,7 +948,10 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
       const customerId = await resolveCustomerId();
       const quoteResponse = await api.post("/api/v1/pos/sales/quote", { items: cartItems, customer_id: customerId });
       const quote = quoteResponse?.quote || quoteResponse?.data || quoteResponse || {};
-      const quotedTotal = Number(quote.total_amount ?? quote.total ?? getCartTotals().total);
+      const quotedSubtotal = Number(quote.subtotal_amount ?? quote.subtotal ?? subtotal);
+      const quotedTotal = totals.hasManualDiscount
+        ? Math.max(quotedSubtotal - discountAmount, 0)
+        : Number(quote.total_amount ?? quote.total ?? totals.total);
       const paidAmount = paymentMethod === "deferred" ? Number(els.paidAmount?.value || 0) : quotedTotal;
       const sale = await api.post("/api/v1/sales/checkout", {
         items: cartItems,
@@ -915,13 +959,22 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
         sales_person_id: els.salesSelect.value,
         payment_method: paymentMethod,
         paid_amount: paidAmount,
+        ...discountPayload,
         shift_id: shiftId,
         idempotency_key: crypto.randomUUID()
       });
-      printReceipt(sale);
+      printReceipt(sale, {
+        customerName: els.customerName?.value.trim() || "عميل نقدي",
+        customerPhone: els.customerPhone?.value.trim() || "",
+        customerAddress: els.customerAddress?.value.trim() || "",
+        paymentLabel: activeMethod,
+        paidAmount,
+        remainingAmount: Math.max(quotedTotal - paidAmount, 0)
+      });
       showToast("تم تسجيل عملية البيع بنجاح ✓");
       state.cart = [];
       selectedDiscountPct = 0;
+      if (els.manualDiscountAmount) els.manualDiscountAmount.value = "";
       renderCart();
       closePaymentModal();
       await loadPosData();
@@ -941,15 +994,26 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
     }
   });
 
-  function printReceipt(sale = {}) {
+  function printReceipt(sale = {}, payment = {}) {
     const printArea = document.getElementById("printArea");
     if (!printArea) return;
-    const { subtotal, discountValue, total } = getCartTotals();
+    const { subtotal, discountValue, total, hasManualDiscount } = getCartTotals();
+    const selectedDiscountOption = els.customerTypeSelect?.selectedOptions?.[0];
+    const selectedDiscountName = selectedDiscountOption?.textContent?.trim() || "فئة العميل";
+    const selectedDiscountRate = Number(selectedDiscountPct || 0);
+    const discountLabel = hasManualDiscount
+      ? "خصم يدوي"
+      : `خصم ${selectedDiscountName} ${selectedDiscountRate.toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
     const now = new Date();
     const date = now.toLocaleDateString("ar-EG");
     const time = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
     const invoiceNo = sale.invoice_number || sale.invoice?.invoice_number || `INV-${Date.now().toString().slice(-6)}`;
     const salesName = els.salesSelect?.selectedOptions[0]?.textContent || "—";
+    const currentUser = getCurrentUser();
+    const cashierProfile = currentUser?.user || currentUser?.data || currentUser?.profile || currentUser || {};
+    const cashierName = cashierProfile.name || cashierProfile.full_name || cashierProfile.username || "كاشير نقطة البيع";
+    const paidAmount = Number(sale.paid_amount ?? sale.invoice?.paid_amount ?? payment.paidAmount ?? total);
+    const remainingAmount = Number(sale.remaining_amount ?? sale.invoice?.remaining_amount ?? payment.remainingAmount ?? Math.max(total - paidAmount, 0));
 
     if (window.GhaithPrint) {
       window.GhaithPrint.printReceipt({
@@ -957,14 +1021,31 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
         number: invoiceNo,
         date,
         time,
-        cashier: "كاشير نقطة البيع",
+        cashier: cashierName,
         sales: salesName,
-        payment: els.paymentMethodGroup.querySelector(".method-btn.is-active")?.dataset.method || "نقدي",
-        items: state.cart.map(item => ({ name: item.name, sku: item.sku, qty: item.qty, price: item.price })),
+        customer: payment.customerName || "عميل نقدي",
+        customer_phone: payment.customerPhone || "",
+        customer_address: payment.customerAddress || "",
+        payment: payment.paymentLabel || els.paymentMethodGroup.querySelector(".method-btn.is-active")?.dataset.method || "نقدي",
+        paid_amount: paidAmount,
+        remaining_amount: remainingAmount,
+        barcode: invoiceBarcodeValue(invoiceNo),
+        items: state.cart.map(item => ({
+          name: item.name,
+          sku: item.sku,
+          barcode: item.barcode || item.sku,
+          qty: item.qty,
+          price: item.price,
+          total: item.price * item.qty,
+          size: visibleVariantValue(item.size),
+          color: visibleVariantValue(item.color)
+        })),
         totals: [
           { label: "الإجمالي الفرعي", value: subtotal },
-          ...(discountValue > 0 ? [{ label: "الخصم", value: discountValue, negative: true }] : []),
-          { label: "الإجمالي النهائي", value: total, final: true }
+          ...(discountValue > 0 ? [{ label: discountLabel, value: discountValue, negative: true }] : []),
+          { label: "الإجمالي النهائي", value: total, final: true },
+          { label: "المدفوع", value: paidAmount },
+          { label: "المتبقي", value: remainingAmount, emphasis: remainingAmount > 0 }
         ]
       });
       return;
@@ -982,16 +1063,22 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
         <table class="r-table">
           <thead>
             <tr>
-              <th>الصنف</th>
-              <th style="text-align:center">كمية</th>
-              <th style="text-align:left">السعر</th>
+              <th>المنتج / الباركود</th>
+              <th>المقاس</th>
+              <th>اللون</th>
+              <th style="text-align:center">العدد</th>
+              <th style="text-align:center">سعر الوحدة</th>
+              <th style="text-align:left">الإجمالي</th>
             </tr>
           </thead>
           <tbody>
             ${state.cart.map(item => `
               <tr>
-                <td class="item-name">${escapeHtml(item.name)}</td>
+                <td class="item-name">${escapeHtml(item.name)}<small>${escapeHtml(item.barcode || item.sku || "")}</small></td>
+                <td>${escapeHtml(visibleVariantValue(item.size))}</td>
+                <td>${escapeHtml(visibleVariantValue(item.color))}</td>
                 <td class="item-qty">${item.qty}</td>
+                <td class="item-price">${formatMoney(item.price)} ج</td>
                 <td class="item-price">${formatMoney(item.price * item.qty)} ج</td>
               </tr>
             `).join('')}
@@ -1000,7 +1087,7 @@ import { getCurrentUser, getUserRole } from "../../../core/auth.js";
 
         <div class="r-totals">
           <div class="r-row"><span>إجمالي المنتجات:</span><span>${formatMoney(subtotal)} ج.م</span></div>
-          ${discountValue > 0 ? `<div class="r-row"><span>الخصم:</span><span>- ${formatMoney(discountValue)} ج.م</span></div>` : ''}
+          ${discountValue > 0 ? `<div class="r-row"><span>${escapeHtml(discountLabel)}:</span><span>- ${formatMoney(discountValue)} ج.م</span></div>` : ''}
           <div class="r-row r-final"><span>الصافي:</span><span>${formatMoney(total)} ج.م</span></div>
         </div>
 

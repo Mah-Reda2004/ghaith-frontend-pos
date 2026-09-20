@@ -1,5 +1,5 @@
 import { api } from "../../../core/api.js";
-import { debounce, escapeHtml } from "../../../core/utils.js";
+import { debounce, escapeHtml, formatMoney } from "../../../core/utils.js";
 
 const API_PAGE_SIZE = 100;
 const UI_PAGE_SIZE = 20;
@@ -66,7 +66,7 @@ function getElements() {
   };
 }
 
-const money = value => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = formatMoney;
 const listFrom = response => Array.isArray(response) ? response : response?.items || response?.payments || response?.invoices || response?.data?.items || response?.data?.payments || response?.data?.invoices || [];
 const dateLabel = value => value ? new Intl.DateTimeFormat("ar-EG", { dateStyle: "medium" }).format(new Date(value)) : "—";
 function showToast(elements, message, error = false) { const toast = document.createElement("div"); toast.className = `toast${error ? " is-error" : ""}`; toast.textContent = message; elements.toastStack.append(toast); setTimeout(() => toast.remove(), 3200); }

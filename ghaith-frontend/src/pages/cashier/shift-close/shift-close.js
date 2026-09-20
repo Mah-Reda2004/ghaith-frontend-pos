@@ -1,9 +1,22 @@
 import { api, idempotencyKey } from "../../../core/api.js";
 import { logout } from "../../../core/auth.js";
 
-const money = value => Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const labels = { cash: "نقدي", card: "بطاقة", wallet: "محفظة", instapay: "إنستا باي", transfer: "تحويل", deferred: "آجل" };
+import { formatMoney } from "../../../core/utils.js";
+
+const money = formatMoney;
+const labels = { cash: "نقدي", card: "بطاقة", wallet: "رصيد العميل", instapay: "إنستا باي", transfer: "محفظة إلكترونية", deferred: "آجل" };
 let currentShift = null, summary = null;
+
+function paymentMethodKey(value) {
+  const key = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases = {
+    "نقدي": "cash", cash_payment: "cash",
+    "بطاقة": "card", card_payment: "card", credit_card: "card", debit_card: "card", visa: "card",
+    "محفظة": "wallet", electronic_wallet: "wallet", e_wallet: "wallet",
+    "انستا_باي": "instapay", "إنستا_باي": "instapay", insta_pay: "instapay"
+  };
+  return aliases[key] || key;
+}
 
 function toast(message, error = false) { const stack = document.getElementById("toastStack"); const node = document.createElement("div"); node.className = `toast${error ? " is-error" : ""}`; node.textContent = message; stack.append(node); setTimeout(() => node.remove(), 3000); }
 
@@ -11,14 +24,20 @@ function normalizeSummary(data) {
   const root = data?.data?.summary || data?.summary || data?.data?.shift_summary || data?.shift_summary || data?.data?.shift || data?.shift || data?.data || data || {};
   const sales = root.sales || root.sales_summary || {}, expenses = root.expenses || root.expense_summary || {}, returns = root.returns || root.return_summary || {};
   const payments = root.payment_breakdown || root.payment_distribution || root.payment_methods || root.payments || sales.payment_breakdown || sales.payments || [];
-  const paymentRows = Array.isArray(payments) ? payments : Object.entries(payments).map(([method, value]) => ({ method, ...(typeof value === "object" ? value : { amount: value }) }));
-  const paymentAmount = method => Number(paymentRows.find(item => item.method === method || item.payment_method === method)?.amount || 0);
+  const paymentRows = (Array.isArray(payments) ? payments : Object.entries(payments).map(([method, value]) => ({ method, ...(typeof value === "object" ? value : { amount: value }) })))
+    .map(item => ({ ...item, method: paymentMethodKey(item.method || item.payment_method) }));
+  const paymentAmount = method => paymentRows.filter(item => item.method === method).reduce((total, item) => total + Number(item.amount ?? item.total ?? item.counted_amount ?? 0), 0);
+  const electronicRowsTotal = paymentAmount("card") + paymentAmount("wallet") + paymentAmount("transfer") + paymentAmount("instapay");
+  const explicitElectronicTotal = Number(root.card_total ?? root.card_sales ?? root.card_payments ?? sales.card_total ?? sales.card_sales ?? 0)
+    + Number(root.wallet_total ?? root.wallet_sales ?? root.wallet_payments ?? sales.wallet_total ?? sales.wallet_sales ?? 0)
+    + Number(root.transfer_total ?? root.transfer_sales ?? root.transfer_payments ?? sales.transfer_total ?? sales.transfer_sales ?? 0)
+    + Number(root.instapay_total ?? root.instapay_sales ?? root.instapay_payments ?? sales.instapay_total ?? sales.instapay_sales ?? 0);
   return {
     ...root,
     total_sales: root.total_sales ?? root.sales_total ?? sales.total_sales ?? sales.total ?? sales.amount,
     invoice_count: root.invoice_count ?? root.sales_count ?? sales.invoice_count ?? sales.count,
     cash_total: root.cash_total ?? root.cash_sales ?? root.cash_payments ?? sales.cash_total ?? sales.cash_sales ?? paymentAmount("cash"),
-    card_total: root.card_total ?? root.card_sales ?? root.card_payments ?? sales.card_total ?? sales.card_sales ?? paymentAmount("card"),
+    card_total: electronicRowsTotal || explicitElectronicTotal,
     returns_total: root.returns_total ?? root.total_returns ?? returns.total ?? returns.amount,
     total_expenses: root.total_expenses ?? root.expenses_total ?? root.cash_expenses ?? expenses.total_expenses ?? expenses.total ?? expenses.amount,
     expense_count: root.expense_count ?? root.expenses_count ?? expenses.expense_count ?? expenses.count,

@@ -1,4 +1,4 @@
-import { escapeHtml } from "../../../core/utils.js";
+import { escapeHtml, formatMoney } from "../../../core/utils.js";
 import { api } from "../../../core/api.js";
 
 const EMPTY_DASHBOARD_CHARTS = { sales: { labels: [], series: { daily: [], weekly: [], monthly: [] } }, category: { total: "0", totalLabel: "الإجمالي", items: [] } };
@@ -28,7 +28,7 @@ function firstValue(...values) {
 function setDashboardValues(selector, values) {
   document.querySelectorAll(selector).forEach((node, index) => {
     const value = values[index];
-    node.textContent = value === undefined || value === null ? "0" : Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
+    node.textContent = value === undefined || value === null ? "0" : formatMoney(value);
   });
 }
 

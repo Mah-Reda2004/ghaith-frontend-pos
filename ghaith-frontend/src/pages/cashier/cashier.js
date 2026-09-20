@@ -23,6 +23,14 @@ const userMenuDropdown = document.getElementById("userMenuDropdown");
 const currentUserName = document.getElementById("currentUserName");
 let activeScript;
 let navigationId = 0;
+const assetVersion = new URL(window.location.href).searchParams.get("v");
+
+function routeAssetUrl(path, params = {}) {
+  const url = new URL(path, window.location.href);
+  if (assetVersion) url.searchParams.set("v", assetVersion);
+  Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+  return url.href;
+}
 
 initTheme();
 const loginUrl = new URL("../auth/login/login.html", window.location.href).href;
@@ -118,7 +126,7 @@ async function loadRoute() {
 
   try {
     if (route.css) {
-      routeStyle.href = route.css;
+      routeStyle.href = routeAssetUrl(route.css);
       await new Promise((resolve, reject) => {
         routeStyle.onload = resolve;
         routeStyle.onerror = reject;
@@ -127,7 +135,7 @@ async function loadRoute() {
       routeStyle.removeAttribute("href");
     }
 
-    const response = await window.fetch(route.html);
+    const response = await window.fetch(routeAssetUrl(route.html));
     if (!response.ok) throw new Error("view-load-failed");
     const source = await response.text();
     if (currentNavigation !== navigationId) return;
@@ -146,7 +154,7 @@ async function loadRoute() {
     if (activeScript) activeScript.remove();
     activeScript = document.createElement("script");
     if (route.module) activeScript.type = "module";
-    activeScript.src = `${route.script}?route=${currentNavigation}`;
+    activeScript.src = routeAssetUrl(route.script, { route: currentNavigation });
     activeScript.id = "cashierRouteScript";
     activeScript.onerror = () => renderRouteError();
     document.body.appendChild(activeScript);

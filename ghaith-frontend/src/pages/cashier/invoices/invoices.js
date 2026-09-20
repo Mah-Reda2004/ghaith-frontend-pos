@@ -4,6 +4,7 @@
 // ==========================================================================
 
 import { api, idempotencyKey, listFrom } from "../../../core/api.js";
+import { debounce, formatMoney } from "../../../core/utils.js";
 
 (function () {
   "use strict";
@@ -81,6 +82,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     filters: {},
     allData: [],
     allInvoices: [],
+    returnOperations: [],
     total: 0,
     operations: [],
     currentInvoice: null,
@@ -96,6 +98,12 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     exchangeQuery: "",
     exchangeVariantKey: "",
     exchangeVariantSize: "",
+    replacementStatus: "idle",
+    replacementError: "",
+    replacementRequestId: 0,
+    replacementPage: 1,
+    replacementHasMore: false,
+    exchangeCartOpen: false,
     currentShift: null,
     usersById: new Map(),
     customersById: new Map(),
@@ -103,6 +111,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     customerTypesById: new Map(),
     referenceDataPromise: null,
     lastOperation: null,
+    lastOperationType: "",
   };
 
   /* ------------------------------------------------------------------ */
@@ -115,10 +124,6 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
       .replace(/>/g, "&gt;");
   }
 
-  function formatMoney(n) {
-    return Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
   function formatDate(iso) {
     const d = new Date(iso);
     const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
@@ -126,9 +131,8 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     return { date, time };
   }
 
-  function debounce(fn, ms = 350) {
-    let t;
-    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  function roundMoney(value) {
+    return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   }
 
   function showToast(msg, type = "success") {
@@ -143,10 +147,19 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
   /* 5) حالة الـ Status → class                                          */
   /* ------------------------------------------------------------------ */
   const STATUS_MAP = {
-    "مكتملة":  { cls: "is-done",    label: "مكتملة" },
+    "مكتملة": { cls: "is-done", label: "مكتملة" },
+    "مدفوعة": { cls: "is-paid", label: "مدفوعة" },
     "قيد الدفع": { cls: "is-pending", label: "قيد الدفع" },
-    "آجل":     { cls: "is-debt",    label: "آجل" },
-    "ملغاة":   { cls: "is-cancel",  label: "ملغاة" },
+    "مدفوعة جزئيًا": { cls: "is-partially-paid", label: "مدفوعة جزئيًا" },
+    "غير مدفوعة": { cls: "is-unpaid", label: "غير مدفوعة" },
+    "آجل": { cls: "is-debt", label: "آجل" },
+    "مسودة": { cls: "is-draft", label: "مسودة" },
+    "ملغاة": { cls: "is-cancel", label: "ملغاة" },
+    "مرتجع": { cls: "is-returned", label: "مرتجع" },
+    "مرتجع جزئيًا": { cls: "is-partially-returned", label: "مرتجع جزئيًا" },
+    "مرتجع بالكامل": { cls: "is-fully-returned", label: "مرتجع بالكامل" },
+    "مستبدلة": { cls: "is-exchanged", label: "مستبدلة" },
+    "مستبدلة جزئيًا": { cls: "is-partially-exchanged", label: "مستبدلة جزئيًا" },
   };
 
   const METHOD_ICONS = {
@@ -156,8 +169,19 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     "تحويل":   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>`,
     "آجل":     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
   };
-  const STATUS_LABELS = { completed: "مكتملة", pending: "قيد الدفع", pending_payment: "قيد الدفع", deferred: "آجل", cancelled: "ملغاة", void: "ملغاة", returned: "مرتجع", partially_returned: "مرتجع جزئيًا", fully_returned: "مرتجع بالكامل" };
-  const PAYMENT_LABELS = { cash: "نقدي", wallet: "محفظة", card: "فيزا", transfer: "تحويل", instapay: "تحويل", deferred: "آجل" };
+  const STATUS_LABELS = {
+    completed: "مكتملة", paid: "مدفوعة", pending: "قيد الدفع", pending_payment: "قيد الدفع",
+    partially_paid: "مدفوعة جزئيًا", unpaid: "غير مدفوعة", deferred: "آجل", draft: "مسودة",
+    cancelled: "ملغاة", canceled: "ملغاة", void: "ملغاة", refunded: "مرتجع",
+    partially_refunded: "مرتجع جزئيًا", returned: "مرتجع", partially_returned: "مرتجع جزئيًا",
+    fully_returned: "مرتجع بالكامل", exchanged: "مستبدلة", partially_exchanged: "مستبدلة جزئيًا"
+  };
+  const PAYMENT_LABELS = {
+    cash: "نقدي", wallet: "محفظة", card: "فيزا", visa: "فيزا", credit_card: "فيزا",
+    debit_card: "فيزا", transfer: "محفظة إلكترونية", bank: "تحويل بنكي", bank_transfer: "تحويل بنكي",
+    instapay: "تحويل إنستاباي", deferred: "آجل", credit: "آجل", mixed: "دفع مختلط",
+    store_credit: "رصيد متجر", exchange_credit: "رصيد استبدال", exchange: "استبدال"
+  };
   const REFUND_LABELS = { cash: "نقدي", store_credit: "رصيد متجر", exchange_credit: "رصيد استبدال", exchange: "استبدال" };
 
   function invoiceItems(item) {
@@ -182,10 +206,120 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
 
   function operationInvoiceReference(operation) {
     const linkedInvoice = operation.invoice || operation.return_invoice || operation.exchange_invoice || {};
-    const invoiceNumber = operation.return_invoice_number || operation.exchange_invoice_number || operation.invoice_number || operation.related_invoice_number || linkedInvoice.invoice_number || operation.return_number || operation.exchange_number || operation.number || operation.operation_number;
-    if (invoiceNumber) return { label: "رقم الفاتورة", value: invoiceNumber };
+    const type = operationType(operation);
+    const operationNumber = operation.return_number || operation.exchange_number || operation.operation_number || operation.number || operation.return_invoice_number || operation.exchange_invoice_number;
+    if (operationNumber) return { label: type === "exchange" ? "رقم الاستبدال" : "رقم المرتجع", value: operationNumber };
     const barcode = operation.return_invoice_barcode || operation.exchange_invoice_barcode || operation.invoice_barcode || operation.operation_barcode || operation.barcode || operation.reference_barcode || linkedInvoice.barcode;
-    return { label: barcode ? "باركود الفاتورة" : "رقم الفاتورة", value: barcode || "—" };
+    return { label: barcode ? "باركود العملية" : type === "exchange" ? "رقم الاستبدال" : "رقم المرتجع", value: barcode || "—" };
+  }
+
+  function operationReferenceValue(operation) {
+    return String(operationInvoiceReference(operation).value || "");
+  }
+
+  function operationOriginalInvoiceId(operation) {
+    const original = operation.original_invoice || operation.sales_invoice || operation.invoice || {};
+    return String(operation.original_invoice_id || operation.sales_invoice_id || operation.invoice_id || original.id || "");
+  }
+
+  async function loadReturnOperations() {
+    try {
+      const first = await api.get("/api/v1/returns", { query: { page: 1, page_size: 100 } });
+      const pages = [first];
+      const firstItems = listFrom(first);
+      const total = Number(first?.total ?? first?.data?.total ?? firstItems.length);
+      for (let page = 2; page <= Math.ceil(total / 100); page += 1) {
+        pages.push(await api.get("/api/v1/returns", { query: { page, page_size: 100 } }));
+      }
+      state.returnOperations = pages.flatMap(listFrom).map(operation => ({ ...operation, type: "return" }));
+    } catch {
+      // يظل سجل فواتير البيع متاحًا حتى لو تعذر تحميل قائمة المرتجعات.
+      state.returnOperations = [];
+    }
+    return state.returnOperations;
+  }
+
+  function operationType(operation) {
+    const rawType = normalizeEnumKey(operation.type || operation.operation_type || operation.kind || "");
+    const reference = String(operation.number || operation.return_number || operation.exchange_number || "").toUpperCase();
+    return rawType.includes("exchange") || reference.startsWith("EXC") ? "exchange" : "return";
+  }
+
+  function operationId(operation, type = operationType(operation)) {
+    return operation[`${type}_id`] || operation.operation_id || operation.reference_id || operation.id;
+  }
+
+  function operationItems(operation, kind = "return") {
+    const keys = kind === "replacement"
+      ? ["replacement_items", "replacements", "new_items", "exchange_items", "received_items"]
+      : ["return_items", "returned_items", "refund_items"];
+    for (const key of keys) if (Array.isArray(operation?.[key])) return operation[key];
+    return [];
+  }
+
+  function operationItemQuantity(item) {
+    return Number(item?.quantity ?? item?.qty ?? item?.returned_quantity ?? item?.replacement_quantity ?? 1) || 0;
+  }
+
+  function operationItemInvoiceId(item) {
+    return String(item?.invoice_item_id || item?.sale_item_id || item?.original_item_id || item?.line_id || item?.id || "");
+  }
+
+  function operationItemVariantId(item) {
+    return String(item?.variant_id || item?.product_variant_id || item?.variant?.id || item?.product_variant?.id || "");
+  }
+
+  function operationItemName(item) {
+    const variant = state.variantsById.get(operationItemVariantId(item)) || {};
+    return item?.product_name || item?.name || item?.product?.name_ar || item?.product?.name || item?.variant?.product_name || variant.name || variant.name_ar || variant.product?.name_ar || variant.product?.name || "منتج بديل";
+  }
+
+  function operationItemSku(item) {
+    const variant = state.variantsById.get(operationItemVariantId(item)) || {};
+    return item?.sku || item?.variant?.sku || item?.product_variant?.sku || variant.sku || "";
+  }
+
+  function returnedQuantityForItem(item, operations = state.operations) {
+    const explicit = item.returned_quantity ?? item.refunded_quantity ?? item.returned_qty ?? item.refunded_qty;
+    if (explicit !== undefined && explicit !== null) return Math.max(0, Number(explicit) || 0);
+    const id = String(item.id || item.invoice_item_id || item.sale_item_id || "");
+    if (!id) return 0;
+    return operations.reduce((total, operation) => total + operationItems(operation, "return")
+      .filter(line => operationItemInvoiceId(line) === id)
+      .reduce((sum, line) => sum + operationItemQuantity(line), 0), 0);
+  }
+
+  function replacementItemsFromOperations(operations = state.operations) {
+    return operations.flatMap(operation => operationType(operation) === "exchange" ? operationItems(operation, "replacement").map(item => ({
+      name: operationItemName(item), sku: operationItemSku(item), qty: operationItemQuantity(item),
+      price: Number(item.unit_price ?? item.price ?? item.sale_price ?? 0), replacement: true
+    })) : []);
+  }
+
+  async function hydrateOperation(operation) {
+    const type = operationType(operation);
+    const id = operationId(operation, type);
+    const hasLineDetails = operationItems(operation, "return").length || operationItems(operation, "replacement").length;
+    if (!id || hasLineDetails) return operation;
+    try {
+      const response = await api.get(`/api/v1/${type === "exchange" ? "exchanges" : "returns"}/${encodeURIComponent(id)}`);
+      const details = response?.[type] || response?.data || response;
+      return { ...operation, ...(details && typeof details === "object" ? details : {}), type };
+    } catch {
+      return operation;
+    }
+  }
+
+  async function loadInvoiceOperations(invoiceId, { notify = false } = {}) {
+    try {
+      const response = await api.get(`/api/v1/sales-invoices/${encodeURIComponent(invoiceId)}/operations`);
+      const operations = Array.isArray(response?.operations) ? response.operations : listFrom(response);
+      state.operations = await Promise.all(operations.map(hydrateOperation));
+    } catch (error) {
+      state.operations = [];
+      if (notify) showToast(error.message, "error");
+    }
+    return state.operations;
   }
 
   function personName(person, ...fallbacks) {
@@ -193,10 +327,23 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     return person?.name || person?.full_name || person?.username || fallbacks.find(Boolean) || "—";
   }
 
+  function normalizeEnumKey(value) {
+    return String(value ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  }
+
+  function translatedEnum(value, labels, fallback = "—") {
+    if (Array.isArray(value)) {
+      const translated = value.map(entry => translatedEnum(entry, labels, "")).filter(Boolean);
+      return [...new Set(translated)].join(" + ") || fallback;
+    }
+    if (value == null || value === "") return fallback;
+    return labels[normalizeEnumKey(value)] || String(value);
+  }
+
   function invoicePaymentMethod(item) {
     const payment = item.payment || item.payment_details || item.payments?.[0] || {};
-    const method = item.payment_method ?? item.method ?? payment.method ?? payment.payment_method;
-    return PAYMENT_LABELS[method] || method || "—";
+    const method = item.payment_methods ?? item.payment_method ?? item.method ?? payment.methods ?? payment.method ?? payment.payment_method;
+    return translatedEnum(method, PAYMENT_LABELS);
   }
 
   function needsInvoiceDetails(item) {
@@ -211,12 +358,16 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     return !hasItems || !hasPhone || !hasCashier || !hasSales || !hasPayment;
   }
 
+  function invoiceFromResponse(response) {
+    return response?.invoice || response?.data?.invoice || response?.data?.item || response?.item || response?.data || response;
+  }
+
   async function hydrateInvoices(invoices) {
     return Promise.all(invoices.map(async item => {
       if (!item?.id || !needsInvoiceDetails(item)) return item;
       try {
         const response = await api.get(`/api/v1/sales-invoices/${encodeURIComponent(item.id)}`);
-        const details = response?.invoice || response?.data || response;
+        const details = invoiceFromResponse(response);
         return { ...item, ...details };
       } catch {
         return item;
@@ -285,9 +436,32 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     const items = invoiceItems(item).map(line => ({ ...state.variantsById.get(String(line.variant_id || line.product_variant_id || line.variant?.id || line.product_variant?.id || "")), ...line }));
     const discountRecord = typeof item.discount === "object" && item.discount ? item.discount : {};
     const customerType = customer.customer_type || state.customerTypesById.get(String(customer.customer_type_id || item.customer_type_id || "")) || {};
-    const discountValue = Number(item.discount_amount ?? discountRecord.amount ?? (typeof item.discount === "number" ? item.discount : 0));
+    const itemsSubtotal = items.reduce((sum, line) => {
+      const quantity = Number(line.quantity ?? line.qty ?? 1);
+      const unitPrice = Number(line.unit_price ?? line.price ?? line.sale_price ?? 0);
+      return sum + (Number(line.subtotal ?? line.line_total ?? line.total) || unitPrice * quantity);
+    }, 0);
+    const subtotalValue = Number(item.subtotal_amount ?? item.subtotal ?? item.gross_amount ?? itemsSubtotal ?? 0);
+    const totalValue = Number(item.total_amount ?? item.grand_total ?? item.net_amount ?? item.total ?? 0);
+    const taxValue = Number(item.tax_amount ?? item.vat_amount ?? item.vat ?? 0);
+    const explicitDiscount = Number(
+      item.discount_amount ?? item.total_discount ?? item.discount_value ?? item.discountAmount ??
+      discountRecord.amount ?? discountRecord.discount_amount ??
+      (typeof item.discount === "number" ? item.discount : 0)
+    );
+    const inferredDiscount = Math.max(0, subtotalValue + taxValue - totalValue);
+    const discountValue = explicitDiscount > 0 ? explicitDiscount : inferredDiscount;
     const discountType = item.discount_type || item.discount_reason || discountRecord.name || discountRecord.label || discountRecord.type;
-    const discountLabel = item.discount_label || (discountType === "percentage" ? `خصم نسبة ${Number(discountRecord.value || customerType.discount_percent || 0)}%` : discountType === "amount" ? "خصم مبلغ ثابت" : customerType.name ? `خصم ${customerType.name}` : discountValue > 0 ? "خصم الكاشير" : "بدون خصم");
+    const customerTypePercent = Number(customerType.discount_percent ?? customerType.discount_rate ?? customerType.discount ?? 0);
+    const inferredPercentage = subtotalValue > 0 ? (discountValue / subtotalValue) * 100 : 0;
+    const percentageValue = Number(discountRecord.value || item.discount_percent || item.discount_rate || customerTypePercent || inferredPercentage || 0);
+    const percentageText = percentageValue.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    const savedDiscountLabel = String(item.discount_label || "").trim();
+    const discountLabel = customerType.name && customerTypePercent > 0
+      ? `خصم ${customerType.name} ${percentageText}%`
+      : discountType === "percentage"
+        ? `خصم نسبة ${percentageText}%`
+        : savedDiscountLabel || (discountType === "amount" ? "خصم مبلغ ثابت" : customerType.name ? `خصم ${customerType.name}` : discountValue > 0 ? "خصم الكاشير" : "بدون خصم");
     return {
       ...item,
       id: String(item.id),
@@ -301,12 +475,12 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
       sales: state.usersById.get(String(item.sales_person_id || item.sales_user_id || sales?.id || "")) || personName(sales, item.sales_person_name, item.sales_user_name, item.sales_name),
       items_count: invoiceItemCount(item, items),
       payment_method: invoicePaymentMethod(item),
-      status: STATUS_LABELS[item.status] || item.status || "مكتملة",
-      total: Number(item.total_amount ?? item.total ?? 0),
-      subtotal: Number(item.subtotal ?? 0),
+      status: translatedEnum(item.status, STATUS_LABELS, "مكتملة"),
+      total: totalValue,
+      subtotal: subtotalValue,
       discount: discountValue,
       discountLabel,
-      tax: Number(item.tax_amount ?? item.vat_amount ?? item.vat ?? 0),
+      tax: taxValue,
       paid: Number(item.paid_amount ?? 0),
       remaining: Number(item.remaining_amount ?? 0),
       change: Number(item.change_amount ?? 0),
@@ -346,8 +520,11 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
       for (let page = 2; page <= Math.ceil(apiTotal / 100); page += 1) {
         rawInvoices.push(...listFrom(await api.get("/api/v1/sales-invoices", { query: { page, page_size: 100 } })));
       }
-      await loadReferenceData();
-      state.allInvoices = (await hydrateInvoices(rawInvoices)).map(normalizeInvoice);
+      await Promise.all([loadReferenceData(), loadReturnOperations()]);
+      state.allInvoices = (await hydrateInvoices(rawInvoices)).map(normalizeInvoice).map(invoice => ({
+        ...invoice,
+        returnOperations: state.returnOperations.filter(operation => operationOriginalInvoiceId(operation) === invoice.id)
+      }));
       syncCashierOptions(state.allInvoices);
       const filtered = filterInvoices(state.allInvoices);
       state.total = filtered.length;
@@ -365,7 +542,15 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
   function filterInvoices(invoices) {
     const f = state.filters;
     return invoices.filter(invoice => {
-      if (f.invNo && !String(invoice.number).toLowerCase().includes(f.invNo.toLowerCase())) return false;
+      if (f.invNo) {
+        const invoiceNumber = String(invoice.number).toLowerCase();
+        const query = f.invNo.toLowerCase();
+        const queryDigits = query.replace(/\D/g, "");
+        const invoiceDigits = invoiceNumber.replace(/\D/g, "");
+        const returnNumbers = (invoice.returnOperations || []).map(operationReferenceValue).map(value => value.toLowerCase());
+        const matchesReturn = returnNumbers.some(value => value.includes(query) || (queryDigits && value.replace(/\D/g, "").includes(queryDigits)));
+        if (!invoiceNumber.includes(query) && !(queryDigits && invoiceDigits.includes(queryDigits)) && !matchesReturn) return false;
+      }
       if (f.customer && !String(invoice.customer).toLowerCase().includes(f.customer.toLowerCase())) return false;
       if (f.phone && !String(invoice.phone).includes(f.phone)) return false;
       if (f.cashier && String(invoice.cashierId) !== String(f.cashier)) return false;
@@ -407,8 +592,9 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
       const { date, time } = formatDate(inv.date);
       const st = STATUS_MAP[inv.status] || { cls: "is-done", label: inv.status };
       const methodIcon = METHOD_ICONS[inv.payment_method] || "";
+      const returnReferences = (inv.returnOperations || []).map(operationReferenceValue).filter(value => value && value !== "—");
       tr.innerHTML = `
-        <td><span class="inv-no">#${escapeHtml(inv.number)}</span></td>
+        <td><span class="inv-no">#${escapeHtml(inv.number)}</span>${returnReferences.map(reference => `<span class="inv-return-no">مرتجع #${escapeHtml(reference)}</span>`).join("")}</td>
         <td><span class="inv-customer">${escapeHtml(inv.customer)}</span></td>
         <td><span style="font-size:var(--fs-sm);direction:ltr;display:inline-block;">${escapeHtml(inv.phone || "---")}</span></td>
         <td>
@@ -500,8 +686,10 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
   /* ------------------------------------------------------------------ */
   function applyFilters() {
     state.page = 1;
+    const scannedInvoiceNumber = els.filterInvNo.value.trim().replace(/^\*+|\*+$/g, "");
+    if (scannedInvoiceNumber !== els.filterInvNo.value) els.filterInvNo.value = scannedInvoiceNumber;
     state.filters = {
-      invNo:    els.filterInvNo.value.trim(),
+      invNo:    scannedInvoiceNumber,
       customer: els.filterCustomer.value.trim(),
       phone:    els.filterPhone.value.trim(),
       date:     els.filterDate.value,
@@ -530,6 +718,11 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
   [els.filterInvNo, els.filterCustomer, els.filterPhone].forEach(el => {
     el.addEventListener("input", debouncedFilter);
   });
+  els.filterInvNo.addEventListener("keydown", event => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    applyFilters();
+  });
   [els.filterDate, els.filterCashier, els.filterMethod, els.filterStatus].forEach(el => {
     el.addEventListener("change", applyFilters);
   });
@@ -553,13 +746,14 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     if (!btn || ["view", "print", "return-flow"].includes(btn.dataset.action)) {
       try {
         const response = await api.get(`/api/v1/sales-invoices/${encodeURIComponent(id)}`);
-        inv = normalizeInvoice(response?.invoice || response?.data || response);
+        const details = invoiceFromResponse(response);
+        inv = normalizeInvoice({ ...inv, ...details });
         state.allData = state.allData.map(item => item.id === id ? inv : item);
       } catch (error) { showToast(error.message, "error"); return; }
     }
 
     if (!btn || btn.dataset.action === "view") openDetailModal(inv);
-    if (btn && btn.dataset.action === "print") printSingleInvoice(inv);
+    if (btn && btn.dataset.action === "print") { await loadInvoiceOperations(inv.id); printSingleInvoice(inv); }
     if (btn && btn.dataset.action === "return-flow") openReturnFlow(inv);
   });
 
@@ -575,17 +769,30 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
   /* ------------------------------------------------------------------ */
   /* 13) تدفق الاسترجاع والاستبدال                                      */
   /* ------------------------------------------------------------------ */
-  function buildReturnItems(inv) {
+  function buildReturnItems(inv, operations = state.operations) {
     const invoiceItems = inv.items || [];
-    if (invoiceItems.length) return invoiceItems.map((item, index) => ({
-      id: String(item.id || item.invoice_item_id),
-      name: item.product_name || item.name || item.product?.name || "منتج",
-      sku: item.sku || item.variant?.sku || "—",
-      soldQty: Number(item.returnable_quantity ?? item.available_return_quantity ?? item.remaining_quantity ?? item.quantity ?? item.qty ?? 1), qty: 0,
-      price: Number(item.unit_price || item.price || item.sale_price || 0), selected: false,
-      variantId: item.variant_id || item.variant?.id || null,
-      version: Number(item.version || item.variant?.version || 1)
-    }));
+    if (invoiceItems.length) return invoiceItems.map(item => {
+      const purchasedQty = Number(item.quantity ?? item.qty ?? 1) || 0;
+      const returnedQty = Math.min(purchasedQty, returnedQuantityForItem(item, operations));
+      const explicitReturnable = item.returnable_quantity ?? item.available_return_quantity ?? item.remaining_returnable_quantity ?? item.remaining_quantity;
+      const returnableQty = explicitReturnable !== undefined && explicitReturnable !== null
+        ? Math.max(0, Math.min(purchasedQty, Number(explicitReturnable) || 0))
+        : Math.max(0, purchasedQty - returnedQty);
+      const variantId = String(item.variant_id || item.product_variant_id || item.variant?.id || item.product_variant?.id || "");
+      const nestedVariants = item.product_variants || item.product?.product_variants || item.product?.variants || [];
+      const nestedVariant = Array.isArray(nestedVariants) ? nestedVariants.find(entry => String(entry.id || entry.variant_id) === variantId) || nestedVariants[0] || {} : nestedVariants;
+      const variant = item.product_variant || item.variant || nestedVariant || {};
+      return {
+        id: String(item.id || item.invoice_item_id), name: item.product_name || item.name || item.product?.name || "منتج",
+        sku: item.sku || item.variant?.sku || "—",
+        barcode: item.barcode || item.variant?.barcode || item.product_variant?.barcode || item.product?.barcode || item.sku || item.variant?.sku || "—", purchasedQty,
+        size: item.size || item.variant_size || item.product_size || item.size_name || variant.size || variant.size_name || "",
+        color: item.color || item.variant_color || item.product_color || item.color_name || variant.color || variant.color_name || "",
+        returnedQty: Math.max(returnedQty, purchasedQty - returnableQty), soldQty: returnableQty, qty: 0,
+        price: Number(item.unit_price || item.price || item.sale_price || 0), selected: false,
+        variantId: item.variant_id || item.variant?.id || null, version: Number(item.version || item.variant?.version || 1)
+      };
+    });
     return [];
   }
 
@@ -594,19 +801,19 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
   }
 
   function getReturnTotals() {
-    const grossSubtotal = getSelectedReturnItems().reduce((sum, item) => sum + item.price * item.qty, 0);
+    const grossSubtotal = roundMoney(getSelectedReturnItems().reduce((sum, item) => sum + item.price * item.qty, 0));
     const invoiceSubtotal = Number(state.currentInvoice?.subtotal || 0);
     const discountRate = invoiceSubtotal > 0 ? Math.min(Number(state.currentInvoice?.discount || 0) / invoiceSubtotal, 1) : 0;
-    const discount = grossSubtotal * discountRate;
-    const subtotal = grossSubtotal - discount;
+    const discount = roundMoney(grossSubtotal * discountRate);
+    const subtotal = roundMoney(grossSubtotal - discount);
     const taxableBase = Math.max(invoiceSubtotal - Number(state.currentInvoice?.discount || 0), 0);
     const taxRate = taxableBase > 0 ? Number(state.currentInvoice?.tax || 0) / taxableBase : 0;
-    const tax = subtotal * taxRate;
-    return { grossSubtotal, discount, subtotal, tax, total: subtotal + tax, taxRate, discountRate };
+    const tax = roundMoney(subtotal * taxRate);
+    return { grossSubtotal, discount, subtotal, tax, total: roundMoney(subtotal + tax), taxRate, discountRate };
   }
 
   function getExchangeTotal() {
-    return state.exchangeCart.reduce((sum, item) => sum + item.price * item.qty, 0);
+    return roundMoney(state.exchangeCart.reduce((sum, item) => sum + item.price * item.qty, 0));
   }
 
   async function getCurrentShiftId() {
@@ -622,7 +829,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
 
   function setFlowHeading(title) {
     els.returnFlowTitle.textContent = title;
-    els.returnFlowInvoiceNo.textContent = state.currentInvoice ? `رقم الفاتورة: #${state.currentInvoice.id}` : "";
+    els.returnFlowInvoiceNo.textContent = state.currentInvoice ? `رقم الفاتورة: #${state.currentInvoice.number || state.currentInvoice.invoice_number || state.currentInvoice.id}` : "";
   }
 
   function firstReplacementRecord(value) {
@@ -662,9 +869,112 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     }).filter(item => item.id && item.stock > 0);
   }
 
+  function replacementCategoryId() {
+    if (state.exchangeCategory === "الكل") return "";
+    return state.replacementCategories.find(category => category.name === state.exchangeCategory)?.id || "";
+  }
+
+  async function loadReplacementProducts({ render = true, append = false } = {}) {
+    const requestId = ++state.replacementRequestId;
+    if (!append) state.replacementPage = 1;
+    state.replacementStatus = "loading";
+    state.replacementError = "";
+    if (render && state.returnStep === "exchange") renderExchangePicker();
+    try {
+      const response = await api.get("/api/v1/products/search", {
+        query: {
+          q: state.exchangeQuery.trim() || undefined,
+          category_id: replacementCategoryId() || undefined,
+          in_stock: true,
+          page: state.replacementPage,
+          page_size: 100
+        }
+      });
+      if (requestId !== state.replacementRequestId) return;
+      const products = normalizeReplacementProducts(response);
+      if (append) {
+        const merged = new Map(state.replacementProducts.map(product => [product.id, product]));
+        products.forEach(product => merged.set(product.id, product));
+        state.replacementProducts = [...merged.values()];
+      } else state.replacementProducts = products;
+      const total = Number(response?.total ?? response?.pagination?.total);
+      state.replacementHasMore = Number.isFinite(total) ? state.replacementPage * 100 < total : products.length === 100;
+      state.replacementStatus = state.replacementProducts.length ? "success" : "empty";
+    } catch (error) {
+      if (requestId !== state.replacementRequestId) return;
+      if (!append) state.replacementProducts = [];
+      state.replacementStatus = append && state.replacementProducts.length ? "success" : "error";
+      state.replacementError = error.message;
+      if (append) showToast("تعذّر تحميل المزيد من المنتجات.", "error");
+    }
+    if (render && state.returnStep === "exchange") renderExchangePicker();
+  }
+
+  function addExchangeItem(product) {
+    if (!product || product.stock <= 0) return;
+    const existing = state.exchangeCart.find(item => item.id === product.id);
+    if (existing) {
+      if (existing.qty >= product.stock) {
+        showToast("لا توجد كمية إضافية من هذا المنتج في المخزون.", "error");
+        return;
+      }
+      existing.qty += 1;
+      existing.stock = product.stock;
+      existing.version = product.version;
+    } else {
+      state.exchangeCart.push({ ...product, qty: 1 });
+    }
+  }
+
+  async function findReplacementByCode(rawCode) {
+    const code = String(rawCode || "").replace(/[\r\n\t]/g, "").trim();
+    if (!code) return false;
+    let product = state.replacementProducts.find(item => item.barcode.toLowerCase() === code.toLowerCase() || item.sku.toLowerCase() === code.toLowerCase());
+    if (!product) {
+      try {
+        const response = await api.get(`/api/v1/products/barcode/${encodeURIComponent(code)}`);
+        product = normalizeReplacementProduct(response?.item || response?.data || response);
+      } catch {
+        showToast(`لم يتم العثور على منتج بالكود: ${code}`, "error");
+        return false;
+      }
+    }
+    if (!product.id || product.stock <= 0) {
+      showToast("هذا المنتج غير متاح في المخزون.", "error");
+      return false;
+    }
+    const catalogItem = state.replacementProducts.find(item => item.id === product.id);
+    if (catalogItem) Object.assign(catalogItem, product);
+    else state.replacementProducts.push(product);
+    addExchangeItem(product);
+    state.exchangeQuery = "";
+    renderExchangePicker();
+    requestAnimationFrame(() => document.getElementById("exchangeSearch")?.focus());
+    return true;
+  }
+
+  async function refreshExchangeCartStock() {
+    const refreshed = [];
+    for (const item of state.exchangeCart) {
+      let latest;
+      try {
+        if (item.barcode) latest = normalizeReplacementProduct(await api.get(`/api/v1/products/barcode/${encodeURIComponent(item.barcode)}`, { query: { _: Date.now() } }));
+        else {
+          const response = await api.get("/api/v1/products/search", { query: { q: item.sku, in_stock: true, page: 1, page_size: 20, _: Date.now() } });
+          latest = normalizeReplacementProducts(response).find(product => product.id === item.id || product.sku === item.sku);
+        }
+      } catch { latest = null; }
+      if (!latest?.id || latest.stock <= 0) continue;
+      refreshed.push({ ...item, ...latest, qty: Math.min(item.qty, latest.stock) });
+    }
+    state.exchangeCart = refreshed;
+    await loadReplacementProducts({ render: false });
+  }
+
   async function openReturnFlow(inv, mode = "return") {
     state.currentInvoice = inv;
     state.returnStep = "select";
+    await loadInvoiceOperations(inv.id);
     state.returnItems = buildReturnItems(inv);
     state.replacementProducts = [];
     state.replacementCategories = [];
@@ -676,27 +986,23 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     state.exchangeQuery = "";
     state.exchangeVariantKey = "";
     state.exchangeVariantSize = "";
+    state.replacementStatus = "loading";
+    state.replacementError = "";
+    state.replacementPage = 1;
+    state.replacementHasMore = false;
+    state.exchangeCartOpen = false;
     state.lastOperation = null;
+    state.lastOperationType = "";
     els.returnFlowOverlay.hidden = false;
     document.body.style.overflow = "hidden";
     renderReturnFlow();
     try {
-      const first = await api.get("/api/v1/products/search", { query: { in_stock: true, page: 1, page_size: 100 } });
-      const pageCount = Number(first?.pages || first?.total_pages) || Math.ceil(Number(first?.total || listFrom(first).length) / 100);
-      const responses = [first];
-      for (let page = 2; page <= pageCount; page += 1) responses.push(await api.get("/api/v1/products/search", { query: { in_stock: true, page, page_size: 100 } }));
-      state.replacementProducts = responses.flatMap(response => normalizeReplacementProducts(response));
-      try {
-        state.replacementCategories = listFrom(await api.get("/api/v1/categories")).filter(item => item.status !== "inactive" && item.is_active !== false).map(item => {
-          const category = firstReplacementRecord(item);
-          return { id: String(category.id || category.uuid || category.category_id || ""), name: category.name || category.name_ar || category.category_name };
-        }).filter(item => item.id && item.name);
-        state.replacementProducts.forEach(product => {
-          const category = state.replacementCategories.find(item => item.id === product.categoryId || item.name.toLocaleLowerCase("ar") === product.category.toLocaleLowerCase("ar"));
-          if (category) { product.categoryId = category.id; product.category = category.name; }
-        });
-      } catch { /* تظل تصنيفات المنتجات نفسها متاحة إذا تعذر تحميل القائمة. */ }
-    } catch (error) { showToast(error.message, "error"); }
+      state.replacementCategories = listFrom(await api.get("/api/v1/categories")).filter(item => item.status !== "inactive" && item.is_active !== false).map(item => {
+        const category = firstReplacementRecord(item);
+        return { id: String(category.id || category.uuid || category.category_id || ""), name: category.name || category.name_ar || category.category_name };
+      }).filter(item => item.id && item.name);
+    } catch { state.replacementCategories = []; }
+    await loadReplacementProducts({ render: false });
   }
 
   async function submitReturn() {
@@ -711,11 +1017,12 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     await api.post(`${path}/quote`, payload);
     const response = await api.post(path, payload, { headers: { "Idempotency-Key": idempotencyKey() } });
     state.lastOperation = response?.return || response?.data || response;
+    state.lastOperationType = "return";
     state.returnStep = "success"; renderReturnFlow(); await loadData();
   }
 
   async function submitExchange() {
-    const difference = getExchangeTotal() - getReturnTotals().total;
+    const difference = roundMoney(getExchangeTotal() - getReturnTotals().total);
     const payload = {
       reason: state.returnReason.trim() || "استبدال",
       refund_method: difference < 0 ? "cash" : null,
@@ -729,7 +1036,8 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     const quotePayload = { reason: payload.reason, refund_method: payload.refund_method, return_items: payload.return_items, replacement_items: payload.replacement_items, difference_payment: payload.difference_payment };
     await api.post(`${path}/quote`, quotePayload);
     const response = await api.post(path, payload, { headers: { "Idempotency-Key": idempotencyKey() } });
-    state.lastOperation = response?.exchange || response?.data || response;
+    state.lastOperation = response?.exchange || response?.operation || response?.result?.exchange || response?.result || response?.data?.exchange || response?.data || response;
+    state.lastOperationType = "exchange";
     state.returnStep = "success"; renderReturnFlow(); await loadData();
   }
 
@@ -761,16 +1069,16 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
         <div class="return-table">
           <div class="return-row return-row--head"><span>المنتج</span><span>الكمية المباعة</span><span>الكمية المرتجعة</span><span>الإجمالي</span></div>
           ${state.returnItems.map(item => `
-            <div class="return-row${item.selected ? " is-selected" : ""}" data-return-id="${item.id}">
+            <div class="return-row${item.selected ? " is-selected" : ""}${item.soldQty <= 0 ? " is-returned" : ""}" data-return-id="${item.id}">
               <label class="return-product">
-                <input type="checkbox" data-flow-action="toggle-return" ${item.selected ? "checked" : ""} />
-                <span>${escapeHtml(item.name)}<small>SKU: ${escapeHtml(item.sku)}</small></span>
+                <input type="checkbox" data-flow-action="toggle-return" ${item.selected ? "checked" : ""} ${item.soldQty <= 0 ? "disabled" : ""} />
+                <span>${escapeHtml(item.name)}${item.soldQty <= 0 ? '<em class="return-status-badge">تم الارتجاع</em>' : ""}<small>SKU: ${escapeHtml(item.sku)}${item.returnedQty > 0 && item.soldQty > 0 ? ` · تم ارتجاع ${item.returnedQty} من ${item.purchasedQty}` : ""}</small></span>
               </label>
-              <span class="num">${item.soldQty}</span>
+              <span class="num">${item.purchasedQty}</span>
               <div class="return-stepper">
                 <button type="button" data-flow-action="return-dec" ${!item.selected || item.qty <= 1 ? "disabled" : ""}>−</button>
                 <span class="num">${item.qty}</span>
-                <button type="button" data-flow-action="return-inc" ${!item.selected || item.qty >= item.soldQty ? "disabled" : ""}>+</button>
+                <button type="button" data-flow-action="return-inc" ${!item.selected || item.qty >= item.soldQty || item.soldQty <= 0 ? "disabled" : ""}>+</button>
               </div>
               <span class="return-price num">${formatMoney(item.price * item.qty)} ج.م</span>
             </div>`).join("")}
@@ -812,11 +1120,13 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
   function renderExchangePicker() {
     setFlowHeading("اختيار المنتجات البديلة");
     const total = getExchangeTotal();
+    const returnCredit = getReturnTotals().total;
+    const difference = roundMoney(total - returnCredit);
     const categories = ["الكل", ...new Set([...state.replacementCategories.map(category => category.name), ...state.replacementProducts.map(product => product.category)].filter(Boolean))];
     const visibleVariants = state.replacementProducts.filter(product => {
       const matchesCategory = state.exchangeCategory === "الكل" || product.category === state.exchangeCategory;
       const query = state.exchangeQuery.trim().toLowerCase();
-      const matchesQuery = !query || product.name.toLowerCase().includes(query) || product.sku.toLowerCase().includes(query);
+      const matchesQuery = !query || product.name.toLowerCase().includes(query) || product.sku.toLowerCase().includes(query) || product.barcode.toLowerCase().includes(query);
       return matchesCategory && matchesQuery;
     });
     const productGroups = [...visibleVariants.reduce((groups, variant) => {
@@ -834,10 +1144,18 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
       <div class="exchange-variant-step"><div class="exchange-variant-heading"><i>1</i><div><b>اختر المقاس</b><small>${sizes.length} مقاسات متاحة</small></div></div><div class="exchange-size-options">${sizes.map(size => { const stock = activeGroup.filter(item => variantSize(item) === size).reduce((sum, item) => sum + item.stock, 0); return `<button type="button" class="exchange-size-choice${state.exchangeVariantSize === size ? " is-active" : ""}" data-flow-action="choose-exchange-size" data-size="${escapeHtml(size)}"><strong>${escapeHtml(size)}</strong><small>${stock} قطعة</small></button>`; }).join("")}</div></div>
       <div class="exchange-variant-step${state.exchangeVariantSize ? "" : " is-waiting"}"><div class="exchange-variant-heading"><i>2</i><div><b>اختر اللون</b><small>${state.exchangeVariantSize ? `الألوان المتاحة لمقاس ${escapeHtml(state.exchangeVariantSize)}` : "اختر المقاس أولاً"}</small></div></div>${state.exchangeVariantSize ? `<div class="exchange-color-options">${matchingColors.map(item => { const color = visibleReplacementValue(item.color) || "غير محدد"; return `<button type="button" class="exchange-color-choice" data-flow-action="choose-exchange-variant" data-product-id="${escapeHtml(item.id)}" ${item.stock <= 0 ? "disabled" : ""}><span><i aria-hidden="true"></i><strong>${escapeHtml(color)}</strong></span><small>${item.stock} قطعة</small><b>${formatMoney(item.price)} ج.م</b><em>إضافة للسلة ←</em></button>`; }).join("")}</div>` : '<p class="exchange-variant-empty">حدد المقاس لعرض الألوان المتاحة.</p>'}</div>
     </section></div>` : "";
+    const catalogContent = state.replacementStatus === "loading"
+      ? '<div class="view-loading exchange-catalog-state" role="status"><span class="spinner" aria-hidden="true"></span><p>جاري تحميل المنتجات المتاحة...</p></div>'
+      : state.replacementStatus === "error"
+        ? `<div class="error-state exchange-catalog-state"><h3>تعذّر تحميل المنتجات</h3><p>${escapeHtml(state.replacementError || "تحقق من الاتصال ثم أعد المحاولة.")}</p><button class="btn btn-primary" type="button" data-flow-action="retry-exchange-catalog">إعادة المحاولة</button></div>`
+        : productGroups.length
+          ? `${productGroups.map(group => { const stock = group.variants.reduce((sum, item) => sum + item.stock, 0), prices = group.variants.map(item => item.price), colors = [...new Set(group.variants.map(item => visibleReplacementValue(item.color)).filter(Boolean))], groupSizes = [...new Set(group.variants.map(item => visibleReplacementValue(item.size)).filter(Boolean))], price = Math.min(...prices) === Math.max(...prices) ? formatMoney(prices[0]) : `${formatMoney(Math.min(...prices))} - ${formatMoney(Math.max(...prices))}`; return `<button class="product-card exchange-product${stock <= 0 ? " is-out-of-stock" : ""}" type="button" data-flow-action="add-exchange" data-product-key="${escapeHtml(group.key)}" ${stock <= 0 ? "disabled" : ""}><div class="product-card__badges"><span class="product-card__badge-stock">المخزون: ${stock}</span>${group.variants.length > 1 ? `<span class="product-card__variant-count">${group.variants.length} اختيارات</span>` : ""}</div><strong class="product-card__name">${escapeHtml(group.name)}</strong>${colors.length || groupSizes.length ? `<div class="product-card__details">${colors.length ? `<span><b>الألوان</b>${escapeHtml(colors.join("، "))}</span>` : ""}${groupSizes.length ? `<span><b>المقاسات</b><span class="product-card__size-list">${groupSizes.map(size => `<strong class="product-card__size">${escapeHtml(size)}</strong>`).join("")}</span></span>` : ""}</div>` : ""}<div class="product-card__footer"><span class="product-card__price num">${price} <small>ج.م</small></span><span class="product-card__choose">${group.variants.length > 1 ? "اختيار" : "إضافة"} +</span></div></button>`; }).join("")}${state.replacementHasMore ? '<div class="exchange-load-more"><button class="btn btn-outline" type="button" data-flow-action="load-more-exchange">تحميل منتجات إضافية</button></div>' : ""}`
+          : '<div class="empty-state exchange-catalog-state"><h3>لا توجد منتجات مطابقة</h3><p>جرّب البحث باسم آخر أو اختر تصنيفًا مختلفًا.</p><button class="btn btn-outline" type="button" data-flow-action="reset-exchange-filter">عرض كل المنتجات</button></div>';
     els.returnFlowBody.innerHTML = `
       <div class="exchange-picker">
-        <section class="exchange-catalog"><div class="exchange-catalog__tools"><label class="exchange-search"><span>⌕</span><input class="input" id="exchangeSearch" value="${escapeHtml(state.exchangeQuery)}" placeholder="ابحث باسم المنتج أو SKU..."></label><div class="exchange-categories">${categories.map(category => `<button class="exchange-category${state.exchangeCategory === category ? " is-active" : ""}" data-flow-action="exchange-category" data-category="${escapeHtml(category)}" type="button">${escapeHtml(category)}</button>`).join("")}</div></div><main class="exchange-products">${productGroups.length ? productGroups.map(group => { const stock = group.variants.reduce((sum, item) => sum + item.stock, 0), prices = group.variants.map(item => item.price), colors = [...new Set(group.variants.map(item => visibleReplacementValue(item.color)).filter(Boolean))], groupSizes = [...new Set(group.variants.map(item => visibleReplacementValue(item.size)).filter(Boolean))], price = Math.min(...prices) === Math.max(...prices) ? formatMoney(prices[0]) : `${formatMoney(Math.min(...prices))} - ${formatMoney(Math.max(...prices))}`; return `<button class="product-card exchange-product${stock <= 0 ? " is-out-of-stock" : ""}" type="button" data-flow-action="add-exchange" data-product-key="${escapeHtml(group.key)}" ${stock <= 0 ? "disabled" : ""}><div class="product-card__badges"><span class="product-card__badge-stock">المخزون: ${stock}</span>${group.variants.length > 1 ? `<span class="product-card__variant-count">${group.variants.length} اختيارات</span>` : ""}</div><strong class="product-card__name">${escapeHtml(group.name)}</strong>${colors.length || groupSizes.length ? `<div class="product-card__details">${colors.length ? `<span><b>الألوان</b>${escapeHtml(colors.join("، "))}</span>` : ""}${groupSizes.length ? `<span><b>المقاسات</b><span class="product-card__size-list">${groupSizes.map(size => `<strong class="product-card__size">${escapeHtml(size)}</strong>`).join("")}</span></span>` : ""}</div>` : ""}<div class="product-card__footer"><span class="product-card__price num">${price} <small>ج.م</small></span><span class="product-card__choose">${group.variants.length > 1 ? "اختيار" : "إضافة"} +</span></div></button>`; }).join("") : '<p class="return-hint">لا توجد منتجات مطابقة.</p>'}</main></section>
-        <aside class="exchange-cart"><div class="exchange-cart__header"><h3>سلة الاستبدال</h3><span>${state.exchangeCart.reduce((sum, item) => sum + item.qty, 0)} عناصر</span></div><div class="exchange-cart__list">${state.exchangeCart.length ? state.exchangeCart.map(item => `<div class="exchange-cart__item" data-exchange-id="${item.id}"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.size)} · ${escapeHtml(item.color)}</small><div><span class="return-stepper"><button data-flow-action="exchange-dec">−</button><span>${item.qty}</span><button data-flow-action="exchange-inc">+</button></span><span class="return-price num">${formatMoney(item.price * item.qty)} ج.م</span></div></div>`).join("") : '<p class="return-hint">لم يتم اختيار منتجات بديلة بعد.</p>'}</div><div class="return-breakdown"><div><span>الإجمالي</span><strong class="return-price num">${formatMoney(total)} ج.م</strong></div></div><div class="exchange-cart__actions"><button class="exchange-back-button" data-flow-action="back-manage"><span aria-hidden="true">→</span><b>الرجوع</b><small>لطريقة الاسترداد</small></button><button class="btn btn-primary exchange-next" data-flow-action="to-summary" ${state.exchangeCart.length === 0 ? "disabled" : ""}>التالي</button></div></aside>${picker}
+        <section class="exchange-catalog"><div class="exchange-catalog__tools"><label class="exchange-search"><span>⌕</span><input class="input" id="exchangeSearch" value="${escapeHtml(state.exchangeQuery)}" placeholder="ابحث بالاسم أو SKU أو امسح الباركود..." autocomplete="off"><small>سكانر</small></label><div class="exchange-categories">${categories.map(category => `<button class="exchange-category${state.exchangeCategory === category ? " is-active" : ""}" data-flow-action="exchange-category" data-category="${escapeHtml(category)}" type="button">${escapeHtml(category)}</button>`).join("")}</div></div><main class="exchange-products">${catalogContent}</main></section>
+        <button class="exchange-cart-fab" type="button" data-flow-action="toggle-exchange-cart">السلة (${state.exchangeCart.reduce((sum, item) => sum + item.qty, 0)})</button><button class="exchange-cart-shade${state.exchangeCartOpen ? " is-open" : ""}" type="button" data-flow-action="close-exchange-cart" aria-label="إغلاق سلة الاستبدال"></button>
+        <aside class="exchange-cart${state.exchangeCartOpen ? " is-open" : ""}"><div class="exchange-cart__header"><h3>سلة الاستبدال</h3><span>${state.exchangeCart.reduce((sum, item) => sum + item.qty, 0)} عناصر</span><button class="exchange-cart__close" type="button" data-flow-action="close-exchange-cart" aria-label="إغلاق السلة">×</button></div><div class="exchange-cart__list">${state.exchangeCart.length ? state.exchangeCart.map(item => `<div class="exchange-cart__item" data-exchange-id="${escapeHtml(item.id)}"><div class="exchange-cart__item-heading"><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(visibleReplacementValue(item.size) || "—")} · ${escapeHtml(visibleReplacementValue(item.color) || "—")}</small></span><button class="exchange-cart__remove" type="button" data-flow-action="exchange-remove" aria-label="حذف ${escapeHtml(item.name)}">×</button></div><div><span class="return-stepper"><button type="button" data-flow-action="exchange-dec">−</button><span class="num">${item.qty}</span><button type="button" data-flow-action="exchange-inc" ${item.qty >= item.stock ? "disabled" : ""}>+</button></span><span class="return-price num">${formatMoney(item.price * item.qty)} ج.م</span></div><small class="exchange-cart__stock">المتاح: ${item.stock} قطعة</small></div>`).join("") : '<div class="empty-state exchange-cart__empty"><h3>السلة فارغة</h3><p>اختر منتجًا بديلًا أو امسح باركوده.</p></div>'}</div><div class="return-breakdown exchange-live-totals"><div><span>رصيد المنتجات المرتجعة</span><strong class="num">${formatMoney(returnCredit)} ج.م</strong></div><div><span>إجمالي المنتجات البديلة</span><strong class="num">${formatMoney(total)} ج.م</strong></div><div class="return-breakdown__total"><span>${difference > 0 ? "المطلوب من العميل" : difference < 0 ? "المستحق للعميل" : "لا يوجد فرق"}</span><strong class="num">${formatMoney(Math.abs(difference))} ج.م</strong></div></div><div class="exchange-cart__actions"><button class="exchange-back-button" type="button" data-flow-action="back-manage"><span aria-hidden="true">→</span><b>الرجوع</b><small>لطريقة الاسترداد</small></button><button class="btn btn-primary exchange-next" type="button" data-flow-action="to-summary" ${state.exchangeCart.length === 0 ? "disabled" : ""}>التالي</button></div></aside>${picker}
       </div>`;
   }
 
@@ -845,7 +1163,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     setFlowHeading("ملخص عملية الاستبدال");
     const returnTotal = getReturnTotals().total;
     const exchangeTotal = getExchangeTotal();
-    const difference = exchangeTotal - returnTotal;
+    const difference = roundMoney(exchangeTotal - returnTotal);
     els.returnFlowBody.innerHTML = `
       <div class="exchange-summary">
         <div class="exchange-summary__columns">
@@ -862,25 +1180,29 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
   }
 
   function renderFlowSuccess() {
-    const isExchange = state.refundMethod === "exchange";
+    const isExchange = state.lastOperationType === "exchange" || state.refundMethod === "exchange";
     const returnTotal = getReturnTotals().total;
     const exchangeTotal = getExchangeTotal();
     const operation = state.lastOperation || {};
     const operationNumber = operation.return_number || operation.exchange_number || operation.number || operation.id || "—";
-    const operationAmount = isExchange ? Math.abs(Number(operation.difference_amount ?? operation.net_difference ?? exchangeTotal - returnTotal)) : Number(operation.total_refund ?? operation.return_total ?? returnTotal);
+    const operationAmount = isExchange ? Math.abs(roundMoney(operation.difference_amount ?? operation.net_difference ?? exchangeTotal - returnTotal)) : roundMoney(operation.total_refund ?? operation.return_total ?? returnTotal);
     setFlowHeading(isExchange ? "نجاح عملية الاستبدال" : "نجاح عملية المرتجع");
     els.returnFlowBody.innerHTML = `<div class="flow-success"><div class="flow-success__icon">✓</div><h3>${isExchange ? "تم تنفيذ الاستبدال بنجاح" : "تم تنفيذ المرتجع بنجاح"}</h3><p>تمت معالجة الطلب وتحديث المخزون</p><div class="flow-success__details"><div><span>${isExchange ? "رقم حركة الاستبدال" : "رقم إيصال المرتجع"}</span><strong class="num">#${escapeHtml(operationNumber)}</strong></div><div><span>${isExchange ? "صافي الفارق" : "المبلغ المسترد"}</span><strong class="num">${formatMoney(operationAmount)} ج.م</strong></div></div><div class="flow-success__actions"><button class="btn btn-primary" data-flow-action="print-return">${isExchange ? "طباعة إيصال الاستبدال" : "طباعة إيصال المرتجع"}</button><button class="btn btn-outline" data-flow-action="close-success">إغلاق النافذة</button></div></div>`;
   }
 
   function printReturnReceipt() {
-    const isExchange = state.refundMethod === "exchange";
+    const isExchange = state.lastOperationType === "exchange" || state.refundMethod === "exchange";
     const returnTotal = getReturnTotals().total;
     const exchangeTotal = getExchangeTotal();
+    const operation = state.lastOperation || {};
+    const operationNumber = operation.return_number || operation.exchange_number || operation.operation_number || operation.number || operation.id || "—";
+    const originalInvoiceNumber = state.currentInvoice.number || state.currentInvoice.invoice_number || "—";
+    const barcode = String(operationNumber).replace(/\D/g, "");
     if (window.GhaithPrint) {
-      window.GhaithPrint.printReceipt({title:isExchange?"إيصال استبدال":"إيصال مرتجع",number:`${isExchange?"EXC":"RET"}-${Date.now().toString().slice(-5)}`,customer:state.currentInvoice.customer,note:`الفاتورة الأصلية: ${state.currentInvoice.id}`,items:getSelectedReturnItems().map(item=>({name:item.name,sku:item.sku,qty:item.qty,price:item.price})),totals:[{label:"قيمة المرتجعات",value:returnTotal},...(isExchange?[{label:"قيمة البدائل",value:exchangeTotal},{label:"صافي الفارق",value:Math.abs(exchangeTotal-returnTotal),final:true}]:[{label:"المبلغ المسترد",value:returnTotal,final:true}])]});
+      window.GhaithPrint.printReceipt({title:isExchange?"إيصال استبدال":"إيصال مرتجع",number:operationNumber,barcode,customer:state.currentInvoice.customer,customer_phone:state.currentInvoice.phone || "",cashier:state.currentInvoice.cashier || "—",sales:state.currentInvoice.sales || "—",note:`الفاتورة الأصلية: ${originalInvoiceNumber}`,items:[...getSelectedReturnItems().map(item=>({name:item.name,sku:item.sku,qty:item.qty,price:item.price,size:item.size || "",color:item.color || "",status:"تم الارتجاع"})),...(isExchange?state.exchangeCart.map(item=>({name:item.name,sku:item.sku,qty:item.qty,price:item.price,size:item.size || "",color:item.color || "",status:"منتج بديل"})):[])],totals:[{label:"قيمة المرتجعات",value:returnTotal},...(isExchange?[{label:"قيمة البدائل",value:exchangeTotal},{label:"صافي الفارق",value:Math.abs(exchangeTotal-returnTotal),final:true}]:[{label:"المبلغ المسترد",value:returnTotal,final:true}])]});
       return;
     }
-    els.printArea.innerHTML = `<div class="receipt"><div class="r-header"><h2>غيث للزي الاسلامي الراقي</h2><p class="r-sub">إيصال ${isExchange ? "استبدال" : "مرتجع"}</p><p>الفاتورة الأصلية: ${escapeHtml(state.currentInvoice.id)}</p></div><div class="r-totals"><div class="r-row"><span>قيمة المرتجعات:</span><span>${formatMoney(returnTotal)} ج.م</span></div>${isExchange ? `<div class="r-row"><span>قيمة البدائل:</span><span>${formatMoney(exchangeTotal)} ج.م</span></div><div class="r-row r-final"><span>صافي الفارق:</span><span>${formatMoney(Math.abs(exchangeTotal - returnTotal))} ج.م</span></div>` : `<div class="r-row r-final"><span>المبلغ المسترد:</span><span>${formatMoney(returnTotal)} ج.م</span></div>`}</div></div>`;
+    els.printArea.innerHTML = `<div class="receipt"><div class="r-header"><h2>غيث للزي الاسلامي الراقي</h2><p class="r-sub">إيصال ${isExchange ? "استبدال" : "مرتجع"} #${escapeHtml(operationNumber)}</p><p>الفاتورة الأصلية: ${escapeHtml(originalInvoiceNumber)}</p></div><div class="r-totals"><div class="r-row"><span>قيمة المرتجعات:</span><span>${formatMoney(returnTotal)} ج.م</span></div>${isExchange ? `<div class="r-row"><span>قيمة البدائل:</span><span>${formatMoney(exchangeTotal)} ج.م</span></div><div class="r-row r-final"><span>صافي الفارق:</span><span>${formatMoney(Math.abs(roundMoney(exchangeTotal - returnTotal)))} ج.م</span></div>` : `<div class="r-row r-final"><span>المبلغ المسترد:</span><span>${formatMoney(returnTotal)} ج.م</span></div>`}</div></div>`;
     window.print();
   }
 
@@ -901,17 +1223,23 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     if (action === "back-select") { state.returnStep = "select"; renderReturnFlow(); }
     if (action === "back-manage") { state.returnStep = "manage"; renderReturnFlow(); }
     if (action === "confirm-return") { if (state.refundMethod === "exchange") { state.returnStep = "exchange"; renderReturnFlow(); } else { try { target.disabled = true; await submitReturn(); } catch (error) { showToast(error.message, "error"); target.disabled = false; } } }
-    if (action === "add-exchange") { const variants = state.replacementProducts.filter(item => (item.productId || item.id) === target.dataset.productKey); if (variants.length === 1) { const product = variants[0], existing = state.exchangeCart.find(item => item.id === product.id); existing ? existing.qty++ : state.exchangeCart.push({ ...product, qty: 1 }); } else { const sizes = [...new Set(variants.map(item => visibleReplacementValue(item.size) || "غير محدد"))]; state.exchangeVariantKey = target.dataset.productKey; state.exchangeVariantSize = sizes.length === 1 ? sizes[0] : ""; } renderExchangePicker(); }
+    if (action === "add-exchange") { const variants = state.replacementProducts.filter(item => (item.productId || item.id) === target.dataset.productKey); if (variants.length === 1) addExchangeItem(variants[0]); else { const sizes = [...new Set(variants.map(item => visibleReplacementValue(item.size) || "غير محدد"))]; state.exchangeVariantKey = target.dataset.productKey; state.exchangeVariantSize = sizes.length === 1 ? sizes[0] : ""; } renderExchangePicker(); }
     if (action === "choose-exchange-size") { state.exchangeVariantSize = target.dataset.size; renderExchangePicker(); }
-    if (action === "choose-exchange-variant") { const product = state.replacementProducts.find(item => item.id === target.dataset.productId); if (product) { const existing = state.exchangeCart.find(item => item.id === product.id); existing ? existing.qty++ : state.exchangeCart.push({ ...product, qty: 1 }); } state.exchangeVariantKey = ""; state.exchangeVariantSize = ""; renderExchangePicker(); }
+    if (action === "choose-exchange-variant") { addExchangeItem(state.replacementProducts.find(item => item.id === target.dataset.productId)); state.exchangeVariantKey = ""; state.exchangeVariantSize = ""; renderExchangePicker(); }
     if (action === "close-exchange-variant") { state.exchangeVariantKey = ""; state.exchangeVariantSize = ""; renderExchangePicker(); }
-    if (action === "exchange-category") { state.exchangeCategory = target.dataset.category; renderExchangePicker(); }
-    if (action === "exchange-inc" && exchangeItem) { exchangeItem.qty++; renderExchangePicker(); }
+    if (action === "exchange-category") { state.exchangeCategory = target.dataset.category; await loadReplacementProducts(); }
+    if (action === "retry-exchange-catalog") await loadReplacementProducts();
+    if (action === "load-more-exchange") { state.replacementPage += 1; await loadReplacementProducts({ append: true }); }
+    if (action === "reset-exchange-filter") { state.exchangeCategory = "الكل"; state.exchangeQuery = ""; await loadReplacementProducts(); }
+    if (action === "toggle-exchange-cart") { state.exchangeCartOpen = !state.exchangeCartOpen; renderExchangePicker(); }
+    if (action === "close-exchange-cart") { state.exchangeCartOpen = false; renderExchangePicker(); }
+    if (action === "exchange-inc" && exchangeItem) { if (exchangeItem.qty >= exchangeItem.stock) showToast("وصلت للكمية المتاحة في المخزون.", "error"); else exchangeItem.qty++; renderExchangePicker(); }
     if (action === "exchange-dec" && exchangeItem) { exchangeItem.qty--; if (exchangeItem.qty <= 0) state.exchangeCart = state.exchangeCart.filter(item => item.id !== exchangeItem.id); renderExchangePicker(); }
+    if (action === "exchange-remove" && exchangeItem) { state.exchangeCart = state.exchangeCart.filter(item => item.id !== exchangeItem.id); renderExchangePicker(); }
     if (action === "to-summary") { state.returnStep = "summary"; renderReturnFlow(); }
     if (action === "back-exchange") { state.returnStep = "exchange"; renderReturnFlow(); }
     if (action === "payment-method") { state.paymentMethod = target.dataset.value; renderExchangeSummary(); }
-    if (action === "finish-exchange") { try { target.disabled = true; await submitExchange(); } catch (error) { showToast(error.message, "error"); target.disabled = false; } }
+    if (action === "finish-exchange") { try { target.disabled = true; await submitExchange(); } catch (error) { if (error.status === 409) { await refreshExchangeCartStock(); state.returnStep = "exchange"; renderReturnFlow(); showToast(state.exchangeCart.length ? "تم تحديث المخزون والكميات. راجع السلة ثم حاول مرة أخرى." : "تغيّر المخزون ولم تعد المنتجات المختارة متاحة.", "error"); } else { showToast(error.message, "error"); target.disabled = false; } } }
     if (action === "print-return") printReturnReceipt();
   });
 
@@ -919,10 +1247,44 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     if (event.target.dataset.flowAction === "refund-method") { state.refundMethod = event.target.value; renderReturnManagement(); }
   });
 
-  const updateExchangeSearch = debounce(value => { state.exchangeQuery = value; renderExchangePicker(); }, 350);
+  const updateExchangeSearch = debounce(async value => { state.exchangeQuery = value; await loadReplacementProducts(); }, 350);
   els.returnFlowBody.addEventListener("input", event => {
     if (event.target.id === "returnReason") state.returnReason = event.target.value;
     if (event.target.id === "exchangeSearch") updateExchangeSearch(event.target.value);
+  });
+
+  els.returnFlowBody.addEventListener("keydown", event => {
+    if (event.target.id !== "exchangeSearch" || !["Enter", "Tab"].includes(event.key)) return;
+    const value = event.target.value.trim();
+    if (!value) return;
+    event.preventDefault();
+    findReplacementByCode(value);
+  });
+
+  const EXCHANGE_SCAN_GAP_MS = 120;
+  let exchangeScanBuffer = "";
+  let exchangeScanLastKeyAt = 0;
+  let exchangeScanResetTimer = null;
+  document.addEventListener("keydown", event => {
+    if (els.returnFlowOverlay.hidden || state.returnStep !== "exchange" || event.ctrlKey || event.altKey || event.metaKey) return;
+    const target = event.target;
+    if (target instanceof HTMLElement && (target.matches("input, textarea, select") || target.isContentEditable)) return;
+    const now = performance.now();
+    if (["Enter", "Tab"].includes(event.key)) {
+      if (exchangeScanBuffer.length >= 4 && now - exchangeScanLastKeyAt <= EXCHANGE_SCAN_GAP_MS) {
+        event.preventDefault();
+        findReplacementByCode(exchangeScanBuffer);
+      }
+      exchangeScanBuffer = "";
+      clearTimeout(exchangeScanResetTimer);
+      return;
+    }
+    if (event.key.length !== 1 || event.repeat) return;
+    if (now - exchangeScanLastKeyAt > EXCHANGE_SCAN_GAP_MS) exchangeScanBuffer = "";
+    exchangeScanBuffer += event.key;
+    exchangeScanLastKeyAt = now;
+    clearTimeout(exchangeScanResetTimer);
+    exchangeScanResetTimer = setTimeout(() => { exchangeScanBuffer = ""; }, EXCHANGE_SCAN_GAP_MS * 2);
   });
 
   els.closeReturnFlowBtn.addEventListener("click", closeReturnFlow);
@@ -937,13 +1299,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
   /* ------------------------------------------------------------------ */
   async function openDetailModal(inv) {
     state.currentInvoice = inv;
-    try {
-      const response = await api.get(`/api/v1/sales-invoices/${encodeURIComponent(inv.id)}/operations`);
-      state.operations = Array.isArray(response?.operations) ? response.operations : listFrom(response);
-    } catch (error) {
-      state.operations = [];
-      showToast(error.message, "error");
-    }
+    await loadInvoiceOperations(inv.id, { notify: true });
     const { date, time } = formatDate(inv.date);
     const st = STATUS_MAP[inv.status] || { cls: "is-done", label: inv.status };
     const items = buildReturnItems(inv);
@@ -951,12 +1307,12 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     const tax = Number(inv.tax || 0);
     const customer = inv.customerData || {};
     const operationsMarkup = state.operations.length ? state.operations.map(operation => {
-      const rawType = operation.type || operation.operation_type || "";
-      const type = rawType === "exchange" || (operation.number || "").startsWith("EXC") ? "exchange" : "return";
+      const type = operationType(operation);
       const label = type === "exchange" ? "استبدال" : "مرتجع";
       const invoiceReference = operationInvoiceReference(operation);
       const operationDetails = [operation.reason && `السبب: ${operation.reason}`, operation.refund_method && `الاسترداد: ${REFUND_LABELS[operation.refund_method] || operation.refund_method}`].filter(Boolean).join(" · ");
-      return `<article class="related-operation${type === "exchange" ? " is-exchange" : ""}"><span>${label} · ${invoiceReference.label}</span><strong class="num">#${escapeHtml(invoiceReference.value)}</strong><small>${escapeHtml(operationDetails || STATUS_LABELS[operation.status] || operation.status || "مكتملة")} · ${formatMoney(operation.total_refund ?? operation.total_amount ?? operation.return_total ?? operation.difference_amount ?? 0)} ج.م</small></article>`;
+      const replacementNames = operationItems(operation, "replacement").map(item => `${operationItemName(item)} × ${operationItemQuantity(item)}`).join("، ");
+      return `<article class="related-operation${type === "exchange" ? " is-exchange" : ""}"><span>${label} · ${invoiceReference.label}</span><strong class="num">#${escapeHtml(invoiceReference.value)}</strong>${replacementNames ? `<b class="related-operation__products">البديل: ${escapeHtml(replacementNames)}</b>` : ""}<small>${escapeHtml(operationDetails || STATUS_LABELS[operation.status] || operation.status || "مكتملة")} · ${formatMoney(operation.total_refund ?? operation.total_amount ?? operation.return_total ?? operation.difference_amount ?? 0)} ج.م</small></article>`;
     }).join("") : '<article class="related-operation"><span>لا توجد عمليات مرتبطة</span><strong>—</strong><small>حتى الآن</small></article>';
     els.detailTitle.innerHTML = `<span>تفاصيل الفاتورة <b class="num">#${escapeHtml(inv.number)}</b></span><span class="inv-detail-status">${escapeHtml(st.label)}</span>`;
 
@@ -987,7 +1343,7 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
             <section class="detail-info-card"><h3>بيانات العميل</h3><div><span>الاسم:</span><strong>${escapeHtml(inv.customer)}</strong></div><div><span>الجوال:</span><strong class="num">${escapeHtml(inv.phone || "—")}</strong></div><div><span>العنوان:</span><strong>${escapeHtml(customer.address || inv.customer_address || "—")}</strong></div><div><span>الفئة:</span><em>${escapeHtml(customer.customer_type?.name || customer.type_name || inv.customer_type_name || "عميل نقدي")}</em></div></section>
             <section class="detail-info-card"><h3>بيانات الفاتورة</h3><div><span>التاريخ:</span><strong>${escapeHtml(date)}</strong></div><div><span>الوقت:</span><strong>${escapeHtml(time)}</strong></div><div><span>الكاشير:</span><strong>${escapeHtml(inv.cashier)}</strong></div><div><span>السيلز:</span><strong>${escapeHtml(inv.sales || "—")}</strong></div><div><span>طريقة الدفع:</span><strong>${escapeHtml(inv.payment_method)}</strong></div></section>
           </div>
-          <div class="detail-products-table"><div class="detail-product-row is-head"><span>المنتج</span><span>التصنيف</span><span>المواصفات</span><span>الكمية</span><span>السعر</span><span>الإجمالي</span></div>${(inv.items || []).map(item => `<div class="detail-product-row"><span>${escapeHtml(item.product_name || item.name || item.product?.name || "منتج")}</span><span>${escapeHtml(item.category?.name || item.category_name || "—")}</span><span>${escapeHtml(invoiceItemSpecifications(item))}</span><span class="num">${Number(item.quantity ?? item.qty ?? 0)}</span><span class="num">${formatMoney(item.unit_price ?? item.price ?? 0)}</span><span class="num">${formatMoney(item.line_total ?? Number(item.unit_price ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 0))}</span></div>`).join("") || '<div class="detail-product-row"><span>لا توجد أصناف</span></div>'}</div>
+          <div class="detail-products-table"><div class="detail-product-row is-head"><span>المنتج</span><span>التصنيف</span><span>المواصفات</span><span>الكمية</span><span>السعر</span><span>الإجمالي</span></div>${buildReturnItems(inv).map(item => { const source = (inv.items || []).find(line => String(line.id || line.invoice_item_id) === item.id) || {}; return `<div class="detail-product-row${item.soldQty <= 0 ? " is-returned" : ""}"><span>${escapeHtml(item.name)}${item.soldQty <= 0 ? '<em class="return-status-badge">تم الارتجاع</em>' : item.returnedQty > 0 ? `<em class="return-status-badge is-partial">مرتجع ${item.returnedQty}</em>` : ""}</span><span>${escapeHtml(source.category?.name || source.category_name || "—")}</span><span>${escapeHtml(invoiceItemSpecifications(source))}</span><span class="num">${item.purchasedQty}</span><span class="num">${formatMoney(item.price)}</span><span class="num">${formatMoney(item.price * item.purchasedQty)}</span></div>`; }).join("") || '<div class="detail-product-row"><span>لا توجد أصناف</span></div>'}</div>
           <section class="related-operations"><h3>العمليات المرتبطة</h3><div class="related-operations__list"><article class="related-operation is-original"><span>الفاتورة الأصلية</span><strong class="num">#${escapeHtml(inv.number)}</strong><small>${escapeHtml(date)} | ${escapeHtml(inv.cashier)}</small></article>${operationsMarkup}</div></section>
         </main>
       </div>
@@ -1031,17 +1387,28 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
     if (window.GhaithPrint) {
       window.GhaithPrint.printReceipt({
         title: st.label === "مرتجع" ? "إيصال مرتجع" : "فاتورة مبيعات",
-        number: inv.id,
+        number: inv.number,
         date,
         time,
         customer: inv.customer,
+        customer_phone: inv.phone || "",
+        customer_address: inv.customerData?.address || inv.customer_address || "",
         cashier: inv.cashier,
         sales: inv.sales || "—",
         payment: inv.payment_method,
-        items: (inv.items || buildReturnItems(inv)).map(item => ({ name: item.name, sku: item.sku, qty: item.qty || item.quantity || item.soldQty || 1, price: item.price || 0 })),
+        paid_amount: inv.paid,
+        remaining_amount: inv.remaining,
+        barcode: String(inv.number || "").replace(/\D/g, "") || inv.number,
+        items: [
+          ...buildReturnItems(inv).map(item => ({ name: item.name, status: item.soldQty <= 0 ? "تم الارتجاع" : item.returnedQty > 0 ? `مرتجع ${item.returnedQty}` : "", sku: item.sku, barcode: item.barcode || item.sku, size: item.size, color: item.color, qty: item.purchasedQty || 1, price: item.price || 0, total: (item.price || 0) * (item.purchasedQty || 1) })),
+          ...replacementItemsFromOperations().map(item => ({ ...item, status: "منتج بديل" }))
+        ],
         totals: [
-          ...(Number(inv.discount) ? [{ label: "الخصم", value: inv.discount, negative: true }] : []),
-          { label: "الإجمالي", value: inv.total, final: true }
+          ...(Number(inv.subtotal) ? [{ label: "الإجمالي الفرعي", value: inv.subtotal }] : []),
+          ...(Number(inv.discount) ? [{ label: inv.discountLabel || "الخصم", value: inv.discount, negative: true }] : []),
+          { label: "الإجمالي النهائي", value: inv.total, final: true },
+          { label: "المدفوع", value: inv.paid },
+          { label: "المتبقي", value: inv.remaining, emphasis: Number(inv.remaining) > 0 }
         ],
         note: `الحالة: ${st.label}`
       });
@@ -1052,15 +1419,18 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
         <div class="r-header">
           <h2>غيث للزي الاسلامي الراقي</h2>
           <p class="r-sub">فاتورة مبيعات</p>
-          <p class="r-date">${escapeHtml(date)} — ${escapeHtml(time)} | رقم: ${escapeHtml(inv.id)}</p>
+          <p class="r-date">${escapeHtml(date)} — ${escapeHtml(time)} | رقم: ${escapeHtml(inv.number)}</p>
         </div>
         <div class="r-totals">
           <div class="r-row"><span>العميل:</span><span>${escapeHtml(inv.customer)}</span></div>
+          <div class="r-row"><span>الهاتف:</span><span>${escapeHtml(inv.phone || "—")}</span></div>
           <div class="r-row"><span>الكاشير:</span><span>${escapeHtml(inv.cashier)}</span></div>
           <div class="r-row"><span>السيلز:</span><span>${escapeHtml(inv.sales || "—")}</span></div>
           <div class="r-row"><span>طريقة الدفع:</span><span>${escapeHtml(inv.payment_method)}</span></div>
           <div class="r-row"><span>الحالة:</span><span>${escapeHtml(st.label)}</span></div>
           <div class="r-row r-final"><span>الإجمالي:</span><span>${formatMoney(inv.total)} ج.م</span></div>
+          <div class="r-row"><span>المدفوع:</span><span>${formatMoney(inv.paid)} ج.م</span></div>
+          <div class="r-row"><span>المتبقي:</span><span>${formatMoney(inv.remaining)} ج.م</span></div>
         </div>
         <div class="r-footer">
           <p>شكراً لزيارتكم ❤</p>

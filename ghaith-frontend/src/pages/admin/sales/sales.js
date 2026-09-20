@@ -1,10 +1,10 @@
 import { api, listFrom } from "../../../core/api.js";
-import { debounce, escapeHtml } from "../../../core/utils.js";
+import { debounce, escapeHtml, formatMoney } from "../../../core/utils.js";
 
-const money = value => `${Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 2 })} EGP`;
+const money = value => `${formatMoney(value)} EGP`;
 const dateLabel = value => value ? new Date(value).toLocaleString("ar-EG", { dateStyle: "medium", timeStyle: "short" }) : "—";
 const PERIOD_LABELS = { today: "اليوم", yesterday: "أمس", this_week: "هذا الأسبوع", this_month: "هذا الشهر", last_30_days: "آخر 30 يومًا", custom: "فترة مخصصة" };
-const PAYMENT_LABELS = { cash: "نقدي", card: "بطاقة", wallet: "محفظة", transfer: "تحويل", bank: "تحويل بنكي", instapay: "إنستا باي", deferred: "آجل", mixed: "دفع مختلط", store_credit: "رصيد متجر", exchange_credit: "رصيد استبدال" };
+const PAYMENT_LABELS = { cash: "نقدي", card: "بطاقة", wallet: "رصيد العميل", transfer: "محفظة إلكترونية", bank: "تحويل بنكي", instapay: "إنستا باي", deferred: "آجل", mixed: "دفع مختلط", store_credit: "رصيد متجر", exchange_credit: "رصيد استبدال" };
 const STATUS_LABELS = { completed: "مكتملة", pending: "قيد الانتظار", pending_payment: "قيد الدفع", deferred: "آجل", cancelled: "ملغاة", void: "ملغاة", returned: "مرتجعة", partially_returned: "مرتجعة جزئيًا", fully_returned: "مرتجعة بالكامل", refunded: "تم رد المبلغ" };
 const references = { users: new Map(), userEntries: [], customers: new Map(), variants: new Map(), customerTypes: new Map(), promise: null };
 

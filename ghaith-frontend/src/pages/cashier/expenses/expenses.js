@@ -1,6 +1,7 @@
 // ==========================================================================
 
 import { api, idempotencyKey, listFrom } from "../../../core/api.js";
+import { formatMoney } from "../../../core/utils.js";
 // المصروفات — منطق كامل: بطاقات الإحصائيات، جدول المصروفات، إضافة مصروف،
 // مودال النجاح، بحث، Pagination
 // ==========================================================================
@@ -97,13 +98,6 @@ import { api, idempotencyKey, listFrom } from "../../../core/api.js";
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
-  }
-
-  function formatMoney(n) {
-    return Number(n).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
   }
 
   function formatDate(iso) {

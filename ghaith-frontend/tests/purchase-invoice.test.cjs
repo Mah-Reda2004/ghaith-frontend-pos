@@ -23,7 +23,7 @@ const os = require('node:os');
     await page.goto('http://127.0.0.1:8765/src/pages/admin/admin.html#purchase-invoice');
     await page.locator('#piBarcode').waitFor();
     assert.equal(await page.locator('#adminNav [data-route="suppliers"]').evaluate(node => node.classList.contains('is-active')), true);
-    await page.locator('#piSupplier').selectOption('demo-supplier-1');
+    await page.locator('#piSupplier').selectOption('test-supplier');
     assert.equal(await page.locator('#piNumber, #piTax').count(), 0);
     await page.locator('#piBarcode').fill('62210001');
     await page.locator('#piBarcode').press('Enter');

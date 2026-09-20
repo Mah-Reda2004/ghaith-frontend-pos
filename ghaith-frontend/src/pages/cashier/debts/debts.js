@@ -1,5 +1,5 @@
 import { bindThemeToggle, initTheme } from "../../../core/theme.js";
-import { debounce, escapeHtml } from "../../../core/utils.js";
+import { debounce, escapeHtml, formatMoney } from "../../../core/utils.js";
 import { api, idempotencyKey, listFrom } from "../../../core/api.js";
 
 if (document.documentElement.dataset.cashierSpa !== "true") {
@@ -14,6 +14,8 @@ const state = {
   cashierFilter: "all",
   currentDebt: null,
   paymentMethod: "cash",
+  usersById: new Map(),
+  variantsById: new Map(),
 };
 
 const els = {
@@ -40,42 +42,99 @@ const els = {
   startNewSale: document.getElementById("startNewSaleBtn"),
 };
 
-function formatMoney(value) {
-  return Number(value).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+function normalizeDebtItem(item) {
+  const variantId = String(item.product_variant_id || item.variant_id || item.variant?.id || "");
+  const variant = state.variantsById.get(variantId) || item.product_variant || item.variant || {};
+  const quantity = Number(item.qty ?? item.quantity ?? 1);
+  const price = Number(item.unit_price ?? item.price ?? 0);
+  return {
+    ...item,
+    name: item.product_name || item.name || variant.name || variant.product_name || "منتج",
+    sku: item.sku || variant.sku || "—",
+    qty: quantity,
+    price,
+    total: Number(item.total ?? item.line_total ?? price * quantity)
+  };
 }
 
 function normalizeDebt(item) {
-  const customer = item.customer || {}, invoice = typeof item.invoice === "object" && item.invoice ? item.invoice : {}, cashier = invoice.cashier || item.cashier || {};
+  const customer = item.customers || item.customer || {}, invoice = typeof item.invoice === "object" && item.invoice ? item.invoice : {}, cashier = invoice.cashier || item.cashier || {};
   const created = item.created_at || invoice.created_at || new Date().toISOString();
+  const cashierId = item.cashier_id || invoice.cashier_id || cashier.id;
+  const rawItems = item.items || item.invoice_items || invoice.items || invoice.invoice_items || [];
   return {
     ...item,
     id: String(item.id),
     customerId: customer.id || item.customer_id || invoice.customer_id,
     invoiceId: item.invoice_id || item.sales_invoice_id || invoice.id || "",
     invoiceNumber: item.invoice_number || item.sales_invoice_number || item.sale_invoice_number || invoice.invoice_number || invoice.number || item.invoiceNumber || "—",
-    customer: customer.name || item.customer_name || "عميل",
+    customer: customer.name || item.customer_name || "عميل نقدي",
+    customerPhone: customer.phone || item.customer_phone || "",
     date: created.slice(0, 10),
     time: new Date(created).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }),
-    cashier: cashier.name || cashier.username || item.cashier_name || "—",
+    cashier: state.usersById.get(String(cashierId || "")) || cashier.name || cashier.username || item.cashier_name || "—",
     total: Number(item.total_amount ?? invoice.total_amount ?? item.original_amount ?? 0),
     paid: Number(item.paid_amount ?? item.amount_paid ?? 0),
     remaining: Number(item.remaining_amount ?? item.balance ?? 0),
-    items: item.items || invoice.items || []
+    subtotal: Number(invoice.subtotal ?? item.subtotal ?? item.total_amount ?? invoice.total_amount ?? invoice.total ?? 0),
+    discount: Number(invoice.discount_amount ?? invoice.discount ?? item.discount_amount ?? item.discount ?? 0),
+    tax: Number(invoice.tax_amount ?? invoice.vat_amount ?? item.tax_amount ?? item.vat_amount ?? 0),
+    items: rawItems.map(normalizeDebtItem)
   };
+}
+
+async function loadPagedDirectory(path) {
+  const first = await api.get(path, { query: { page: 1, page_size: 100 } });
+  const pages = [first];
+  const total = Number(first?.total ?? first?.data?.total ?? listFrom(first).length);
+  for (let page = 2; page <= Math.ceil(total / 100); page += 1) pages.push(await api.get(path, { query: { page, page_size: 100 } }));
+  return pages.flatMap(listFrom);
+}
+
+async function loadReferenceData() {
+  const [users, products] = await Promise.all([
+    loadPagedDirectory("/api/v1/admin/users").catch(() => []),
+    loadPagedDirectory("/api/v1/pos/catalog").catch(() => [])
+  ]);
+  state.usersById = new Map(users.map(entry => {
+    const user = entry.user || entry;
+    return [String(user.id || entry.user_id || ""), user.name || user.full_name || user.username || "—"];
+  }).filter(([id]) => id));
+  state.variantsById = new Map(products.flatMap(product => {
+    const variants = product.variants || product.product_variants || [product];
+    return variants.map(variant => [String(variant.id || variant.variant_id || ""), { ...variant, name: product.name_ar || product.name || variant.name_ar || variant.name }]);
+  }).filter(([id]) => id));
+}
+
+async function hydrateDebtInvoice(item) {
+  if (!item.invoice_id && !item.sales_invoice_id) return item;
+  try {
+    const response = await api.get(`/api/v1/sales-invoices/${encodeURIComponent(item.invoice_id || item.sales_invoice_id)}`);
+    const invoice = response?.invoice || response?.data || response;
+    return { ...item, invoice };
+  } catch {
+    return item;
+  }
 }
 
 async function loadDebts() {
   els.refresh.disabled = true;
   els.refresh.classList.add("is-loading");
+  els.resultCount.textContent = "جاري تحميل المديونيات...";
   try {
-    const response = await api.get("/api/v1/debts", { query: { page: 1, page_size: 100 } });
-    state.debts = listFrom(response).map(normalizeDebt);
+    const [response] = await Promise.all([
+      api.get("/api/v1/debts", { query: { page: 1, page_size: 100 } }),
+      loadReferenceData()
+    ]);
+    const hydrated = await Promise.all(listFrom(response).map(hydrateDebtInvoice));
+    state.debts = hydrated.map(normalizeDebt);
     populateCashierFilter();
     renderDebts();
   } catch (error) {
     state.debts = [];
     renderDebts();
-    showToast(error.message, "error");
+    els.resultCount.textContent = "تعذّر تحميل المديونيات. اضغط تحديث للمحاولة مرة أخرى.";
+    showToast("تعذّر تحميل المديونيات. حاول مرة أخرى.", "error");
   } finally {
     els.refresh.disabled = false;
     els.refresh.classList.remove("is-loading");
@@ -108,7 +167,7 @@ function matchesDateFilter(value) {
 
 function populateCashierFilter() {
   const currentValue = els.cashierFilter.value;
-  const cashiers = [...new Set(state.debts.map(debt => debt.cashier))];
+  const cashiers = [...new Set(state.debts.map(debt => debt.cashier).filter(name => name && name !== "—"))];
   els.cashierFilter.innerHTML = `<option value="all">كل الكاشيرية</option>${cashiers.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}`;
   els.cashierFilter.value = cashiers.includes(currentValue) ? currentValue : "all";
   state.cashierFilter = els.cashierFilter.value;
@@ -159,13 +218,20 @@ function showToast(message, type = "success") {
 
 async function openDetail(debt) {
   try {
-    const response = await api.get(`/api/v1/debts/${encodeURIComponent(debt.id)}`);
-    debt = normalizeDebt({ ...debt, ...(response?.debt || response?.data || response) });
-    if (debt.customerId) debt.customerSummary = await api.get(`/api/v1/debtors/${encodeURIComponent(debt.customerId)}/summary`);
+    const [debtResponse, invoiceResponse] = await Promise.all([
+      api.get(`/api/v1/debts/${encodeURIComponent(debt.id)}`),
+      debt.invoiceId ? api.get(`/api/v1/sales-invoices/${encodeURIComponent(debt.invoiceId)}`).catch(() => null) : null
+    ]);
+    const invoice = invoiceResponse?.invoice || invoiceResponse?.data || invoiceResponse || debt.invoice;
+    debt = normalizeDebt({ ...debt, ...(debtResponse?.debt || debtResponse?.data || debtResponse), invoice });
+    if (debt.customerId) {
+      try { debt.customerSummary = await api.get(`/api/v1/debtors/${encodeURIComponent(debt.customerId)}/summary`); }
+      catch { debt.customerSummary = null; }
+    }
   } catch (error) { showToast(error.message, "error"); return; }
   state.currentDebt = debt;
-  const subtotal = debt.total / 1.15;
-  const tax = debt.total - subtotal;
+  const subtotal = debt.subtotal || debt.total + debt.discount - debt.tax;
+  const taxLabel = debt.tax > 0 ? "ضريبة القيمة المضافة" : "الضريبة";
   els.detailBody.innerHTML = `
     <div class="debt-detail__body">
       <div class="debt-detail__hero"><h3>${escapeHtml(debt.customer)}</h3><p>فاتورة ضريبية مبسطة</p></div>
@@ -177,11 +243,11 @@ async function openDetail(debt) {
       </div>
       <div class="debt-items">
         <div class="debt-items__row is-head"><span>اسم المنتج</span><span>الكمية</span><span>السعر (ج.م)</span><span>الإجمالي (ج.م)</span></div>
-        ${debt.items.map(item => `<div class="debt-items__row"><span>${escapeHtml(item.name)}</span><span class="num">${item.qty}</span><span class="num">${formatMoney(item.price)}</span><span class="num">${formatMoney(item.price * item.qty)}</span></div>`).join("")}
+        ${debt.items.length ? debt.items.map(item => `<div class="debt-items__row"><span>${escapeHtml(item.name)}<small>${escapeHtml(item.sku)}</small></span><span class="num">${item.qty}</span><span class="num">${formatMoney(item.price)}</span><span class="num">${formatMoney(item.total)}</span></div>`).join("") : '<div class="debt-items__empty">لا تتوفر تفاصيل أصناف هذه الفاتورة.</div>'}
       </div>
       <div class="debt-detail__totals">
         <section class="debt-balance-card"><div><span>المبلغ المدفوع</span><strong class="num">${formatMoney(debt.paid)} ج.م</strong></div><div class="is-danger"><span>المتبقي</span><strong class="num">${formatMoney(debt.remaining)} ج.م</strong></div></section>
-        <section class="debt-total-card"><div><span>الإجمالي الفرعي</span><strong class="num">${formatMoney(subtotal)}</strong></div><div><span>الخصم</span><strong class="num">0.00</strong></div><div><span>ضريبة القيمة المضافة (15%)</span><strong class="num">${formatMoney(tax)}</strong></div><div class="debt-total-card__final"><span>الإجمالي النهائي</span><strong class="num">${formatMoney(debt.total)}</strong></div></section>
+        <section class="debt-total-card"><div><span>الإجمالي الفرعي</span><strong class="num">${formatMoney(subtotal)}</strong></div><div><span>الخصم</span><strong class="num">${formatMoney(debt.discount)}</strong></div><div><span>${taxLabel}</span><strong class="num">${formatMoney(debt.tax)}</strong></div><div class="debt-total-card__final"><span>الإجمالي النهائي</span><strong class="num">${formatMoney(debt.total)}</strong></div></section>
       </div>
     </div>`;
   els.detailOverlay.hidden = false;
