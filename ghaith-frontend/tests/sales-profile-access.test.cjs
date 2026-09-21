@@ -55,6 +55,18 @@ const assert = require('node:assert/strict');
     for (const viewport of [{ width: 1440, height: 900 }, { width: 900, height: 900 }, { width: 390, height: 844 }]) {
       await page.setViewportSize(viewport);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, `profile overflows at ${viewport.width}px`);
+      const bounds = await page.locator('.profile-performance, .profile-transactions, .profile-transactions__table, .profile-donut').evaluateAll(nodes => nodes.map(node => { const rect = node.getBoundingClientRect(); return { className: node.className, left: rect.left, right: rect.right, viewport: window.innerWidth }; }));
+      bounds.forEach(bound => {
+        assert.ok(bound.left >= 0 && bound.right <= bound.viewport, `${bound.className} leaves the viewport at ${viewport.width}px`);
+      });
+      if (viewport.width === 390) {
+        const tableOverflow = await page.locator('.profile-transactions__table').evaluate(node => ({ x: getComputedStyle(node).overflowX, scrollsInside: node.scrollWidth > node.clientWidth }));
+        assert.deepEqual(tableOverflow, { x: 'auto', scrollsInside: true });
+        if (process.env.CAPTURE_PROFILE_PREVIEW === '1') {
+          await page.locator('.profile-body').evaluate(node => { node.scrollTop = node.scrollHeight; });
+          await page.screenshot({ path: 'print-previews/sales-profile-mobile.png' });
+        }
+      }
     }
 
     await page.evaluate(() => { location.hash = 'invoices'; });

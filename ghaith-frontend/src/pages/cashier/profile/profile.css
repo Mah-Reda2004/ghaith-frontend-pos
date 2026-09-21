@@ -153,6 +153,7 @@
 .profile-stat__caption--commission { color: color-mix(in srgb, var(--color-primary) 65%, var(--color-text-muted)); }
 
 .profile-insights {
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr);
   align-items: start;
@@ -166,6 +167,8 @@
 }
 
 .profile-performance {
+  min-width: 0;
+  max-width: 100%;
   padding: var(--space-5);
   border: 1px solid color-mix(in srgb, var(--color-primary) 20%, var(--color-border));
   border-radius: var(--radius-md);
@@ -185,6 +188,7 @@
 .profile-section-heading > strong { color: var(--color-primary); font-size: var(--fs-md); direction: ltr; }
 
 .profile-donut-layout {
+  min-width: 0;
   display: grid;
   grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
   align-items: center;
@@ -193,6 +197,7 @@
 
 .profile-donut {
   width: min(100%, 210px);
+  max-width: 100%;
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -298,6 +303,11 @@
   gap: var(--space-4);
 }
 
+.profile-transactions {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .profile-transactions__title {
   display: flex;
   align-items: center;
@@ -314,8 +324,14 @@
 .profile-transactions__all:hover { color: var(--color-primary); }
 
 .profile-transactions__table {
+  width: 100%;
+  max-width: 100%;
   max-height: calc((var(--space-7) * 8) + var(--space-4));
   margin-block-start: var(--space-4);
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
   border: 1px solid color-mix(in srgb, var(--color-primary) 20%, var(--color-border));
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -341,7 +357,7 @@
 }
 
 @media (max-width: 767px) {
-  .profile-body { scrollbar-gutter: auto; }
+  .profile-body { overflow-x: hidden; scrollbar-gutter: auto; }
 
   .profile-page {
     width: 100%;
@@ -366,9 +382,10 @@
   .profile-stat__caption { text-align: center; }
   .profile-insights { gap: var(--space-4); margin-block-start: var(--space-5); }
   .profile-performance { padding: var(--space-4); }
+  .profile-transactions__table { direction: rtl; }
   .profile-transactions__table table { min-width: calc(var(--space-7) * 13); }
   .profile-donut-layout { grid-template-columns: 1fr; }
-  .profile-donut { width: min(64vw, calc(var(--space-7) * 5.5)); }
+  .profile-donut { width: min(64vw, calc(var(--space-7) * 5.5), 100%); }
   .profile-section-heading { align-items: flex-end; }
   .profile-transactions__header { flex-wrap: wrap; }
 }
