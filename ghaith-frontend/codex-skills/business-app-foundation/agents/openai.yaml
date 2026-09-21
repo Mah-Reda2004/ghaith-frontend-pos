@@ -1,0 +1,4 @@
+interface:
+  display_name: "Business App Foundation"
+  short_description: "Build maintainable admin and POS frontends"
+  default_prompt: "Use $business-app-foundation to implement this business application change safely."

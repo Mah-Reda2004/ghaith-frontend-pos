@@ -328,8 +328,10 @@
 .profile-transactions__table .profile-commission { color: var(--color-primary); }
 
 @media (max-width: 1180px) {
+  .profile-page { width: calc(100% - (var(--space-4) * 2)); }
   .profile-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .profile-insights { grid-template-columns: 1fr; }
+  .profile-transactions__table { max-width: 100%; }
 }
 
 @media (max-width: 900px) {
@@ -339,27 +341,40 @@
 }
 
 @media (max-width: 767px) {
+  .profile-body { scrollbar-gutter: auto; }
+
   .profile-page {
-    width: calc(100% - (var(--space-4) * 2));
+    width: 100%;
+    padding-inline: var(--space-3);
     padding-block-start: var(--space-4);
   }
 
-  .profile-header { flex-direction: column; }
-  .profile-stats { grid-template-columns: minmax(0, 1fr); margin-block-start: var(--space-5); }
+  .profile-header {
+    min-height: 0;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-block-end: var(--space-4);
+  }
+
+  .profile-header__intro h1 { font-size: var(--fs-lg); }
+  .profile-header__intro p { font-size: var(--fs-sm); }
+  .profile-status { width: 100%; justify-content: center; }
+  .profile-stats { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); margin-block-start: var(--space-4); }
   .profile-stat--today { grid-column: auto; }
-  .profile-stat { min-height: auto; padding: var(--space-5); }
-  .profile-stat__value { font-size: var(--fs-2xl); }
-  .profile-insights { margin-block-start: var(--space-6); }
+  .profile-stat { min-height: calc(var(--space-7) * 2.7); padding: var(--space-4); }
+  .profile-stat__value { margin-block-start: var(--space-3); font-size: var(--fs-2xl); }
+  .profile-stat__caption { text-align: center; }
+  .profile-insights { gap: var(--space-4); margin-block-start: var(--space-5); }
+  .profile-performance { padding: var(--space-4); }
   .profile-transactions__table table { min-width: calc(var(--space-7) * 13); }
   .profile-donut-layout { grid-template-columns: 1fr; }
-  .profile-donut { width: min(72vw, 220px); }
+  .profile-donut { width: min(64vw, calc(var(--space-7) * 5.5)); }
   .profile-section-heading { align-items: flex-end; }
+  .profile-transactions__header { flex-wrap: wrap; }
 }
 
 @media (max-width: 430px) {
-  .profile-page { width: calc(100% - (var(--space-3) * 2)); }
-  .profile-header__intro h1 { font-size: var(--fs-lg); }
-  .profile-status { width: 100%; justify-content: center; }
+  .profile-page { padding-inline: var(--space-3); }
   .profile-stat__value { white-space: normal; overflow-wrap: anywhere; }
   .profile-section-heading { flex-direction: column; align-items: flex-start; }
 }

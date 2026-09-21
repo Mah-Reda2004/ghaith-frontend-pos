@@ -415,9 +415,12 @@ Sidebar is fully expanded and displays icons + text.
 
 ### Tablet — `768px` to `1180px`
 
-Sidebar is reduced to icons only.
+The admin sidebar is reduced to icons only.
 
-This is particularly relevant to the cashier interface.
+The cashier uses its existing horizontal topbar instead of a sidebar. On
+tablet, keep its navigation compact, touch-friendly, and horizontally
+scrollable when the available width is not enough. Do not hide navigation
+labels merely to force every item into one row.
 
 ### Mobile — Below `768px`
 

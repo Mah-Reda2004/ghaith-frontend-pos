@@ -6,6 +6,8 @@ const STORAGE_KEY = "ghaith-notifications-v1";
 const DISMISSED_KEY = "ghaith-notifications-dismissed-v1";
 const CHANNEL_NAME = "ghaith-notifications";
 const MAX_ITEMS = 80;
+const INVENTORY_ENTITY_PREFIX = "inventory:";
+const INVENTORY_PAGE_SIZE = 100;
 let audioContext;
 
 function isLegacyDemo(item){return["product:2","product:3"].includes(item?.entityId)||(item?.message||"").includes("بشت سماوي فاخر")||(item?.message||"").includes("طقم أزرار أكمام ملكي")}
@@ -27,6 +29,67 @@ async function syncServerNotifications(){
     localItems.forEach(item=>{if(item.server&&!serverIds.has(item.id))return;if(!merged.some(entry=>entry.id===item.id||entry.entityId&&entry.entityId===item.entityId))merged.push(item)});
     saveItems(merged);emitChange();
   }catch(error){console.warn("Notification sync failed",error)}
+}
+
+function inventoryRows(product){
+  const variants=product.product_variants||product.variants;
+  return (Array.isArray(variants)&&variants.length?variants:[product]).map(variant=>({product,variant}));
+}
+
+function inventoryAlert(row){
+  const {product,variant}=row;
+  const quantity=Number(variant.stock_quantity??variant.stock_qty??variant.quantity??product.stock_quantity??product.stock_qty??product.quantity??0);
+  const minimum=Number(variant.low_stock_threshold??variant.min_qty??product.low_stock_threshold??product.min_qty??0);
+  const status=String(variant.stock_status||product.stock_status||"").toLowerCase();
+  const outOfStock=status==="out_of_stock"||quantity<=0;
+  const lowStock=!outOfStock&&(status==="limited"||quantity<=minimum);
+  if(!outOfStock&&!lowStock)return null;
+  const productName=String(product.name_ar||product.name||product.name_internal||"منتج بدون اسم");
+  const size=variant.size||product.size;
+  const color=variant.color||product.color;
+  const variantDetails=[size&&`المقاس ${size}`,color&&`اللون ${color}`].filter(Boolean).join("، ");
+  const variantId=variant.id||variant.sku||variant.barcode||`${size||"default"}:${color||"default"}`;
+  const entityId=`${INVENTORY_ENTITY_PREFIX}${product.id||productName}:${variantId}`;
+  return normalize({
+    id:`stock-alert:${entityId}`,
+    type:outOfStock?"out_of_stock":"low_stock",
+    priority:outOfStock?"critical":"warning",
+    title:outOfStock?"نفد منتج من المخزون":"مخزون منتج أوشك على النفاد",
+    message:`${productName}${variantDetails?` (${variantDetails})`:""}: ${outOfStock?"نفد من المخزون":`متبقي ${quantity} فقط، والحد الأدنى ${minimum}`}.`,
+    action:{href:"#inventory",label:"عرض المخزون"},
+    entityId
+  });
+}
+
+async function fetchProductsByStockStatus(stockStatus){
+  const first=await api.get("/api/v1/admin/products",{query:{stock_status:stockStatus,page:1,page_size:INVENTORY_PAGE_SIZE}});
+  const products=[...listFrom(first)];
+  const total=Number(first?.total??first?.pagination?.total??first?.data?.total??first?.data?.pagination?.total??products.length);
+  const pageCount=Math.ceil(total/INVENTORY_PAGE_SIZE);
+  if(pageCount>1){
+    const remaining=await Promise.all(Array.from({length:pageCount-1},(_,index)=>api.get("/api/v1/admin/products",{query:{stock_status:stockStatus,page:index+2,page_size:INVENTORY_PAGE_SIZE}})));
+    remaining.forEach(response=>products.push(...listFrom(response)));
+  }
+  return products;
+}
+
+async function syncInventoryNotifications(){
+  if(getUserRole()!=="admin")return;
+  try{
+    const responses=await Promise.all([fetchProductsByStockStatus("limited"),fetchProductsByStockStatus("out_of_stock")]);
+    const alerts=new Map();
+    responses.flat().flatMap(inventoryRows).map(inventoryAlert).filter(Boolean).forEach(alert=>alerts.set(alert.entityId,alert));
+    const previous=readItems();
+    const existingInventory=new Map(previous.filter(item=>String(item.entityId||"").startsWith(INVENTORY_ENTITY_PREFIX)).map(item=>[item.entityId,item]));
+    const inventoryItems=[...alerts.values()].map(alert=>{
+      const old=existingInventory.get(alert.entityId);
+      const unchanged=old&&old.type===alert.type&&old.message===alert.message;
+      return unchanged?{...alert,id:old.id,createdAt:old.createdAt,read:old.read}:alert;
+    });
+    const otherItems=previous.filter(item=>!String(item.entityId||"").startsWith(INVENTORY_ENTITY_PREFIX));
+    saveItems([...inventoryItems,...otherItems]);
+    emitChange();
+  }catch(error){console.warn("Inventory notification sync failed",error)}
 }
 
 async function updateServerRead(item,read){if(!item?.server)return;await api.patch(`${notificationBase()}/${encodeURIComponent(item.id)}`,{read})}
@@ -62,7 +125,11 @@ export function initNotificationCenter(){
   const markAllButton=document.getElementById("notificationMarkAll"),clearButton=document.getElementById("notificationClear");
   markAllButton.addEventListener("click",async()=>{const previous=readItems(),items=previous.map(item=>({...item,read:true}));saveItems(items);emitChange();render();try{await markAllServerRead()}catch(error){saveItems(previous);render();console.warn("Notification read-all failed",error)}});
   clearButton.addEventListener("click",()=>{const items=readItems(),dismissed=readDismissed();items.filter(item=>item.server&&item.read).forEach(item=>dismissed.push(item.id));saveDismissed(dismissed);saveItems(items.filter(item=>!item.read));emitChange();render()});
-  const refresh=()=>syncServerNotifications();
+  let refreshPromise;
+  const refresh=()=>{
+    if(!refreshPromise)refreshPromise=(async()=>{await syncServerNotifications();await syncInventoryNotifications()})().finally(()=>{refreshPromise=null});
+    return refreshPromise;
+  };
   const onVisibility=()=>{if(document.visibilityState==="visible")refresh()};
   const refreshTimer=window.setInterval(refresh,45000);
   document.addEventListener("visibilitychange",onVisibility);

@@ -311,6 +311,12 @@ import { formatMoney } from "../../../core/utils.js";
           const code = type.code || type.slug || type.type || "walk_in";
           return `<option value="${escapeHtml(type.id)}" data-code="${escapeHtml(code)}" data-discount="${discount}">${escapeHtml(type.name)}</option>`;
         }).join("");
+        const defaultIndex = customerTypes.findIndex(type => {
+          const code = String(type.code || type.slug || type.type || "").trim().toLowerCase();
+          const discount = Number(type.discount_percent ?? type.discount_rate ?? type.discount ?? 0);
+          return ["walk_in", "regular", "normal", "عادي"].includes(code) || discount === 0;
+        });
+        els.customerTypeSelect.selectedIndex = defaultIndex >= 0 ? defaultIndex : 0;
         selectedDiscountPct = Number(els.customerTypeSelect.selectedOptions[0]?.dataset.discount || 0);
       }
     } catch (error) {
@@ -801,6 +807,17 @@ import { formatMoney } from "../../../core/utils.js";
     }
   }
 
+  function resetPaymentForm() {
+    [els.customerName, els.customerPhone, els.customerAddress, els.manualDiscountAmount, els.paidAmount, els.remainingAmount]
+      .filter(Boolean).forEach(input => { input.value = ""; });
+    if (els.salesSelect) els.salesSelect.value = "";
+    const defaultCustomerOption = [...(els.customerTypeSelect?.options || [])].find(option => Number(option.dataset.discount || 0) === 0);
+    if (defaultCustomerOption) els.customerTypeSelect.value = defaultCustomerOption.value;
+    selectedDiscountPct = Number(els.customerTypeSelect?.selectedOptions?.[0]?.dataset.discount || 0);
+    els.paymentMethodGroup.querySelectorAll(".method-btn").forEach(button => button.classList.toggle("is-active", button.dataset.method === "نقدي"));
+    toggleCashInputs("نقدي");
+  }
+
   function updatePaymentTotals() {
     const { subtotal, discountValue, total, hasManualDiscount } = getCartTotals();
     // عمود الملخص
@@ -937,6 +954,12 @@ import { formatMoney } from "../../../core/utils.js";
     }
     const totals = getCartTotals();
     const discountAmount = totals.discountValue;
+    const deferredPaidAmount = Number(els.paidAmount?.value || 0);
+    if (paymentMethod === "deferred" && (!Number.isFinite(deferredPaidAmount) || deferredPaidAmount < 0 || deferredPaidAmount > totals.total)) {
+      showToast("المبلغ المدفوع في البيع الآجل يجب أن يكون بين صفر وإجمالي الفاتورة.", "error");
+      els.paidAmount?.focus();
+      return;
+    }
     // Persist customer-category discounts as well as manual discounts. The
     // customer type alone gives invoice history its label, but the checkout
     // also needs the calculated amount or the saved invoice shows zero.
@@ -952,7 +975,8 @@ import { formatMoney } from "../../../core/utils.js";
       const quotedTotal = totals.hasManualDiscount
         ? Math.max(quotedSubtotal - discountAmount, 0)
         : Number(quote.total_amount ?? quote.total ?? totals.total);
-      const paidAmount = paymentMethod === "deferred" ? Number(els.paidAmount?.value || 0) : quotedTotal;
+      const paidAmount = paymentMethod === "deferred" ? deferredPaidAmount : quotedTotal;
+      if (paidAmount > quotedTotal) throw new Error("المبلغ المدفوع لا يمكن أن يتجاوز إجمالي الفاتورة بعد الخصم.");
       const sale = await api.post("/api/v1/sales/checkout", {
         items: cartItems,
         customer_id: customerId,
@@ -973,8 +997,7 @@ import { formatMoney } from "../../../core/utils.js";
       });
       showToast("تم تسجيل عملية البيع بنجاح ✓");
       state.cart = [];
-      selectedDiscountPct = 0;
-      if (els.manualDiscountAmount) els.manualDiscountAmount.value = "";
+      resetPaymentForm();
       renderCart();
       closePaymentModal();
       await loadPosData();

@@ -366,7 +366,7 @@ async function saveProduct(elements) {
     const saved = products.find(product => String(product.id) === String(savedId || "")) || products.find(product => product.nameAr === nameAr) || normalizeProduct(responseProduct || { name_ar: nameAr, category_id: categoryId });
     showSuccess(elements, saved, Boolean(existing));
     const state = stockState(saved);
-    if (state !== "available") publishNotification({ type: state === "empty" ? "out_of_stock" : "low_stock", priority: state === "empty" ? "critical" : "warning", title: state === "empty" ? "نفد المنتج من المخزون" : "مخزون المنتج منخفض", message: `${saved.nameAr}: الكمية الحالية ${saved.quantity}.`, entityId: `product:${saved.id}` });
+    if (state !== "available") publishNotification({ type: state === "empty" ? "out_of_stock" : "low_stock", priority: state === "empty" ? "critical" : "warning", title: state === "empty" ? "نفد المنتج من المخزون" : "مخزون المنتج منخفض", message: `${saved.nameAr}: الكمية الحالية ${saved.quantity}.`, entityId: `inventory:${saved.id}:${saved.variantId || saved.sku || "default"}` });
   } catch (error) { showToast(elements, error.message, true); }
   finally { elements.saveButton.disabled = false; }
 }

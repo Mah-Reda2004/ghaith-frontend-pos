@@ -1,0 +1,4 @@
+interface:
+  display_name: "Business App Quality"
+  short_description: "Regression testing release and static hosting"
+  default_prompt: "Use $business-app-quality to verify and prepare this application for release."

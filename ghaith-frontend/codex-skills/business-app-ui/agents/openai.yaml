@@ -1,0 +1,4 @@
+interface:
+  display_name: "Business App UI"
+  short_description: "Figma-grid responsive admin and POS interfaces"
+  default_prompt: "Use $business-app-ui to review the Figma grid and build this responsive interface."

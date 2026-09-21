@@ -1,0 +1,4 @@
+interface:
+  display_name: "Business App API Integration"
+  short_description: "Connect frontend flows to backend APIs safely"
+  default_prompt: "Use $business-app-api to connect this frontend workflow to its API."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Business App Printing"
+  short_description: "Reliable receipts labels and local printing"
+  default_prompt: "Use $business-app-printing to implement or diagnose this printing workflow."

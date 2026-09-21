@@ -347,7 +347,7 @@
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-3);
   align-content: start;
-  align-items: start;
+  align-items: stretch;
   padding-bottom: var(--space-3);
 }
 
@@ -356,8 +356,9 @@
   background: var(--color-surface-alt);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  align-self: start;
+  align-self: stretch;
   inline-size: 100%;
+  block-size: 100%;
   padding: var(--space-3);
   transition: border-color var(--transition-fast);
   display: flex;
@@ -570,7 +571,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-2);
 }
 
 .product-card__price {
