@@ -38,7 +38,7 @@ export function getUserRole(user = getCurrentUser()) {
 }
 
 export function getHomeUrl(user, fromLogin = false) {
-  const prefix = fromLogin ? "../../" : "../";
+  const prefix = fromLogin ? "./src/pages/" : "../";
   const role = getUserRole(user);
   if (role === "admin") return `${prefix}admin/admin.html`;
   if (role === "cashier") return `${prefix}cashier/cashier.html`;

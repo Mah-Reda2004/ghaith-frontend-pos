@@ -1,5 +1,5 @@
-import { bindThemeToggle, initTheme } from "../../../core/theme.js";
-import { getHomeUrl, login } from "../../../core/auth.js";
+import { bindThemeToggle, initTheme } from "./src/core/theme.js";
+import { getHomeUrl, login } from "./src/core/auth.js";
 
 const REMEMBER_KEY = "ghaith-remembered-username";
 const form = document.getElementById("loginForm");
