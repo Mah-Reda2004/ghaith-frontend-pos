@@ -190,19 +190,30 @@ async function fetchAllProducts(query) {
   return [first, ...rest].flatMap(listFrom);
 }
 
+async function fetchProductsByScannedBarcode(scannedBarcode, categoryId) {
+  for (const barcode of [scannedBarcode, `PRD${scannedBarcode}`]) {
+    const response = await api.get("/api/v1/products/search", { query: { barcode, category_id: categoryId, in_stock: false, page: 1, page_size: 20 } });
+    const items = listFrom(response);
+    if (items.length) return items.map(item => {
+      if ((item.product_variants || item.variants || []).length) return item;
+      const product = item.product || item.products || {}, variant = item.variant || item.product_variant || item;
+      return { ...product, ...item, id: item.product_id || product.id || item.id, product_variants: [{ ...variant, id: variant.variant_id || variant.id }] };
+    });
+  }
+  return [];
+}
+
 async function loadProducts(elements) {
   const sequence = ++requestSequence;
   elements.tableBody.setAttribute("aria-busy", "true");
   elements.paginationInfo.textContent = "جاري تحميل المنتجات...";
   try {
     const stockMap = { low: "limited", empty: "out_of_stock" };
-    const scannedSearch = elements.search.value.trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
-    const query = { search: scannedSearch, category_id: elements.categoryFilter.value === "all" ? undefined : elements.categoryFilter.value, stock_status: elements.stockFilter.value === "all" ? undefined : stockMap[elements.stockFilter.value] || elements.stockFilter.value };
-    const [initialItems, summaryResponse] = await Promise.all([fetchAllProducts(query), api.get("/api/v1/admin/products/summary")]);
-    let items = initialItems;
-    if (!items.length && /^\d+$/.test(scannedSearch)) {
-      items = await fetchAllProducts({ ...query, search: `PRD${scannedSearch}` });
-    }
+    const scannedSearch = elements.search.value.trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+    const categoryId = elements.categoryFilter.value === "all" ? undefined : elements.categoryFilter.value;
+    const query = { search: scannedSearch, category_id: categoryId, stock_status: elements.stockFilter.value === "all" ? undefined : stockMap[elements.stockFilter.value] || elements.stockFilter.value };
+    const productRequest = /^\d+$/.test(scannedSearch) ? fetchProductsByScannedBarcode(scannedSearch, categoryId) : fetchAllProducts(query);
+    const [items, summaryResponse] = await Promise.all([productRequest, api.get("/api/v1/admin/products/summary")]);
     if (sequence !== requestSequence) return;
     products = items.flatMap(normalizeProductRows);
     summary = { total: Number(summaryResponse.total_product_count || products.length), low: Number(summaryResponse.low_stock_count || 0), empty: Number(summaryResponse.out_of_stock_count || 0), value: Number(summaryResponse.inventory_value || 0) };
@@ -362,9 +373,32 @@ async function saveProduct(elements) {
 
 export function initProducts() {
   const elements = getElements();
+  let scanBuffer = "", scanLastKeyAt = 0, scanResetTimer = null;
   window.bindAdminThemeToggle?.(document.getElementById("productsThemeToggle"));
   Promise.all([loadCategories(elements), loadSuppliers(elements)]).then(() => loadProducts(elements)).catch(error => showToast(elements, error.message, true));
   const refresh = debounce(() => { currentPage = 1; loadProducts(elements); }, 300);
+  const submitScannerSearch = value => {
+    elements.search.value = String(value || "").replace(/[\r\n\t]/g, "").replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit))).trim();
+    refresh.cancel?.(); currentPage = 1; loadProducts(elements);
+  };
+  const handleSearchScanner = event => {
+    if (!["Enter", "Tab"].includes(event.key) || !/^\d{4,}$/.test(elements.search.value.trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit))))) return;
+    event.preventDefault(); submitScannerSearch(elements.search.value);
+  };
+  const handleGlobalScanner = event => {
+    const editable = event.target instanceof HTMLElement && (event.target.matches("input, textarea, select") || event.target.isContentEditable);
+    if (editable || event.ctrlKey || event.altKey || event.metaKey || !document.getElementById("productModal")?.hidden || !document.getElementById("productBarcodeModal")?.hidden) return;
+    const now = performance.now();
+    if (["Enter", "Tab"].includes(event.key)) {
+      const code = scanBuffer; scanBuffer = ""; clearTimeout(scanResetTimer);
+      if (code.length < 4 || now - scanLastKeyAt > 120) return;
+      event.preventDefault(); submitScannerSearch(code); return;
+    }
+    if (event.key.length !== 1 || event.repeat) return;
+    if (now - scanLastKeyAt > 120) scanBuffer = "";
+    scanBuffer += event.key; scanLastKeyAt = now;
+    clearTimeout(scanResetTimer); scanResetTimer = setTimeout(() => { scanBuffer = ""; }, 240);
+  };
   const handleTable = async event => {
     const action = event.target.closest("[data-action]"); const row = action?.closest("[data-product-id]"); if (!action || !row) return;
     const product = products.find(item => String(item.id) === row.dataset.productId); if (!product) return;
@@ -394,9 +428,9 @@ export function initProducts() {
   document.getElementById("addAnotherProduct").addEventListener("click", () => { closeSuccess(elements); openProductModal(elements); }); document.getElementById("backToProducts").addEventListener("click", () => closeSuccess(elements));
   document.getElementById("printProductBarcode").addEventListener("click", event => printSavedProductBarcodes(elements, event.currentTarget));
   elements.form.addEventListener("submit", handleSubmit); elements.tableBody.addEventListener("click", handleTable); elements.pagination.addEventListener("click", handlePagination);
-  elements.search.addEventListener("input", refresh); elements.categoryFilter.addEventListener("change", refresh); elements.stockFilter.addEventListener("change", refresh);
+  elements.search.addEventListener("input", refresh); elements.search.addEventListener("keydown", handleSearchScanner); elements.categoryFilter.addEventListener("change", refresh); elements.stockFilter.addEventListener("change", refresh);
   const refreshPricing = debounce(() => previewPricing(elements), 350);
   [elements.salePrice, elements.costPrice, elements.salesPercentage].forEach(input => input.addEventListener("input", () => { updateProfit(elements); refreshPricing(); }));
-  elements.modal.addEventListener("click", event => { if (event.target === elements.modal) closeProductModal(elements); }); elements.successModal.addEventListener("click", event => { if (event.target === elements.successModal) closeSuccess(elements); }); document.addEventListener("keydown", handleEscape);
-  return () => { requestSequence += 1; pricingPreviewSequence += 1; refresh.cancel?.(); refreshPricing.cancel?.(); elements.form.removeEventListener("submit", handleSubmit); elements.tableBody.removeEventListener("click", handleTable); elements.pagination.removeEventListener("click", handlePagination); document.removeEventListener("keydown", handleEscape); };
+  elements.modal.addEventListener("click", event => { if (event.target === elements.modal) closeProductModal(elements); }); elements.successModal.addEventListener("click", event => { if (event.target === elements.successModal) closeSuccess(elements); }); document.addEventListener("keydown", handleEscape); document.addEventListener("keydown", handleGlobalScanner);
+  return () => { requestSequence += 1; pricingPreviewSequence += 1; refresh.cancel?.(); refreshPricing.cancel?.(); clearTimeout(scanResetTimer); elements.form.removeEventListener("submit", handleSubmit); elements.tableBody.removeEventListener("click", handleTable); elements.pagination.removeEventListener("click", handlePagination); elements.search.removeEventListener("keydown", handleSearchScanner); document.removeEventListener("keydown", handleEscape); document.removeEventListener("keydown", handleGlobalScanner); };
 }

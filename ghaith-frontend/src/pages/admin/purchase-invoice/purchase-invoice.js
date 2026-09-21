@@ -4,12 +4,16 @@ import { productVariantsMarkup, readProductVariants, setupProductVariants } from
 
 const money = formatMoney;
 const today = () => new Date().toISOString().slice(0, 10);
+const normalizeBarcode = value => String(value || "").replace(/[\r\n\t]/g, "").trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+const isBarcodeQuery = value => /^\d{4,}$/.test(normalizeBarcode(value));
+const barcodeCandidates = value => { const code = normalizeBarcode(value); return /^\d+$/.test(code) ? [code, `PRD${code}`] : [code]; };
+const sameBarcode = (stored, scanned) => barcodeCandidates(scanned).some(candidate => normalizeBarcode(stored).toUpperCase() === candidate.toUpperCase());
 
 export function initPurchaseInvoice() {
   const root = document.querySelector(".purchase-page"), $ = selector => root.querySelector(selector), controller = new AbortController();
   const listen = (node, event, callback) => node?.addEventListener(event, callback, { signal: controller.signal });
   const invoice = { id: null, version: null, items: [] };
-  let suppliers = [], categories = [], variants = [], disposed = false, productSearchTimer = null, productSearchSequence = 0;
+  let suppliers = [], categories = [], variants = [], disposed = false, productSearchTimer = null, productSearchSequence = 0, scanBuffer = "", scanLastKeyAt = 0, scanResetTimer = null;
   const feedback = (message, error = false) => { const node = $("#purchaseFeedback"); node.className = `purchase-feedback${error ? " is-error" : ""}`; node.textContent = message; };
   const totals = () => { const subtotal = invoice.items.reduce((sum, item) => sum + item.quantity * item.cost, 0), lineDiscount = invoice.items.reduce((sum, item) => sum + item.discount, 0), discount = Number($("#piDiscount").value || 0), shipping = Number($("#piShipping").value || 0), total = Math.max(0, subtotal - lineDiscount - discount + shipping), state = root.querySelector('[name="paymentState"]:checked')?.value || "full", paid = state === "full" ? total : state === "deferred" ? 0 : Number($("#piPaid").value || 0); return { subtotal, lineDiscount, discount, shipping, total, paid, remaining: Math.max(0, total - paid), state }; };
   const renderTotals = () => { const value = totals(); for (const [id, key] of Object.entries({ piSubtotal: "subtotal", piLineDiscount: "lineDiscount", piTotal: "total", piPaidTotal: "paid", piRemaining: "remaining" })) $(`#${id}`).textContent = money(value[key]); $("#piPaidField").hidden = value.state !== "partial"; $("#piDueField").hidden = value.state === "full"; $("#piMethodField").hidden = value.state === "deferred"; };
@@ -17,6 +21,29 @@ export function initPurchaseInvoice() {
   const add = variant => { const existing = invoice.items.find(item => item.id === variant.id); if (existing) existing.quantity++; else invoice.items.push({ ...variant, quantity: 1, discount: 0 }); renderItems(); };
   const normalizeVariants = products => products.flatMap(product => (product.product_variants || product.variants || []).map(variant => ({ id: String(variant.id), version: Number(variant.version || 1), name: product.name_ar || product.name, size: variant.size || "افتراضي", color: variant.color || "افتراضي", sku: variant.sku || "", barcode: variant.barcode || "", cost: Number(product.purchase_price || variant.purchase_price || 0) })));
   const normalizeSearchVariants = response => listFrom(response).flatMap(item => { const nested = normalizeVariants([item]); if (nested.length) return nested; const variant = item.variant || item.product_variant || item, product = item.product || item.products || item; const id = variant.variant_id || variant.id; return id ? [{ id: String(id), version: Number(variant.version || item.version || 1), name: product.name_ar || product.name || item.product_name || item.name_ar || item.name || "منتج", size: variant.size || "افتراضي", color: variant.color || "افتراضي", sku: variant.sku || product.sku || "", barcode: variant.barcode || product.barcode || "", cost: Number(item.purchase_price ?? product.purchase_price ?? variant.purchase_price ?? 0) }] : []; });
+  const rememberVariant = variant => { const index = variants.findIndex(item => item.id === variant.id); if (index >= 0) variants[index] = variant; else variants.push(variant); return variant; };
+  const barcodeVariant = async value => {
+    const code = normalizeBarcode(value);
+    if (!code) throw new Error("أدخل رقم الباركود أولًا.");
+    const cached = variants.find(item => sameBarcode(item.barcode, code) || sameBarcode(item.sku, code));
+    if (cached) return cached;
+    for (const candidate of barcodeCandidates(code)) {
+      try {
+        const response = await api.get("/api/v1/products/search", { query: { barcode: candidate, in_stock: false, page: 1, page_size: 20 } });
+        const matches = normalizeSearchVariants(response);
+        const variant = matches.find(item => sameBarcode(item.barcode, code) || sameBarcode(item.sku, code)) || matches[0];
+        if (variant) return rememberVariant(variant);
+      } catch { /* جرّب البحث مرة أخرى ببادئة PRD عندما يحذفها جهاز الاسكانر. */ }
+    }
+    throw new Error(`لم يتم العثور على منتج بالباركود ${code}.`);
+  };
+  const addByBarcode = async (value, input) => {
+    const variant = await barcodeVariant(value);
+    add(variant);
+    if (input) input.value = "";
+    const results = $("#piResults"); results.hidden = true; results.innerHTML = "";
+    feedback(`تمت إضافة «${variant.name}» بالباركود ${variant.barcode || normalizeBarcode(value)}.`);
+  };
   let teardownProductVariants = () => {};
   const closeProductOverlay = () => { teardownProductVariants(); teardownProductVariants = () => {}; $("#piModalOverlay").hidden = true; $("#piModalBody").innerHTML = ""; };
   const openSupplierOverlay = () => {
@@ -77,8 +104,25 @@ export function initPurchaseInvoice() {
   const payload = () => { const value = totals(); if (!$("#piSupplier").value || !invoice.items.length) throw new Error("اختر المورد وأضف صنفًا واحدًا على الأقل."); if (!$("#piDate").value) throw new Error("حدد تاريخ الفاتورة."); if (value.state !== "full" && !$("#piDue").value) throw new Error("تاريخ الاستحقاق مطلوب للفواتير الآجلة والمدفوعة جزئيًا."); if ($("#piDue").value && $("#piDue").value < $("#piDate").value) throw new Error("تاريخ الاستحقاق لا يمكن أن يسبق تاريخ الفاتورة."); if (value.paid > value.total) throw new Error("المبلغ المدفوع لا يمكن أن يتجاوز الإجمالي."); return { supplier_id: $("#piSupplier").value, supplier_invoice_number: null, invoice_date: $("#piDate").value, due_date: $("#piDue").value || null, notes: $("#piNotes").value.trim() || null, discount_amount: value.discount, shipping_amount: value.shipping, payment_state: value.state, payment_method: $("#piMethod").value, paid_amount: value.paid, payment_reference: $("#piReference").value.trim() || null, items: invoice.items.map(item => ({ variant_id: item.id, quantity: item.quantity, unit_cost: item.cost, discount_amount: item.discount, expected_version: item.version })) }; };
   const purchaseResponse = response => { const value = response?.invoice || response?.data || response; if (typeof value !== "string") return value || {}; try { return JSON.parse(value); } catch { return { id: value }; } };
   const saveDraft = async () => { const body = payload(), key = idempotencyKey(); const response = invoice.id ? await api.patch(`/api/v1/admin/purchase-invoices/${encodeURIComponent(invoice.id)}/draft`, { ...body, expected_version: invoice.version }, { headers: { "Idempotency-Key": key } }) : await api.post("/api/v1/admin/purchase-invoices/drafts", body, { headers: { "Idempotency-Key": key } }); const saved = purchaseResponse(response); if (!saved.id) throw new Error("تم إرسال المسودة لكن لم يرجع الخادم معرّف الفاتورة."); invoice.id = saved.id; invoice.version = Number(saved.version || invoice.version || 1); if (saved.invoice_number) $("#piInvoiceNumber").textContent = saved.invoice_number; $("#purchaseStatus").textContent = "مسودة محفوظة"; $("#piSaveStatus").textContent = `آخر حفظ: ${new Date().toLocaleTimeString("ar-EG")}`; return saved; };
-  listen($("#piSearch"), "input", event => { const query = event.target.value.trim(), results = $("#piResults"); clearTimeout(productSearchTimer); if (!query) { productSearchSequence += 1; results.hidden = true; results.innerHTML = ""; return; } results.hidden = false; results.innerHTML = "<p>جاري البحث...</p>"; const sequence = ++productSearchSequence; productSearchTimer = setTimeout(async () => { try { const response = await api.get("/api/v1/products/search", { query: { q: query, in_stock: false, page: 1, page_size: 20 } }); if (disposed || sequence !== productSearchSequence) return; const matches = normalizeSearchVariants(response); matches.forEach(item => { const index = variants.findIndex(entry => entry.id === item.id); if (index >= 0) variants[index] = item; else variants.push(item); }); results.innerHTML = matches.map(item => `<button type="button" data-add="${escapeHtml(item.id)}"><span>${escapeHtml(item.name)} <small>${escapeHtml(item.color)} · ${escapeHtml(item.size)}</small></span><b>${money(item.cost)} EGP +</b></button>`).join("") || "<p>لا توجد نتائج.</p>"; } catch (error) { if (sequence === productSearchSequence) results.innerHTML = `<p>${escapeHtml(error.message)}</p>`; } }, 300); });
-  listen($("#piBarcode"), "keydown", async event => { if (event.key !== "Enter") return; event.preventDefault(); const code = event.target.value.trim(); let variant = variants.find(item => item.barcode === code || item.sku === code); if (!variant) { try { const response = await api.get(`/api/v1/products/barcode/${encodeURIComponent(code)}`); const item = response?.data || response; variant = { id: String(item.variant_id || item.id), version: Number(item.version || 1), name: item.name_ar || item.name, size: item.size || "افتراضي", color: item.color || "افتراضي", sku: item.sku || "", barcode: item.barcode || "", cost: Number(item.purchase_price || 0) }; variants.push(variant); } catch (error) { feedback(error.message, true); return; } } add(variant); event.target.value = ""; });
+  listen($("#piSearch"), "input", event => { const query = event.target.value.trim(), results = $("#piResults"); clearTimeout(productSearchTimer); if (!query) { productSearchSequence += 1; results.hidden = true; results.innerHTML = ""; return; } results.hidden = false; results.innerHTML = "<p>جاري البحث...</p>"; const sequence = ++productSearchSequence; productSearchTimer = setTimeout(async () => { try { const matches = isBarcodeQuery(query) ? [await barcodeVariant(query)] : normalizeSearchVariants(await api.get("/api/v1/products/search", { query: { q: query, in_stock: false, page: 1, page_size: 20 } })); if (disposed || sequence !== productSearchSequence) return; matches.forEach(rememberVariant); results.innerHTML = matches.map(item => `<button type="button" data-add="${escapeHtml(item.id)}"><span>${escapeHtml(item.name)} <small>${escapeHtml(item.color)} · ${escapeHtml(item.size)}</small></span><b>${money(item.cost)} EGP +</b></button>`).join("") || "<p>لا توجد نتائج.</p>"; } catch (error) { if (sequence === productSearchSequence) results.innerHTML = `<p>${escapeHtml(error.message)}</p>`; } }, 350); });
+  listen($("#piSearch"), "keydown", async event => { if (!["Enter", "Tab"].includes(event.key) || !isBarcodeQuery(event.currentTarget.value)) return; event.preventDefault(); clearTimeout(productSearchTimer); productSearchSequence += 1; try { await addByBarcode(event.currentTarget.value, event.currentTarget); } catch (error) { feedback(error.message, true); } });
+  listen($("#piBarcode"), "keydown", async event => { if (!["Enter", "Tab"].includes(event.key)) return; event.preventDefault(); try { await addByBarcode(event.currentTarget.value, event.currentTarget); } catch (error) { feedback(error.message, true); } });
+  listen(document, "keydown", event => {
+    const editable = event.target instanceof HTMLElement && (event.target.matches("input, textarea, select") || event.target.isContentEditable);
+    if (editable || event.ctrlKey || event.altKey || event.metaKey || $("#piModalOverlay")?.hidden === false) return;
+    const now = performance.now();
+    if (["Enter", "Tab"].includes(event.key)) {
+      const code = scanBuffer; scanBuffer = ""; clearTimeout(scanResetTimer);
+      if (code.length < 4 || now - scanLastKeyAt > 120) return;
+      event.preventDefault();
+      addByBarcode(code, $("#piSearch")).catch(error => feedback(error.message, true));
+      return;
+    }
+    if (event.key.length !== 1 || event.repeat) return;
+    if (now - scanLastKeyAt > 120) scanBuffer = "";
+    scanBuffer += event.key; scanLastKeyAt = now;
+    clearTimeout(scanResetTimer); scanResetTimer = setTimeout(() => { scanBuffer = ""; }, 240);
+  });
   listen(root, "click", async event => { const button = event.target.closest("button"); if (!button) return; try { if (button.dataset.add) add(variants.find(item => item.id === button.dataset.add)); if (button.hasAttribute("data-remove")) { invoice.items = invoice.items.filter(item => item.id !== button.closest("tr").dataset.id); renderItems(); } if (button.id === "piSaveDraft") { await saveDraft(); feedback("تم حفظ المسودة على الخادم."); } if (button.id === "piAddSupplier") openSupplierOverlay(); if (button.id === "piAddProduct") location.hash = "products"; } catch (error) { feedback(error.message, true); } });
   listen(root, "input", event => { const row = event.target.closest("tr[data-id]"); if (row && event.target.dataset.field) { const item = invoice.items.find(entry => entry.id === row.dataset.id); item[event.target.dataset.field] = Number(event.target.value || 0); renderTotals(); } else renderTotals(); });
   listen(root, "change", renderTotals);
@@ -105,5 +149,5 @@ export function initPurchaseInvoice() {
   $("#piDate").value = today(); $("#piDue").min = $("#piDate").value; $("#piHistory").innerHTML = '<p class="page-subtitle">الفواتير المعتمدة وتفاصيل دفعاتها متاحة من شاشة الموردين.</p>'; $("#purchaseResume").hidden = true; renderItems(); load();
   listen($("#piAddProduct"), "click", event => { event.stopPropagation(); openProductOverlay(); });
   listen($("#piModalOverlay"), "click", event => { if (event.target === $("#piModalOverlay") || event.target.id === "piCloseModal") closeProductOverlay(); });
-  return () => { disposed = true; productSearchSequence += 1; clearTimeout(productSearchTimer); controller.abort(); };
+  return () => { disposed = true; productSearchSequence += 1; clearTimeout(productSearchTimer); clearTimeout(scanResetTimer); controller.abort(); };
 }

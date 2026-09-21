@@ -3,6 +3,7 @@ import os
 import queue
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -91,12 +92,18 @@ class PrinterManager:
         """Return installed physical printers that Windows has not marked offline."""
         online = []
         work_offline = getattr(win32print, "PRINTER_ATTRIBUTE_WORK_OFFLINE", 0x400)
+        unavailable_status = sum(getattr(win32print, name, 0) for name in (
+            "PRINTER_STATUS_ERROR", "PRINTER_STATUS_OFFLINE", "PRINTER_STATUS_NOT_AVAILABLE",
+            "PRINTER_STATUS_PAPER_OUT", "PRINTER_STATUS_DOOR_OPEN", "PRINTER_STATUS_PAUSED",
+        ))
         for name in self.physical_printers():
             handle = None
             try:
                 handle = win32print.OpenPrinter(name)
-                attributes = int(win32print.GetPrinter(handle, 2).get("Attributes") or 0)
-                if not attributes & work_offline:
+                details = win32print.GetPrinter(handle, 2)
+                attributes = int(details.get("Attributes") or 0)
+                status = int(details.get("Status") or 0)
+                if not attributes & work_offline and not status & unavailable_status:
                     online.append(name)
             except Exception:
                 continue
@@ -279,13 +286,28 @@ class PrinterManager:
         height = round(config.barcode_height_mm / 25.4 * dpi)
         image = Image.new("L", (width, height), "white")
         draw, small, bold = ImageDraw.Draw(image), font(14), font(18, True)
-        draw_rtl(draw, (width // 2, 3), str(data.get("name") or "منتج غيث")[:28], bold, "ma")
+        product_area_width = width
+        try:
+            logo_image = Image.open(asset_path("ChatGPT Image Aug 1, 2026, 01_18_31 AM 1.png")).convert("RGBA")
+            bounds = logo_image.getbbox()
+            if bounds:
+                logo_image = logo_image.crop(bounds)
+            logo_image.thumbnail((54, 40), Image.Resampling.LANCZOS)
+            logo_base = Image.new("RGBA", logo_image.size, "white")
+            logo_base.alpha_composite(logo_image)
+            barcode_logo = logo_base.convert("L").point(lambda value: 0 if value < 245 else 255)
+            image.paste(barcode_logo, (width - barcode_logo.width - 4, 1))
+            product_area_width = width - barcode_logo.width - 8
+        except Exception:
+            draw_rtl(draw, (width - 5, 3), "غيث", bold, "ra")
+            product_area_width = width - 58
+        draw_rtl(draw, (product_area_width // 2, 3), str(data.get("name") or "منتج")[:24], bold, "ma")
         details = " | ".join(part for part in (
             f"المقاس: {data.get('size')}" if data.get("size") else "",
             f"اللون: {data.get('color')}" if data.get("color") else "",
         ) if part)
         if details:
-            draw_rtl(draw, (width // 2, 23), details[:36], small, "ma")
+            draw_rtl(draw, (product_area_width // 2, 23), details[:30], small, "ma")
 
         # The scanner must receive the real product barcode, not the internal SKU.
         # Two-dot modules at 203 dpi and a proper quiet zone make Code 128 much
@@ -329,23 +351,25 @@ class PrinterManager:
         prefix = (
             f"SIZE {config.barcode_width_mm} mm,{config.barcode_height_mm - 0.5:g} mm\r\n"
             "GAP 3 mm,0 mm\r\n"
-            "OFFSET -1 mm\r\n"
+            "OFFSET 0 mm\r\n"
             "DIRECTION 1\r\n"
             "REFERENCE 0,0\r\n"
             "DENSITY 10\r\n"
             "SPEED 1.5\r\n"
             "CLS\r\n"
-            f"BITMAP 0,8,{width_bytes},{info.height},0,"
+            f"BITMAP 0,14,{width_bytes},{info.height},0,"
         ).encode("ascii")
-        value_x = max(8, (round(config.barcode_width_mm / 25.4 * config.dpi) - len(barcode_value) * 12) // 2)
+        label_width = round(config.barcode_width_mm / 25.4 * config.dpi)
+        value_x = max(8, (label_width - len(barcode_value) * 12) // 2)
         # Encode only the numeric portion so HID scanners are independent of
         # keyboard language. Keep the complete stored value printed below.
         encoded_value = "".join(character for character in barcode_value if character.isdigit()) or barcode_value
         barcode_type = "128"
-        barcode_x = 36 if len(encoded_value) <= 10 else 20
+        module_count = len(Code128(encoded_value).build()[0])
+        barcode_x = max(8, (label_width - module_count * 2) // 2)
         suffix = (
-            f'\r\nBARCODE {barcode_x},52,"{barcode_type}",78,0,0,2,4,"{encoded_value}"\r\n'
-            f'TEXT {value_x},136,"2",0,1,1,"{barcode_value}"\r\n'
+            f'\r\nBARCODE {barcode_x},58,"{barcode_type}",78,0,0,2,4,"{encoded_value}"\r\n'
+            f'TEXT {value_x},143,"2",0,1,1,"{barcode_value}"\r\n'
             f"PRINT 1,{max(1, copies)}\r\n"
         ).encode("ascii")
         command = prefix + bytes(bitmap) + suffix
@@ -421,32 +445,38 @@ class PrinterManager:
             try:
                 kind, payload, copies = job["kind"], job["payload"], job["copies"]
                 image = self.render_receipt(payload) if kind == "receipt" else self.render_barcode(payload)
-                targets = self.receipt_targets() if kind == "receipt" else self.barcode_targets()
-                if not targets:
+                attempts = 8 if kind == "receipt" else 1
+                printed = False
+                for attempt in range(attempts):
+                    targets = self.receipt_targets() if kind == "receipt" else self.barcode_targets()
+                    for printer_name in targets:
+                        try:
+                            repeat = 1 if kind == "receipt" else copies
+                            document_name = f"Ghaith {payload.get('number') or payload.get('barcode') or payload.get('sku') or kind}"
+                            if kind == "barcode":
+                                barcode_value = numeric_barcode(payload.get("barcode") or payload.get("sku"))
+                                try:
+                                    self._print_barcode_raw(image, printer_name, document_name, barcode_value, repeat)
+                                except Exception:
+                                    for copy_number in range(repeat):
+                                        self._print_image(image, printer_name, document_name, kind)
+                            else:
+                                for copy_number in range(repeat):
+                                    self._print_image(image, printer_name, document_name, kind)
+                            printed = True
+                            log.info("تمت طباعة %s على %s بعدد %s", kind, printer_name, repeat)
+                        except Exception as exc:
+                            log.exception("فشلت الطباعة على %s: %s", printer_name, exc)
+                    if printed or attempt == attempts - 1:
+                        break
+                    # USB thermal printers can take a few seconds to reappear
+                    # after swapping the barcode and receipt printer cables.
+                    time.sleep(2)
+                if not printed:
                     if config.preview_when_no_printer:
                         self._save_preview(image, kind, copies)
                     else:
-                        log.error("لا توجد طابعة فعلية متصلة")
-                    continue
-                for printer_name in targets:
-                    try:
-                        repeat = 1 if kind == "receipt" else copies
-                        document_name = f"Ghaith {payload.get('number') or payload.get('barcode') or payload.get('sku') or kind}"
-                        if kind == "barcode":
-                            barcode_value = numeric_barcode(payload.get("barcode") or payload.get("sku"))
-                            try:
-                                self._print_barcode_raw(image, printer_name, document_name, barcode_value, repeat)
-                            except Exception:
-                                for copy_number in range(repeat):
-                                    self._print_image(image, printer_name, document_name, kind)
-                        else:
-                            for copy_number in range(repeat):
-                                self._print_image(image, printer_name, document_name, kind)
-                        log.info("تمت طباعة %s على %s بعدد %s", kind, printer_name, repeat)
-                    except Exception as exc:
-                        # A disconnected printer must never prevent the job
-                        # from continuing to the next connected printer.
-                        log.exception("فشلت الطباعة على %s: %s", printer_name, exc)
+                        log.error("لا توجد طابعة فعلية جاهزة")
             except Exception as exc:
                 log.exception("فشل أمر الطباعة: %s", exc)
             finally:

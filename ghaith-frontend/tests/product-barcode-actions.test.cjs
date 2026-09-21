@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-    const printRequests = [], errors = [];
+    const printRequests = [], searchRequests = [], errors = [];
     let createdProduct = null;
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => {
@@ -17,11 +17,15 @@ const assert = require('node:assert/strict');
       return route.fulfill({ status: 202, json: { ok: true, queued: true } });
     });
     await page.route('https://test-3f530955.fastapicloud.dev/**', route => {
-      const path = new URL(route.request().url()).pathname;
+      const requestUrl = new URL(route.request().url()), path = requestUrl.pathname;
       if (path === '/api/v1/admin/products' && route.request().method() === 'POST') {
         const body = route.request().postDataJSON();
         createdProduct = { id: 'product-2', name_ar: body.name_ar, category_id: body.category_id, supplier_id: body.supplier_id, sale_price: body.sale_price, status: 'active', product_variants: body.variants.map((variant, index) => ({ id: `created-${index}`, sku: `NEW-${index + 1}`, barcode: `70000000${index + 1}`, size: variant.size, color: variant.color, sale_price: body.sale_price, stock_qty: variant.quantity })) };
         return route.fulfill({ json: createdProduct });
+      }
+      if (path === '/api/v1/products/search' && requestUrl.searchParams.get('barcode')) {
+        const search = requestUrl.searchParams.get('barcode'); searchRequests.push(search);
+        return route.fulfill({ json: { items: search === 'PRD100000500' ? [{ id: 'product-prefix', name_ar: 'منتج بباركود مسبوق', category_id: 'cat-1', supplier_id: 'supplier-1', sale_price: 100, status: 'active', product_variants: [{ id: 'prefix-variant', sku: 'PREFIX-1', barcode: 'PRD100000500', size: 'افتراضي', color: 'افتراضي', stock_qty: 1 }] }] : [], total: search === 'PRD100000500' ? 1 : 0 } });
       }
       if (path === '/api/v1/admin/products') return route.fulfill({ json: { items: [{ id: 'product-1', name_ar: 'عباية اختبار', category_id: 'cat-1', supplier_id: 'supplier-1', sale_price: 500, status: 'active', product_variants: [
         { id: 'black-l', sku: 'BLACK-L', barcode: '622100001', size: 'L', color: 'أسود', sale_price: 500, stock_qty: 8 },
@@ -34,6 +38,12 @@ const assert = require('node:assert/strict');
       return route.fulfill({ json: { items: [] } });
     });
     await page.goto('http://127.0.0.1:8765/src/pages/admin/admin.html#products');
+    await page.getByText('عباية اختبار', { exact: true }).waitFor();
+    await page.locator('#productsSearch').fill('100000500');
+    await page.locator('#productsSearch').press('Enter');
+    await page.getByText('منتج بباركود مسبوق', { exact: true }).waitFor();
+    assert.deepEqual(searchRequests.slice(-2), ['100000500', 'PRD100000500']);
+    await page.locator('#productsSearch').fill('');
     await page.getByText('عباية اختبار', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'طباعة باركود عباية اختبار' }).click();
     const row = page.getByRole('checkbox', { name: 'اختيار L أسود', exact: true }).locator('..');

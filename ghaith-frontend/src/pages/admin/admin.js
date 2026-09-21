@@ -132,7 +132,7 @@ new MutationObserver(records => records.forEach(record => record.addedNodes.forE
   else if (node.nodeType === Node.ELEMENT_NODE) normalizeCurrencyLabels(node);
 }))).observe(document.body, { childList: true, subtree: true });
 
-const loginUrl = new URL("../auth/login/login.html", window.location.href).href;
+const loginUrl = new URL("../auth/login/index.html", window.location.href).href;
 const currentUser = getCurrentUser();
 if (!isAuthenticated() || getUserRole(currentUser) !== "admin") {
   logout();

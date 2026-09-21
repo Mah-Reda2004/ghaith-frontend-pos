@@ -33,7 +33,7 @@ function routeAssetUrl(path, params = {}) {
 }
 
 initTheme();
-const loginUrl = new URL("../auth/login/login.html", window.location.href).href;
+const loginUrl = new URL("../auth/login/index.html", window.location.href).href;
 if (!isAuthenticated()) {
   window.location.replace(loginUrl);
   throw new Error("authentication-required");

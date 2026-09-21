@@ -1,7 +1,7 @@
 (function guardProtectedPage() {
   const accessTokenKey = "ghaith-access-token";
   const currentUserKey = "ghaith-current-user";
-  const loginUrl = new URL("../pages/auth/login/login.html", document.currentScript.src).href;
+  const loginUrl = new URL("../pages/auth/login/index.html", document.currentScript.src).href;
 
   function redirectToLogin() {
     if (window.location.href === loginUrl) return;

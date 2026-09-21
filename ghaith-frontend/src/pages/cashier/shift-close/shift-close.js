@@ -95,7 +95,7 @@ document.getElementById("confirmCloseBtn")?.addEventListener("click", async even
     await api.post("/api/v1/shifts/close", { counted_cash: amount, idempotency_key: idempotencyKey() });
     document.getElementById("confirmModal").style.display = "none";
     document.getElementById("successOverlay").style.display = "flex";
-    window.setTimeout(() => { logout(); window.location.replace(new URL("../auth/login/login.html", window.location.href).href); }, 900);
+    window.setTimeout(() => { logout(); window.location.replace(new URL("../auth/login/index.html", window.location.href).href); }, 900);
   }
   catch (apiError) { error.textContent = apiError.message; }
   finally { confirmButton.disabled = false; }
