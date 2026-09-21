@@ -4,6 +4,8 @@ import queue
 import sys
 import threading
 import time
+import ctypes
+import winreg
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -66,6 +68,7 @@ def asset_path(name: str) -> Path:
 
 class PrinterManager:
     VIRTUAL_PRINTERS = ("pdf", "onenote", "xps", "fax", "microsoft print", "send to", "webex")
+    BARCODE_MARKERS = ("370", "barcode", "label")
 
     def __init__(self):
         self._jobs = queue.Queue()
@@ -88,8 +91,81 @@ class PrinterManager:
     def physical_printers(self) -> list[str]:
         return [name for name in self.get_printers() if not any(value in name.lower() for value in self.VIRTUAL_PRINTERS)]
 
+    def connected_usb_ports(self) -> set[str]:
+        """Read the ports of USB printers that Plug and Play says are present now."""
+        ports: set[str] = set()
+        cfgmgr = ctypes.WinDLL("cfgmgr32")
+        root_path = r"SYSTEM\CurrentControlSet\Enum\USBPRINT"
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, root_path) as root:
+                model_index = 0
+                while True:
+                    try:
+                        model = winreg.EnumKey(root, model_index)
+                    except OSError:
+                        break
+                    model_index += 1
+                    with winreg.OpenKey(root, model) as model_key:
+                        device_index = 0
+                        while True:
+                            try:
+                                device = winreg.EnumKey(model_key, device_index)
+                            except OSError:
+                                break
+                            device_index += 1
+                            instance_id = f"USBPRINT\\{model}\\{device}"
+                            devinst = ctypes.c_ulong()
+                            if cfgmgr.CM_Locate_DevNodeW(ctypes.byref(devinst), instance_id, 0) != 0:
+                                continue
+                            status, problem = ctypes.c_ulong(), ctypes.c_ulong()
+                            if cfgmgr.CM_Get_DevNode_Status(ctypes.byref(status), ctypes.byref(problem), devinst, 0) != 0:
+                                continue
+                            if not status.value & 0x8 or problem.value:
+                                continue
+                            try:
+                                with winreg.OpenKey(model_key, f"{device}\\Device Parameters") as parameters:
+                                    port_name = str(winreg.QueryValueEx(parameters, "PortName")[0]).upper()
+                                    if port_name:
+                                        ports.add(port_name)
+                            except OSError:
+                                continue
+        except OSError as exc:
+            log.error("تعذر قراءة طابعات USB المتصلة: %s", exc)
+        return ports
+
+    def printer_kind(self, name: str) -> str:
+        details = {}
+        handle = None
+        try:
+            handle = win32print.OpenPrinter(name)
+            details = win32print.GetPrinter(handle, 2)
+        except Exception:
+            pass
+        finally:
+            if handle is not None:
+                win32print.ClosePrinter(handle)
+        identity = f"{name} {details.get('pDriverName', '')}".lower()
+        return "barcode" if any(marker in identity for marker in self.BARCODE_MARKERS) else "receipt"
+
     def online_printers(self) -> list[str]:
         """Return installed physical printers that Windows has not marked offline."""
+        connected_ports = self.connected_usb_ports()
+        if connected_ports:
+            connected = []
+            for name in self.physical_printers():
+                handle = None
+                try:
+                    handle = win32print.OpenPrinter(name)
+                    details = win32print.GetPrinter(handle, 2)
+                    if str(details.get("pPortName") or "").upper() in connected_ports:
+                        connected.append(name)
+                except Exception:
+                    continue
+                finally:
+                    if handle is not None:
+                        win32print.ClosePrinter(handle)
+            if connected:
+                return connected
         online = []
         work_offline = getattr(win32print, "PRINTER_ATTRIBUTE_WORK_OFFLINE", 0x400)
         unavailable_status = sum(getattr(win32print, name, 0) for name in (
@@ -114,9 +190,7 @@ class PrinterManager:
 
     def receipt_targets(self) -> list[str]:
         printers = self.online_printers()
-        non_barcode = [name for name in printers if name not in config.barcode_printer_names]
-        if non_barcode:
-            printers = non_barcode
+        printers = [name for name in printers if self.printer_kind(name) == "receipt"]
         if config.receipt_all_printers:
             return printers
         return printers[:1]
@@ -126,13 +200,7 @@ class PrinterManager:
         selected = [name for name in config.barcode_printer_names if name in available]
         if selected:
             return selected
-        try:
-            default = win32print.GetDefaultPrinter()
-            if default in available:
-                return [default]
-        except Exception:
-            pass
-        return available[:1]
+        return [name for name in available if self.printer_kind(name) == "barcode"][:1]
 
     def queue_receipt(self, payload: dict) -> bool:
         if not payload:

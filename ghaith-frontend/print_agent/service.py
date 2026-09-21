@@ -50,7 +50,14 @@ def health():
 
 @app.get("/api/printers")
 def printers():
-    return {"printers": thermal_printer.get_printers(), "physical": thermal_printer.physical_printers(), "barcode_selected": config.barcode_printer_names}
+    connected = thermal_printer.online_printers()
+    return {
+        "printers": thermal_printer.get_printers(),
+        "physical": thermal_printer.physical_printers(),
+        "connected": [{"name": name, "kind": thermal_printer.printer_kind(name)} for name in connected],
+        "receipt_targets": thermal_printer.receipt_targets(),
+        "barcode_targets": thermal_printer.barcode_targets(),
+    }
 
 
 @app.get("/api/settings")
@@ -94,8 +101,8 @@ def test_print():
 
 SETTINGS_HTML = """<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>وكيل طباعة غيث</title><style>
 *{box-sizing:border-box}body{font-family:Tahoma,Arial;background:#0d0d0d;color:#f5f5f5;margin:0;display:grid;place-items:center;min-height:100vh}main{width:min(660px,calc(100% - 28px));background:#1e1e1e;border:1px solid #343434;border-radius:16px;padding:28px;box-shadow:0 24px 70px #0009}h1{color:#ff7900;margin:0 0 6px}.status{color:#22c55e;margin-bottom:24px}.printer{display:flex;gap:10px;align-items:center;padding:13px;background:#292929;border:1px solid #383838;border-radius:10px;margin:8px 0}.note{color:#aaa;font-size:14px;line-height:1.7}button{border:0;border-radius:9px;padding:11px 18px;font-weight:700;cursor:pointer}.primary{background:#ff7900;color:white}.secondary{background:#383838;color:white;margin-inline-start:8px}#msg{min-height:24px;margin-top:14px;color:#22c55e}
-</style></head><body><main><h1>غيث — وكيل الطباعة</h1><div class="status">● الخدمة تعمل على هذا الجهاز</div><p class="note">الفواتير تُرسل تلقائيًا إلى كل الطابعات الفعلية المتصلة. اختر طابعة الباركود فقط؛ وعدد النسخ يأتي من كمية المنتج.</p><h3>طابعة الباركود</h3><div id="printers">جاري تحميل الطابعات...</div><p><button class="primary" onclick="save()">حفظ الإعدادات</button><button class="secondary" onclick="testPrint()">طباعة فاتورة تجريبية</button></p><div id="msg"></div><script>
-const p=document.getElementById('printers'),m=document.getElementById('msg');async function load(){const r=await fetch('/api/printers'),d=await r.json();p.innerHTML=d.physical.length?d.physical.map(n=>`<label class="printer"><input type="checkbox" value="${n.replaceAll('&','&amp;').replaceAll('"','&quot;')}" ${d.barcode_selected.includes(n)?'checked':''}><span>${n}</span></label>`).join(''):'لا توجد طابعات فعلية متصلة الآن — سيتم حفظ معاينة PNG عند الاختبار';}async function save(){const names=[...document.querySelectorAll('input:checked')].map(x=>x.value);const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({barcode_printer_names:names,receipt_all_printers:true,preview_when_no_printer:true})});m.textContent=r.ok?'تم حفظ الإعدادات':'تعذر حفظ الإعدادات';}async function testPrint(){const r=await fetch('/api/test-print',{method:'POST'});m.textContent=r.ok?'تم إرسال الفاتورة التجريبية':'تعذر إرسال الاختبار';}load().catch(()=>p.textContent='تعذر قراءة الطابعات');
+</style></head><body><main><h1>غيث — وكيل الطباعة</h1><div class="status">● الخدمة تعمل على هذا الجهاز</div><p class="note">يتعرف البرنامج تلقائيًا على نوع طابعة USB الموصلة ويوجّه الفواتير والباركود إلى الطابعة المناسبة.</p><h3>الطابعات المتصلة الآن</h3><div id="printers">جاري فحص الطابعات...</div><p><button class="secondary" onclick="testPrint()">طباعة فاتورة تجريبية</button></p><div id="msg"></div><script>
+const p=document.getElementById('printers'),m=document.getElementById('msg');const esc=v=>String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');async function load(){const r=await fetch('/api/printers'),d=await r.json();p.innerHTML=d.connected.length?d.connected.map(x=>`<div class="printer"><span>${x.kind==='barcode'?'باركود':'فواتير'} — ${esc(x.name)}</span></div>`).join(''):'لا توجد طابعة USB متصلة الآن — سيتم التعرف عليها تلقائيًا عند توصيلها';}async function testPrint(){const r=await fetch('/api/test-print',{method:'POST'});m.textContent=r.ok?'تم إرسال الفاتورة التجريبية':'تعذر إرسال الاختبار';}load().catch(()=>p.textContent='تعذر قراءة الطابعات');
 </script></main></body></html>"""
 
 
