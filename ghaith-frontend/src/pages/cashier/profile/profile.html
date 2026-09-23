@@ -27,6 +27,35 @@
         </span>
       </header>
 
+      <section class="profile-cashier" id="cashierProfileOverview" aria-label="ملخص حساب الكاشير" hidden>
+        <article class="profile-cashier__account">
+          <span class="profile-cashier__avatar" data-cashier-avatar>—</span>
+          <div>
+            <span>حساب الكاشير</span>
+            <h2 data-cashier-name>المستخدم</h2>
+            <p>يمكنك بدء عمليات البيع ومراجعة الفواتير ومتابعة ورديتك من هنا.</p>
+          </div>
+          <span class="profile-cashier__active">الحساب نشط</span>
+        </article>
+
+        <article class="profile-cashier__shift">
+          <div class="profile-cashier__shift-heading">
+            <div><span>الوردية الحالية</span><h2 data-shift-status>جاري التحقق...</h2></div>
+            <small class="num" dir="ltr" data-shift-opened>—</small>
+          </div>
+          <div class="profile-cashier__metrics">
+            <span><small>إجمالي المبيعات</small><strong class="num" dir="ltr" data-shift-sales>EGP 0.00</strong></span>
+            <span><small>عدد الفواتير</small><strong data-shift-invoices>٠</strong></span>
+            <span><small>المصروفات</small><strong class="num" dir="ltr" data-shift-expenses>EGP 0.00</strong></span>
+          </div>
+          <nav class="profile-cashier__actions" aria-label="اختصارات الكاشير">
+            <a class="profile-cashier__primary" href="#pos">بدء عملية بيع</a>
+            <a href="#invoices">سجل الفواتير</a>
+            <a href="#shift-close">تفاصيل الوردية</a>
+          </nav>
+        </article>
+      </section>
+
       <section class="profile-stats" aria-label="ملخص العمولات">
         <article class="profile-stat profile-stat--today" data-period-card="today">
           <div class="profile-stat__heading">

@@ -109,6 +109,7 @@ const nav = document.getElementById("adminNav");
 const routeStyle = document.getElementById("adminRouteStyle");
 const sidebar = document.getElementById("adminSidebar");
 const sidebarToggle = document.getElementById("adminSidebarToggle");
+const sidebarClose = document.getElementById("adminSidebarClose");
 const sidebarOverlay = document.getElementById("adminSidebarOverlay");
 let cleanupRoute;
 let navigationId = 0;
@@ -247,6 +248,10 @@ async function loadRoute() {
 }
 
 sidebarToggle.addEventListener("click", () => setSidebarOpen(!sidebar.classList.contains("is-open")));
+sidebarClose.addEventListener("click", () => {
+  setSidebarOpen(false);
+  sidebarToggle.focus();
+});
 const accountTrigger = document.getElementById("adminAccountTrigger");
 const accountMenu = document.getElementById("adminAccountMenu");
 function setAccountMenu(open) {

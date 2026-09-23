@@ -98,8 +98,15 @@
     transform: translateX(100%);
   }
 
-  .sidebar.is-open {
+  html[dir="rtl"] .sidebar.is-open,
+  body .sidebar.is-open {
     transform: translateX(0);
+  }
+
+  .sidebar__nav {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .sidebar__logo,

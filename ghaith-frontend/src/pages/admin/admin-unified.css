@@ -24,6 +24,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
   text-align: right;
   transform: none;
 }
+.admin-sidebar__close { display: none; }
 .admin-sidebar .sidebar__nav { min-height: 0; gap: var(--space-1); }
 .admin-sidebar .nav-link {
   min-height: 0;
@@ -146,6 +147,22 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
   .admin-content { height: 100dvh; overflow: hidden; }
   .admin-topbar { padding-inline: var(--space-3); }
   .admin-topbar__menu { display: inline-flex; background: var(--color-surface-alt); }
+  .admin-sidebar__close {
+    position: absolute;
+    inset-block-start: var(--space-3);
+    inset-inline-end: var(--space-3);
+    width: var(--space-7);
+    height: var(--space-7);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+  }
+  .admin-sidebar__close:hover { color: var(--color-primary); border-color: var(--color-primary); }
+  .admin-sidebar__close svg { width: var(--space-5); height: var(--space-5); }
   .admin-account__identity { display: none; }
   .admin-account__trigger { padding: var(--space-1); }
   .admin-account__trigger > svg { display: none; }
