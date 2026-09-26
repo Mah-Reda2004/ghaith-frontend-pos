@@ -23,7 +23,11 @@ const userMenuDropdown = document.getElementById("userMenuDropdown");
 const currentUserName = document.getElementById("currentUserName");
 let activeScript;
 let navigationId = 0;
-const assetVersion = new URL(window.location.href).searchParams.get("v");
+// The shell itself is versioned in cashier.html. Propagate that version to
+// dynamically loaded route HTML/CSS/JS so a deployment cannot keep an older
+// POS module in the browser cache.
+const assetVersion = new URL(import.meta.url).searchParams.get("v")
+  || new URL(window.location.href).searchParams.get("v");
 
 function routeAssetUrl(path, params = {}) {
   const url = new URL(path, window.location.href);

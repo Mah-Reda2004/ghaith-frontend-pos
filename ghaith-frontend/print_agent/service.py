@@ -34,7 +34,7 @@ async def secure_local_api(request: Request, call_next):
     client_host = request.client.host if request.client else ""
     if client_host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
         return HTMLResponse("Local access only", status_code=403)
-    if request.method != "OPTIONS" and request.url.path.startswith("/api/print") and request.headers.get("X-Ghaith-Print-Key") != config.api_key:
+    if request.method != "OPTIONS" and request.url.path.startswith("/api/print/") and request.headers.get("X-Ghaith-Print-Key") != config.api_key:
         return HTMLResponse("Unauthorized", status_code=401)
     response = await call_next(request)
     if request.headers.get("Access-Control-Request-Private-Network", "").lower() == "true":

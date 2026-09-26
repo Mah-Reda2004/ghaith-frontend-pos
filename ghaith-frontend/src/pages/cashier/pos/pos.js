@@ -912,6 +912,12 @@ import { formatMoney } from "../../../core/utils.js";
   // the supported non-credit `transfer` method to avoid debiting customer credit.
   const PAYMENT_METHODS = { "نقدي": "cash", "محفظة": "transfer", "انستا باي": "instapay", "آجل": "deferred" };
 
+  function moneyPayload(value) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) throw new Error("قيمة المبلغ غير صحيحة.");
+    return (Math.round((amount + Number.EPSILON) * 100) / 100).toFixed(2);
+  }
+
   async function resolveCustomerId() {
     const name = els.customerName?.value.trim();
     const phone = els.customerPhone?.value.trim();
@@ -960,10 +966,13 @@ import { formatMoney } from "../../../core/utils.js";
       els.paidAmount?.focus();
       return;
     }
-    // Persist customer-category discounts as well as manual discounts. The
-    // customer type alone gives invoice history its label, but the checkout
-    // also needs the calculated amount or the saved invoice shows zero.
-    const discountPayload = discountAmount > 0 ? { discount_amount: discountAmount } : {};
+    // Customer-category discounts are calculated by the server from
+    // customer_id. Sending that amount again applies it twice and makes the
+    // paid amount differ from the server total. Only manual discounts belong
+    // in CheckoutRequest.discount_amount.
+    const discountPayload = totals.hasManualDiscount && discountAmount > 0
+      ? { discount_amount: moneyPayload(discountAmount) }
+      : {};
     const originalLabel = els.confirmPaymentBtn.innerHTML;
     els.confirmPaymentBtn.disabled = true;
     els.confirmPaymentBtn.textContent = "جاري تسجيل البيع...";
@@ -977,12 +986,16 @@ import { formatMoney } from "../../../core/utils.js";
         : Number(quote.total_amount ?? quote.total ?? totals.total);
       const paidAmount = paymentMethod === "deferred" ? deferredPaidAmount : quotedTotal;
       if (paidAmount > quotedTotal) throw new Error("المبلغ المدفوع لا يمكن أن يتجاوز إجمالي الفاتورة بعد الخصم.");
+      // The API validates electronic settlements for exact Decimal equality.
+      // A raw JavaScript number can serialize as 99.999999999 instead of
+      // 100.00, which cash tolerates as change but transfer/instapay reject.
+      const paidAmountPayload = moneyPayload(paidAmount);
       const sale = await api.post("/api/v1/sales/checkout", {
         items: cartItems,
         customer_id: customerId,
         sales_person_id: els.salesSelect.value,
         payment_method: paymentMethod,
-        paid_amount: paidAmount,
+        paid_amount: paidAmountPayload,
         ...discountPayload,
         shift_id: shiftId,
         idempotency_key: crypto.randomUUID()

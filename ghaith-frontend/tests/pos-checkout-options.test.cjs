@@ -29,7 +29,7 @@ async function runCheckout(browser, option) {
     if (path === '/api/v1/shifts/current') return route.fulfill({ json: { id: ids.shift, status: 'open' } });
     if (path === '/api/v1/customers') { customerBody = request.postDataJSON(); return route.fulfill({ status: 201, json: { id: ids.customer } }); }
     if (path === '/api/v1/pos/sales/quote') return route.fulfill({ json: { subtotal: 100, discount_amount: option.useCustomer ? 10 : 0, total_amount: option.useCustomer ? 90 : 100 } });
-    if (path === '/api/v1/sales/checkout') { checkoutBody = request.postDataJSON(); return route.fulfill({ json: { id: crypto.randomUUID(), invoice_number: 'INV-OPTION', total_amount: option.useCustomer ? 90 : 100 } }); }
+    if (path === '/api/v1/sales/checkout') { checkoutBody = request.postDataJSON(); return route.fulfill({ json: { id: crypto.randomUUID(), invoice_number: 'INV-OPTION', total_amount: option.useCustomer || option.manualDiscount ? 90 : 100 } }); }
     return route.fulfill({ json: {} });
   });
 
@@ -41,6 +41,7 @@ async function runCheckout(browser, option) {
     await page.locator('#customerTypeSelect').selectOption(ids.vipType);
     await page.locator('#customerName').fill('عميل الاختبار');
   }
+  if (option.manualDiscount) await page.locator('#manualDiscountAmount').fill(String(option.manualDiscount));
   await page.locator('.method-btn', { hasText: option.label }).click();
   if (option.apiValue === 'deferred') await page.locator('#paidAmount').fill('25');
   await page.locator('#confirmPaymentBtn').click();
@@ -53,10 +54,11 @@ async function runCheckout(browser, option) {
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   try {
     const options = [
-      { label: 'نقدي', apiValue: 'cash', paid: 90, useCustomer: true },
-      { label: 'محفظة', apiValue: 'transfer', paid: 100 },
-      { label: 'انستا باي', apiValue: 'instapay', paid: 100 },
-      { label: 'آجل', apiValue: 'deferred', paid: 25 }
+      { label: 'نقدي', apiValue: 'cash', paid: '90.00', useCustomer: true },
+      { label: 'محفظة', apiValue: 'transfer', paid: '100.00' },
+      { label: 'انستا باي', apiValue: 'instapay', paid: '100.00' },
+      { label: 'انستا باي', apiValue: 'instapay', paid: '90.00', manualDiscount: 10 },
+      { label: 'آجل', apiValue: 'deferred', paid: '25.00' }
     ];
     for (const option of options) {
       const { checkoutBody, customerBody } = await runCheckout(browser, option);
@@ -68,9 +70,10 @@ async function runCheckout(browser, option) {
       assert.deepEqual(checkoutBody.items, [{ variant_id: ids.variant, qty: 1, expected_version: 2 }]);
       if (option.useCustomer) {
         assert.equal(checkoutBody.customer_id, ids.customer);
-        assert.equal(checkoutBody.discount_amount, 10);
+        assert.equal(checkoutBody.discount_amount, undefined);
         assert.deepEqual(customerBody, { name: 'عميل الاختبار', phone: null, address: null, customer_type_id: ids.vipType });
       }
+      if (option.manualDiscount) assert.equal(checkoutBody.discount_amount, '10.00');
     }
     console.log('PASS: every POS payment choice and related form selection matches the live CheckoutRequest schema.');
   } finally { await browser.close(); }

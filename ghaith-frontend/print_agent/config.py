@@ -23,6 +23,9 @@ DEFAULTS = {
     "receipt_all_printers": True,
     "barcode_printer_names": [],
     "receipt_width_mm": 80,
+    # 80 mm mechanisms normally expose a 72 mm / 576-dot printable area.
+    # Keeping this explicit prevents raster rows from wrapping on the printer.
+    "receipt_print_width_dots": 576,
     "barcode_width_mm": 37,
     "barcode_height_mm": 23,
     "dpi": 203,
@@ -77,6 +80,8 @@ class PrintAgentConfig:
         return [str(name) for name in names] if isinstance(names, list) else []
     @property
     def receipt_width_mm(self): return int(self.get("receipt_width_mm"))
+    @property
+    def receipt_print_width_dots(self): return int(self.get("receipt_print_width_dots"))
     @property
     def barcode_width_mm(self): return int(self.get("barcode_width_mm"))
     @property

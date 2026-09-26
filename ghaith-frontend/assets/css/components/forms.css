@@ -73,6 +73,18 @@
 
 .input::placeholder { color: var(--color-text-faint); }
 
+/* Keep numeric validation and mobile numeric keyboards without browser steppers. */
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
 .input:focus,
 .select:focus {
   border-color: var(--color-primary);
