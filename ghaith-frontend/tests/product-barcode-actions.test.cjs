@@ -5,7 +5,8 @@ const assert = require('node:assert/strict');
   const browser = await chromium.launch({ headless: true, channel: 'msedge' });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-    const printRequests = [], searchRequests = [], errors = [];
+    const printRequests = [], searchRequests = [], stockAdjustments = [], errors = [];
+    let patchedProduct, deletedProductId;
     let createdProduct = null;
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => {
@@ -23,11 +24,19 @@ const assert = require('node:assert/strict');
         createdProduct = { id: 'product-2', name_ar: body.name_ar, category_id: body.category_id, supplier_id: body.supplier_id, sale_price: body.sale_price, status: 'active', product_variants: body.variants.map((variant, index) => ({ id: `created-${index}`, sku: `NEW-${index + 1}`, barcode: `70000000${index + 1}`, size: variant.size, color: variant.color, sale_price: body.sale_price, stock_qty: variant.quantity })) };
         return route.fulfill({ json: createdProduct });
       }
+      if (path === '/api/v1/products/product-1') return route.fulfill({ json: { id: 'product-1', product_variants: [
+        { id: 'black-l', version: 1, size: 'L', color: 'أسود', stock_qty: 8 },
+        { id: 'black-xl', version: 1, size: 'XL', color: 'أسود', stock_qty: 5 },
+        { id: 'white-l', version: 1, size: 'L', color: 'أبيض', stock_qty: 4 }
+      ] } });
+      if (path === '/api/v1/admin/products/product-1' && route.request().method() === 'PATCH') { patchedProduct = route.request().postDataJSON(); return route.fulfill({ json: { id: 'product-1', ...patchedProduct } }); }
+      if (path === '/api/v1/admin/products/product-1/stock-adjustments' && route.request().method() === 'POST') { stockAdjustments.push(route.request().postDataJSON()); return route.fulfill({ json: { ok: true } }); }
+      if (path.startsWith('/api/v1/admin/products/') && route.request().method() === 'DELETE') { deletedProductId = path.split('/').pop(); return route.fulfill({ status: 204, body: '' }); }
       if (path === '/api/v1/products/search' && requestUrl.searchParams.get('barcode')) {
         const search = requestUrl.searchParams.get('barcode'); searchRequests.push(search);
         return route.fulfill({ json: { items: search === 'PRD100000500' ? [{ id: 'product-prefix', name_ar: 'منتج بباركود مسبوق', category_id: 'cat-1', supplier_id: 'supplier-1', sale_price: 100, status: 'active', product_variants: [{ id: 'prefix-variant', sku: 'PREFIX-1', barcode: 'PRD100000500', size: 'افتراضي', color: 'افتراضي', stock_qty: 1 }] }] : [], total: search === 'PRD100000500' ? 1 : 0 } });
       }
-      if (path === '/api/v1/admin/products') return route.fulfill({ json: { items: [{ id: 'product-1', name_ar: 'عباية اختبار', category_id: 'cat-1', supplier_id: 'supplier-1', sale_price: 500, status: 'active', product_variants: [
+      if (path === '/api/v1/admin/products') return route.fulfill({ json: { items: [{ id: 'product-1', name_ar: 'عباية اختبار', category: { id: 'cat-1', name: 'عبايات' }, supplier: { id: 'supplier-1', name: 'مورد' }, sale_price: 500, status: 'active', product_variants: [
         { id: 'black-l', sku: 'BLACK-L', barcode: '622100001', size: 'L', color: 'أسود', sale_price: 500, stock_qty: 8 },
         { id: 'black-xl', sku: 'BLACK-XL', barcode: '622100002', size: 'XL', color: 'أسود', sale_price: 520, stock_qty: 5 },
         { id: 'white-l', sku: 'WHITE-L', barcode: '622100003', size: 'L', color: 'أبيض', sale_price: 500, stock_qty: 4 }
@@ -45,6 +54,17 @@ const assert = require('node:assert/strict');
     assert.deepEqual(searchRequests.slice(-2), ['100000500', 'PRD100000500']);
     await page.locator('#productsSearch').fill('');
     await page.getByText('عباية اختبار', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'تعديل عباية اختبار' }).click();
+    assert.equal(await page.locator('#productCategory').inputValue(), 'cat-1');
+    assert.equal(await page.locator('#productSupplier').inputValue(), 'supplier-1');
+    let editRows = page.locator('.product-variant-row');
+    await editRows.first().locator('.product-variant-quantity').fill('9');
+    await page.locator('#productQuantity').fill('18');
+    await page.locator('#saveProductBtn').click();
+    await page.getByText('تم تحديث المنتج بنجاح', { exact: true }).waitFor();
+    assert.equal('variants' in patchedProduct, false);
+    assert.deepEqual(stockAdjustments, [{ variant_id: 'black-l', qty_delta: 1, expected_version: 1, reason: 'تعديل يدوي من لوحة الإدارة' }]);
+    await page.locator('#backToProducts').click();
     await page.getByRole('button', { name: 'طباعة باركود عباية اختبار' }).click();
     const row = page.getByRole('checkbox', { name: 'اختيار L أسود', exact: true }).locator('..');
     await row.locator('[data-barcode-select]').check();
@@ -60,6 +80,9 @@ const assert = require('node:assert/strict');
     await page.locator('#productSupplier').selectOption('supplier-1');
     await page.locator('#productSalePrice').fill('600');
     await page.locator('#productCostPrice').fill('300');
+    await page.locator('#productSalesPercentage').fill('10');
+    assert.equal(await page.locator('#productNetProfitPercentage').inputValue(), '240.00');
+    await page.locator('#productQuantity').fill('5');
     await page.locator('[data-variants-mode]').selectOption('multiple');
     let variantRows = page.locator('.product-variant-row');
     await variantRows.nth(0).locator('.product-variant-size').fill('L');
@@ -70,12 +93,28 @@ const assert = require('node:assert/strict');
     await variantRows.nth(1).locator('.product-variant-size').fill('L');
     await variantRows.nth(1).locator('.product-variant-color').fill('أبيض');
     await variantRows.nth(1).locator('.product-variant-quantity').fill('3');
+    await page.locator('#productQuantity').fill('4');
+    await page.locator('[data-variants-total-error]:visible').waitFor();
+    assert.match(await page.locator('[data-variants-total-error]').textContent(), /\(5\).*\(4\)/);
+    await page.locator('#saveProductBtn').click();
+    await page.waitForTimeout(100);
+    assert.equal(createdProduct, null);
+    assert.equal(await page.locator('#productModal').isVisible(), true);
+    await page.locator('#productQuantity').fill('5');
     await page.locator('#saveProductBtn').click();
     await page.getByText('تمت إضافة المنتج بنجاح', { exact: true }).waitFor();
     assert.equal(await page.locator('#productSuccessModal').isVisible(), true);
     await page.locator('#printProductBarcode').click();
     await page.waitForFunction(() => document.getElementById('localPrintToast')?.textContent.includes('5'));
     assert.deepEqual(printRequests.slice(1).map(item => ({ size: item.size, color: item.color, copies: item.copies })), [{ size: 'L', color: 'أسود', copies: 2 }, { size: 'L', color: 'أبيض', copies: 3 }]);
+    await page.locator('#backToProducts').click();
+    await page.getByRole('button', { name: 'حذف منتج جديد متعدد' }).click();
+    await page.locator('#productDeleteModal').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#productDeleteModal').textContent(), /هل تريد حذف المنتج/);
+    await page.locator('#confirmProductDelete').click();
+    await page.getByText('تم حذف المنتج بنجاح', { exact: true }).waitFor();
+    assert.equal(deletedProductId, 'product-2');
+    assert.equal(await page.locator('#productsTableBody').getByText('منتج جديد متعدد', { exact: true }).count(), 0);
     assert.deepEqual(errors, []);
     console.log('PASS: admin barcode actions support selective counts and success-screen stock quantities.');
   } finally { await browser.close(); }

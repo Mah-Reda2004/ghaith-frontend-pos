@@ -112,6 +112,7 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     referenceDataPromise: null,
     lastOperation: null,
     lastOperationType: "",
+    recentOperations: [],
   };
 
   /* ------------------------------------------------------------------ */
@@ -207,7 +208,9 @@ import { debounce, formatMoney } from "../../../core/utils.js";
   function operationInvoiceReference(operation) {
     const linkedInvoice = operation.invoice || operation.return_invoice || operation.exchange_invoice || {};
     const type = operationType(operation);
-    const operationNumber = operation.return_number || operation.exchange_number || operation.operation_number || operation.number || operation.return_invoice_number || operation.exchange_invoice_number;
+    const operationNumber = type === "exchange"
+      ? operation.exchange_number || operation.operation_number || operation.number || operation.exchange_invoice_number || operation.return_number || operation.return_invoice_number
+      : operation.return_number || operation.operation_number || operation.number || operation.return_invoice_number || operation.exchange_number || operation.exchange_invoice_number;
     if (operationNumber) return { label: type === "exchange" ? "رقم الاستبدال" : "رقم المرتجع", value: operationNumber };
     const barcode = operation.return_invoice_barcode || operation.exchange_invoice_barcode || operation.invoice_barcode || operation.operation_barcode || operation.barcode || operation.reference_barcode || linkedInvoice.barcode;
     return { label: barcode ? "باركود العملية" : type === "exchange" ? "رقم الاستبدال" : "رقم المرتجع", value: barcode || "—" };
@@ -222,6 +225,16 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     return String(operation.original_invoice_id || operation.sales_invoice_id || operation.invoice_id || original.id || "");
   }
 
+  function operationKey(operation) {
+    return `${operationType(operation)}:${operationId(operation) || operationReferenceValue(operation)}`;
+  }
+
+  function rememberCompletedOperation(operation, type, invoiceId) {
+    const completed = { ...operation, type, operation_type: type, original_invoice_id: operation.original_invoice_id || invoiceId };
+    state.recentOperations = [completed, ...state.recentOperations.filter(item => operationKey(item) !== operationKey(completed))];
+    return completed;
+  }
+
   async function loadReturnOperations() {
     try {
       const first = await api.get("/api/v1/returns", { query: { page: 1, page_size: 100 } });
@@ -231,18 +244,23 @@ import { debounce, formatMoney } from "../../../core/utils.js";
       for (let page = 2; page <= Math.ceil(total / 100); page += 1) {
         pages.push(await api.get("/api/v1/returns", { query: { page, page_size: 100 } }));
       }
-      state.returnOperations = pages.flatMap(listFrom).map(operation => ({ ...operation, type: "return" }));
+      const fromApi = pages.flatMap(listFrom).map(operation => ({ ...operation, type: operationType(operation) }));
+      const merged = new Map(fromApi.map(operation => [operationKey(operation), operation]));
+      state.recentOperations.forEach(operation => { if (!merged.has(operationKey(operation))) merged.set(operationKey(operation), operation); });
+      state.returnOperations = [...merged.values()];
     } catch {
       // يظل سجل فواتير البيع متاحًا حتى لو تعذر تحميل قائمة المرتجعات.
-      state.returnOperations = [];
+      state.returnOperations = [...state.recentOperations];
     }
     return state.returnOperations;
   }
 
   function operationType(operation) {
-    const rawType = normalizeEnumKey(operation.type || operation.operation_type || operation.kind || "");
-    const reference = String(operation.number || operation.return_number || operation.exchange_number || "").toUpperCase();
-    return rawType.includes("exchange") || reference.startsWith("EXC") ? "exchange" : "return";
+    const rawType = normalizeEnumKey(operation.type || operation.operation_type || operation.return_type || operation.kind || "");
+    const refundMethod = normalizeEnumKey(operation.refund_method || operation.settlement_method || "");
+    const references = [operation.exchange_number, operation.exchange_invoice_number, operation.operation_number, operation.number].filter(Boolean).map(value => String(value).toUpperCase());
+    const hasReplacements = operationItems(operation, "replacement").length > 0;
+    return rawType.includes("exchange") || refundMethod === "exchange" || Boolean(operation.exchange_id || operation.exchange_number || operation.exchange_invoice_number) || hasReplacements || references.some(reference => reference.startsWith("EXC")) ? "exchange" : "return";
   }
 
   function operationId(operation, type = operationType(operation)) {
@@ -322,6 +340,21 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     return state.operations;
   }
 
+  async function fetchInvoiceOperationSummary(invoice) {
+    const fallback = invoice.returnOperations || [];
+    try {
+      const response = await api.get(`/api/v1/sales-invoices/${encodeURIComponent(invoice.id)}/operations`);
+      const listed = Array.isArray(response?.operations) ? response.operations : listFrom(response);
+      const hydrated = await Promise.all(listed.map(hydrateOperation));
+      const authoritative = hydrated.length ? hydrated : fallback;
+      const recentForInvoice = state.recentOperations.filter(operation => operationOriginalInvoiceId(operation) === invoice.id);
+      const merged = new Map([...authoritative, ...recentForInvoice].map(operation => [operationKey(operation), operation]));
+      return { ...invoice, returnOperations: [...merged.values()] };
+    } catch {
+      return invoice;
+    }
+  }
+
   function personName(person, ...fallbacks) {
     if (typeof person === "string") return person;
     return person?.name || person?.full_name || person?.username || fallbacks.find(Boolean) || "—";
@@ -373,6 +406,22 @@ import { debounce, formatMoney } from "../../../core/utils.js";
         return item;
       }
     }));
+  }
+
+  function isDerivedOperationInvoice(item) {
+    const kind = normalizeEnumKey(item.document_type || item.invoice_type || item.source_type || item.operation_type || item.type || "");
+    const linkedOriginal = item.original_invoice_id || item.original_sales_invoice_id || item.source_invoice_id || item.parent_invoice_id || item.exchange_source_invoice_id;
+    const operationNumber = String(item.return_number || item.exchange_number || "").toUpperCase();
+    return Boolean(linkedOriginal) || kind.includes("return") || kind.includes("exchange") || operationNumber.startsWith("RET") || operationNumber.startsWith("EXC");
+  }
+
+  function uniqueOriginalInvoices(invoices) {
+    const unique = new Map();
+    invoices.filter(item => !isDerivedOperationInvoice(item)).forEach(item => {
+      const key = String(item.invoice_number || item.number || item.id || "");
+      if (key && !unique.has(key)) unique.set(key, item);
+    });
+    return [...unique.values()];
   }
 
   async function loadUserDirectory() {
@@ -521,7 +570,7 @@ import { debounce, formatMoney } from "../../../core/utils.js";
         rawInvoices.push(...listFrom(await api.get("/api/v1/sales-invoices", { query: { page, page_size: 100 } })));
       }
       await Promise.all([loadReferenceData(), loadReturnOperations()]);
-      state.allInvoices = (await hydrateInvoices(rawInvoices)).map(normalizeInvoice).map(invoice => ({
+      state.allInvoices = (await hydrateInvoices(uniqueOriginalInvoices(rawInvoices))).map(normalizeInvoice).map(invoice => ({
         ...invoice,
         returnOperations: state.returnOperations.filter(operation => operationOriginalInvoiceId(operation) === invoice.id)
       }));
@@ -529,7 +578,7 @@ import { debounce, formatMoney } from "../../../core/utils.js";
       const filtered = filterInvoices(state.allInvoices);
       state.total = filtered.length;
       const start = (state.page - 1) * state.pageSize;
-      state.allData = filtered.slice(start, start + state.pageSize);
+      state.allData = await Promise.all(filtered.slice(start, start + state.pageSize).map(fetchInvoiceOperationSummary));
       renderTable();
     } catch (e) {
       showState("error");
@@ -590,11 +639,14 @@ import { debounce, formatMoney } from "../../../core/utils.js";
       tr.setAttribute("role", "button");
       tr.setAttribute("aria-label", `عرض تفاصيل الفاتورة ${inv.id}`);
       const { date, time } = formatDate(inv.date);
-      const st = STATUS_MAP[inv.status] || { cls: "is-done", label: inv.status };
+      const operationTypes = (inv.returnOperations || []).map(operationType);
+      const hasExchange = operationTypes.includes("exchange");
+      const displayStatus = hasExchange && ["مرتجع", "مرتجع بالكامل"].includes(inv.status) ? "مستبدلة" : hasExchange && inv.status === "مرتجع جزئيًا" ? "مستبدلة جزئيًا" : inv.status;
+      const st = STATUS_MAP[displayStatus] || { cls: "is-done", label: displayStatus };
       const methodIcon = METHOD_ICONS[inv.payment_method] || "";
-      const returnReferences = (inv.returnOperations || []).map(operationReferenceValue).filter(value => value && value !== "—");
+      const operationReferences = (inv.returnOperations || []).map(operation => ({ type: operationType(operation), value: operationReferenceValue(operation) })).filter(reference => reference.value && reference.value !== "—");
       tr.innerHTML = `
-        <td><span class="inv-no">#${escapeHtml(inv.number)}</span>${returnReferences.map(reference => `<span class="inv-return-no">مرتجع #${escapeHtml(reference)}</span>`).join("")}</td>
+        <td><span class="inv-no">#${escapeHtml(inv.number)}</span>${operationReferences.map(reference => `<span class="inv-return-no">${reference.type === "exchange" ? "استبدال" : "مرتجع"} #${escapeHtml(reference.value)}</span>`).join("")}</td>
         <td><span class="inv-customer">${escapeHtml(inv.customer)}</span></td>
         <td><span style="font-size:var(--fs-sm);direction:ltr;display:inline-block;">${escapeHtml(inv.phone || "---")}</span></td>
         <td>
@@ -1016,7 +1068,7 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     const path = `/api/v1/sales-invoices/${encodeURIComponent(state.currentInvoice.id)}/returns`;
     await api.post(`${path}/quote`, payload);
     const response = await api.post(path, payload, { headers: { "Idempotency-Key": idempotencyKey() } });
-    state.lastOperation = response?.return || response?.data || response;
+    state.lastOperation = rememberCompletedOperation(response?.return || response?.data || response, "return", state.currentInvoice.id);
     state.lastOperationType = "return";
     state.returnStep = "success"; renderReturnFlow(); await loadData();
   }
@@ -1036,7 +1088,7 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     const quotePayload = { reason: payload.reason, refund_method: payload.refund_method, return_items: payload.return_items, replacement_items: payload.replacement_items, difference_payment: payload.difference_payment };
     await api.post(`${path}/quote`, quotePayload);
     const response = await api.post(path, payload, { headers: { "Idempotency-Key": idempotencyKey() } });
-    state.lastOperation = response?.exchange || response?.operation || response?.result?.exchange || response?.result || response?.data?.exchange || response?.data || response;
+    state.lastOperation = rememberCompletedOperation(response?.exchange || response?.operation || response?.result?.exchange || response?.result || response?.data?.exchange || response?.data || response, "exchange", state.currentInvoice.id);
     state.lastOperationType = "exchange";
     state.returnStep = "success"; renderReturnFlow(); await loadData();
   }
@@ -1184,7 +1236,7 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     const returnTotal = getReturnTotals().total;
     const exchangeTotal = getExchangeTotal();
     const operation = state.lastOperation || {};
-    const operationNumber = operation.return_number || operation.exchange_number || operation.number || operation.id || "—";
+    const operationNumber = operationInvoiceReference(operation).value || operation.id || "—";
     const operationAmount = isExchange ? Math.abs(roundMoney(operation.difference_amount ?? operation.net_difference ?? exchangeTotal - returnTotal)) : roundMoney(operation.total_refund ?? operation.return_total ?? returnTotal);
     setFlowHeading(isExchange ? "نجاح عملية الاستبدال" : "نجاح عملية المرتجع");
     els.returnFlowBody.innerHTML = `<div class="flow-success"><div class="flow-success__icon">✓</div><h3>${isExchange ? "تم تنفيذ الاستبدال بنجاح" : "تم تنفيذ المرتجع بنجاح"}</h3><p>تمت معالجة الطلب وتحديث المخزون</p><div class="flow-success__details"><div><span>${isExchange ? "رقم حركة الاستبدال" : "رقم إيصال المرتجع"}</span><strong class="num">#${escapeHtml(operationNumber)}</strong></div><div><span>${isExchange ? "صافي الفارق" : "المبلغ المسترد"}</span><strong class="num">${formatMoney(operationAmount)} ج.م</strong></div></div><div class="flow-success__actions"><button class="btn btn-primary" data-flow-action="print-return">${isExchange ? "طباعة إيصال الاستبدال" : "طباعة إيصال المرتجع"}</button><button class="btn btn-outline" data-flow-action="close-success">إغلاق النافذة</button></div></div>`;
@@ -1195,7 +1247,7 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     const returnTotal = getReturnTotals().total;
     const exchangeTotal = getExchangeTotal();
     const operation = state.lastOperation || {};
-    const operationNumber = operation.return_number || operation.exchange_number || operation.operation_number || operation.number || operation.id || "—";
+    const operationNumber = operationInvoiceReference(operation).value || operation.id || "—";
     const originalInvoiceNumber = state.currentInvoice.number || state.currentInvoice.invoice_number || "—";
     const barcode = String(operationNumber).replace(/\D/g, "");
     if (window.GhaithPrint) {

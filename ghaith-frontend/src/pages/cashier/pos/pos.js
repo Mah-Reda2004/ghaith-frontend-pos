@@ -94,7 +94,7 @@ import { formatMoney } from "../../../core/utils.js";
     closeVariantPicker: document.getElementById("closeVariantPicker"),
   };
 
-  let selectedDiscountPct = 0;
+  let selectedCustomerDiscount = { type: "amount", value: 0 };
   let activeVariantGroup = [];
   let selectedVariantSize = "";
 
@@ -307,17 +307,19 @@ import { formatMoney } from "../../../core/utils.js";
       catch { /* أنواع العملاء لا تمنع عرض الكتالوج */ }
       if (els.customerTypeSelect && customerTypes.length) {
         els.customerTypeSelect.innerHTML = customerTypes.map(type => {
-          const discount = Number(type.discount_percent ?? type.discount_rate ?? type.discount ?? 0);
+          const discount = Number(type.discount_value ?? type.discount_amount ?? type.discount_percent ?? type.discount_rate ?? type.discount ?? 0);
+          const discountType = type.discount_type || (type.discount_value !== undefined || type.discount_amount !== undefined ? "amount" : "percentage");
           const code = type.code || type.slug || type.type || "walk_in";
-          return `<option value="${escapeHtml(type.id)}" data-code="${escapeHtml(code)}" data-discount="${discount}">${escapeHtml(type.name)}</option>`;
+          return `<option value="${escapeHtml(type.id)}" data-code="${escapeHtml(code)}" data-discount="${discount}" data-discount-type="${escapeHtml(discountType)}">${escapeHtml(type.name)}</option>`;
         }).join("");
         const defaultIndex = customerTypes.findIndex(type => {
           const code = String(type.code || type.slug || type.type || "").trim().toLowerCase();
-          const discount = Number(type.discount_percent ?? type.discount_rate ?? type.discount ?? 0);
+          const discount = Number(type.discount_value ?? type.discount_amount ?? type.discount_percent ?? type.discount_rate ?? type.discount ?? 0);
           return ["walk_in", "regular", "normal", "عادي"].includes(code) || discount === 0;
         });
         els.customerTypeSelect.selectedIndex = defaultIndex >= 0 ? defaultIndex : 0;
-        selectedDiscountPct = Number(els.customerTypeSelect.selectedOptions[0]?.dataset.discount || 0);
+        const selected = els.customerTypeSelect.selectedOptions[0];
+        selectedCustomerDiscount = { type: selected?.dataset.discountType || "amount", value: Number(selected?.dataset.discount || 0) };
       }
     } catch (error) {
       products = [];
@@ -368,7 +370,9 @@ import { formatMoney } from "../../../core/utils.js";
 
   function getCartTotals() {
     const subtotal = state.cart.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const categoryDiscountValue = (subtotal * selectedDiscountPct) / 100;
+    const categoryDiscountValue = selectedCustomerDiscount.type === "percentage"
+      ? (subtotal * selectedCustomerDiscount.value) / 100
+      : selectedCustomerDiscount.value;
     const enteredDiscount = Number(els.manualDiscountAmount?.value);
     const hasManualDiscount = els.manualDiscountAmount?.value !== "" && Number.isFinite(enteredDiscount) && enteredDiscount >= 0;
     const discountValue = Math.min(hasManualDiscount ? enteredDiscount : categoryDiscountValue, subtotal);
@@ -813,7 +817,8 @@ import { formatMoney } from "../../../core/utils.js";
     if (els.salesSelect) els.salesSelect.value = "";
     const defaultCustomerOption = [...(els.customerTypeSelect?.options || [])].find(option => Number(option.dataset.discount || 0) === 0);
     if (defaultCustomerOption) els.customerTypeSelect.value = defaultCustomerOption.value;
-    selectedDiscountPct = Number(els.customerTypeSelect?.selectedOptions?.[0]?.dataset.discount || 0);
+    const defaultDiscountOption = els.customerTypeSelect?.selectedOptions?.[0];
+    selectedCustomerDiscount = { type: defaultDiscountOption?.dataset.discountType || "amount", value: Number(defaultDiscountOption?.dataset.discount || 0) };
     els.paymentMethodGroup.querySelectorAll(".method-btn").forEach(button => button.classList.toggle("is-active", button.dataset.method === "نقدي"));
     toggleCashInputs("نقدي");
   }
@@ -834,7 +839,7 @@ import { formatMoney } from "../../../core/utils.js";
           const typeName = selectedOption?.textContent?.trim() || "";
           const discountLabel = hasManualDiscount
             ? " خصم يدوي"
-            : ` خصم ${typeName} ${selectedDiscountPct}%`;
+            : ` خصم ${typeName} ${selectedCustomerDiscount.value}${selectedCustomerDiscount.type === "percentage" ? "%" : " ج.م"}`;
           els.discountBadge.querySelector ?
             (els.discountBadge.lastChild.textContent = discountLabel) :
             null;
@@ -867,7 +872,7 @@ import { formatMoney } from "../../../core/utils.js";
   if (els.customerTypeSelect) {
     els.customerTypeSelect.addEventListener("change", (e) => {
       const selectedOption = els.customerTypeSelect.options[els.customerTypeSelect.selectedIndex];
-      selectedDiscountPct = Number(selectedOption.dataset.discount) || 0;
+      selectedCustomerDiscount = { type: selectedOption.dataset.discountType || "amount", value: Number(selectedOption.dataset.discount) || 0 };
       renderCart();
       updatePaymentTotals();
     });
@@ -926,8 +931,8 @@ import { formatMoney } from "../../../core/utils.js";
     const customerTypeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(customerTypeValue)
       ? customerTypeValue
       : null;
-    if (!name && !phone && !address && selectedDiscountPct <= 0) return null;
-    if (!name) throw new Error(selectedDiscountPct > 0 ? "أدخل اسم العميل لتطبيق خصم فئة العميل على الفاتورة." : "اسم العميل مطلوب عند تسجيل بيانات العميل.");
+    if (!name && !phone && !address && selectedCustomerDiscount.value <= 0) return null;
+    if (!name) throw new Error(selectedCustomerDiscount.value > 0 ? "أدخل اسم العميل لتطبيق خصم فئة العميل على الفاتورة." : "اسم العميل مطلوب عند تسجيل بيانات العميل.");
     const customer = await api.post("/api/v1/customers", {
       name,
       phone: phone || null,
@@ -1036,10 +1041,10 @@ import { formatMoney } from "../../../core/utils.js";
     const { subtotal, discountValue, total, hasManualDiscount } = getCartTotals();
     const selectedDiscountOption = els.customerTypeSelect?.selectedOptions?.[0];
     const selectedDiscountName = selectedDiscountOption?.textContent?.trim() || "فئة العميل";
-    const selectedDiscountRate = Number(selectedDiscountPct || 0);
+    const selectedDiscountValue = Number(selectedCustomerDiscount.value || 0);
     const discountLabel = hasManualDiscount
       ? "خصم يدوي"
-      : `خصم ${selectedDiscountName} ${selectedDiscountRate.toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
+      : `خصم ${selectedDiscountName} ${selectedDiscountValue.toLocaleString("en-US", { maximumFractionDigits: 2 })}${selectedCustomerDiscount.type === "percentage" ? "%" : " ج.م"}`;
     const now = new Date();
     const date = now.toLocaleDateString("ar-EG");
     const time = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
@@ -1090,7 +1095,7 @@ import { formatMoney } from "../../../core/utils.js";
     const html = `
       <div class="receipt">
         <div class="r-header">
-          <h2>غيث للزي الاسلامي الراقي</h2>
+          <h2>غيث للزي الاسلامي</h2>
           <p class="r-sub">فاتورة مبيعات</p>
           <p class="r-date">${date} — ${time} | رقم: ${invoiceNo}</p>
           <p class="r-date">السيلز: ${escapeHtml(salesName)}</p>
@@ -1129,7 +1134,7 @@ import { formatMoney } from "../../../core/utils.js";
 
         <div class="r-footer">
           <p>شكراً لزيارتكم ❤</p>
-          <p>نتمنى لكم تجربة ممتازة</p>
+          <div class="r-barcode"><strong>${escapeHtml(invoiceBarcodeValue(invoiceNo))}</strong><small>امسح الباركود للبحث عن الفاتورة</small></div><p class="r-return-note">استرجاع 14 يوم • استبدال 30 يوم • بعد المدة لا استرجاع أو استبدال</p>
         </div>
       </div>
     `;

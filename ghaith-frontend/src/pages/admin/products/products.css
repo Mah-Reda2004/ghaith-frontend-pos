@@ -94,6 +94,14 @@
 .products-form-grid .field label small { color: var(--color-warning); }
 .products-field-error { color: var(--color-danger); font-size: var(--fs-xs); }
 .products-field-error[hidden] { display: none; }
+.products-delete-dialog { width: min(420px, calc(100% - 32px)); padding: var(--space-6); text-align: center; }
+.products-delete-icon { display: grid; place-items: center; width: 64px; height: 64px; margin: 0 auto var(--space-4); border-radius: 50%; background: color-mix(in srgb, var(--color-danger) 14%, transparent); color: var(--color-danger); font-size: 32px; font-weight: 900; }
+.products-delete-dialog h2 { margin: 0 0 var(--space-2); }
+.products-delete-dialog p { margin: 0; color: var(--color-text); font-size: var(--fs-md); }
+.products-delete-dialog small { display: block; margin-top: var(--space-2); color: var(--color-text-muted); }
+.products-delete-actions { display: flex; justify-content: center; gap: var(--space-3); margin-top: var(--space-6); }
+.products-delete-confirm { border-color: var(--color-danger); background: var(--color-danger); color: #fff; }
+.products-delete-confirm:hover { filter: brightness(.92); }
 .products-sku-field, .products-money-field, .products-percent-field { position: relative; }
 .products-sku-field svg { position: absolute; inset-inline-end: var(--space-3); inset-block-start: 50%; width: var(--space-4); height: var(--space-4); transform: translateY(-50%); color: var(--color-text-faint); }
 .products-sku-field .input { width: 100%; padding-inline-end: var(--space-7); }
@@ -116,7 +124,7 @@
 .products-success__summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-block: var(--space-5); padding: var(--space-4); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface-alt); text-align: start; }
 .products-success__summary div { display: flex; flex-direction: column; gap: var(--space-1); }
 .products-success__summary span { color: var(--color-text-muted); font-size: var(--fs-xs); }
-.products-success__summary strong { font-size: var(--fs-sm); }
+.products-success__summary strong { font-size: var(--fs-sm);text-align: right; }
 .products-success__summary b { color: var(--color-primary); }
 .products-success__actions { display: grid; gap: var(--space-3); }
 .products-success__actions svg { width: var(--space-4); height: var(--space-4); }

@@ -1117,7 +1117,7 @@
     border-bottom: 2px dashed #000;
   }
   .r-header h2 {
-    font-size: 15pt;
+    font-size: 25pt;
     font-weight: 900;
     margin: 0 0 4px;
     letter-spacing: 0.5px;
@@ -1218,4 +1218,22 @@
   .r-footer p {
     margin: 2px 0;
   }
+  .r-barcode {
+    margin-top: 6px;
+    padding: 7px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+  .r-barcode strong {
+    direction: ltr;
+    font-family: monospace;
+    font-size: 12pt;
+    overflow-wrap: anywhere;
+  }
+  .r-barcode small {
+    font-size: 7pt;
+  }
+  .r-return-note { padding-block: 5px; border-block: 1px dashed #000; font-size: 7pt; font-weight: 700; white-space: nowrap; }
 }

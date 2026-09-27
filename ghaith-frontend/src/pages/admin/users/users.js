@@ -51,7 +51,7 @@ function normalizeUser(item) {
   if (item.role_id && ["admin", "cashier", "sales"].includes(role)) roleIds[role] = item.role_id;
   return {
     id: item.id, displayName: item.name || item.username || "—", username: item.username || "—", phone: item.phone || "",
-    role, roleId: item.role_id || "", status: item.is_active === false ? "inactive" : "active", createdAt: item.created_at
+    role, roleId: item.role_id || "", status: item.is_active === false ? "inactive" : "active", createdAt: item.created_at, version: Number(item.version || 1)
   };
 }
 
@@ -201,7 +201,8 @@ async function saveUser(elements) {
     if (id) {
       const roleId = roleIds[role];
       if (!roleId) throw new Error("تعذّر تحديد معرّف الدور المطلوب.");
-      response = await api.patch(`/api/v1/admin/users/${encodeURIComponent(id)}`, { phone, role_id: roleId, is_active: elements.status.value === "active" });
+      const current = users.find(item => String(item.id) === id);
+      response = await api.patch(`/api/v1/admin/users/${encodeURIComponent(id)}`, { phone, role_id: roleId, is_active: elements.status.value === "active", version: current?.version || 1 });
     } else {
       response = await api.post("/api/v1/admin/users", { username, phone, password: elements.password.value, role });
     }
@@ -227,11 +228,11 @@ export function initUsers() {
     if (button.dataset.action === "toggle-status") {
       button.disabled = true;
       const active = user.status !== "active";
-      try { await api.patch(`/api/v1/admin/users/${encodeURIComponent(user.id)}`, { is_active: active }); showToast(elements, active ? "تم تفعيل المستخدم" : "تم إيقاف المستخدم"); await loadUsers(elements); }
+      try { await api.patch(`/api/v1/admin/users/${encodeURIComponent(user.id)}`, { is_active: active, version: user.version }); showToast(elements, active ? "تم تفعيل المستخدم" : "تم إيقاف المستخدم"); await loadUsers(elements); }
       catch (error) { button.disabled = false; showToast(elements, error.message, true); }
     }
     if (button.dataset.action === "delete" && user.status === "active" && await confirmDeactivation(elements, user)) {
-      try { await api.delete(`/api/v1/admin/users/${encodeURIComponent(user.id)}`); showToast(elements, "تم تعطيل المستخدم"); await loadUsers(elements); }
+      try { await api.delete(`/api/v1/admin/users/${encodeURIComponent(user.id)}`, { query: { version: user.version } }); showToast(elements, "تم تعطيل المستخدم"); await loadUsers(elements); }
       catch (error) { showToast(elements, error.message, true); }
     }
   };

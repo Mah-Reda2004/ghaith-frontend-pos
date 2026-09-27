@@ -186,7 +186,8 @@ function closeCategoryModal(elements) {
 async function saveCategory(elements) {
   const name = elements.name.value.trim();
   if (!name) { elements.nameError.hidden = false; elements.name.focus(); return; }
-  const payload = { name, description: elements.description.value.trim() || null, status: elements.status.value };
+  const current = categories.find(item => String(item.id) === elements.id.value);
+  const payload = { name, description: elements.description.value.trim() || null, status: elements.status.value, ...(current ? { version: current.version } : {}) };
   const id = elements.id.value;
   elements.saveButton.disabled = true;
   try {
@@ -215,14 +216,14 @@ export function initCategories() {
     if (action.dataset.action === "toggle-status") {
       action.disabled = true;
       const status = category.status === "active" ? "inactive" : "active";
-      try { await api.patch(`/api/v1/admin/categories/${encodeURIComponent(category.id)}`, { status }); showToast(elements, status === "active" ? "تم تفعيل الفئة" : "تم إيقاف الفئة"); await loadCategories(elements); }
+      try { await api.patch(`/api/v1/admin/categories/${encodeURIComponent(category.id)}`, { status, version: category.version }); showToast(elements, status === "active" ? "تم تفعيل الفئة" : "تم إيقاف الفئة"); await loadCategories(elements); }
       catch (error) { action.disabled = false; showToast(elements, error.message, true); }
     }
     if (action.dataset.action === "delete") {
       const decision = await confirmDelete(elements, category);
       if (!decision) return;
       try {
-        await api.delete(`/api/v1/admin/categories/${encodeURIComponent(category.id)}`, { query: { reassign_to: decision.reassignTo } });
+        await api.delete(`/api/v1/admin/categories/${encodeURIComponent(category.id)}`, { query: { reassign_to: decision.reassignTo, version: category.version } });
         await loadCategories(elements);
         showSuccess(elements, "تم حذف الفئة بنجاح", `تم حذف فئة «${category.name}» من النظام.`);
       } catch (error) { showToast(elements, error.message, true); }

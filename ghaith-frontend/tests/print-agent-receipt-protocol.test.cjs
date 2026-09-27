@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, "..");
 const printer = fs.readFileSync(path.join(root, "print_agent", "printer.py"), "utf8");
 const config = fs.readFileSync(path.join(root, "print_agent", "config.py"), "utf8");
 const service = fs.readFileSync(path.join(root, "print_agent", "service.py"), "utf8");
+const browserPrinting = fs.readFileSync(path.join(root, "src", "components", "printing", "printing.js"), "utf8");
 
 test("receipts use bounded raw ESC/POS instead of the Windows page driver", () => {
   assert.match(printer, /def _escpos_raster\(/);
@@ -45,4 +46,16 @@ test("raw TSPL barcode labels include the product price", () => {
   assert.match(printer, /price_text = f"\{amount_text\} EGP"/);
   assert.match(printer, /price_command = f'TEXT \{price_x\},162/);
   assert.match(printer, /payload\.get\("price"\), repeat/);
+});
+
+test("receipt branding and footer policy are consistent in native and browser printing", () => {
+  const policy = /استرجاع 14 يوم.*استبدال 30 يوم/;
+  assert.match(printer, /للزي الإسلامي/);
+  assert.doesNotMatch(printer, /للزي الإسلامي الراقي/);
+  assert.match(browserPrinting, /للزي الإسلامي/);
+  assert.doesNotMatch(browserPrinting, /للزي الإسلامي الراقي/);
+  assert.match(printer, policy);
+  assert.match(browserPrinting, policy);
+  assert.doesNotMatch(printer, /section_height = 190/);
+  assert.match(browserPrinting, /thermal-footer-note/);
 });

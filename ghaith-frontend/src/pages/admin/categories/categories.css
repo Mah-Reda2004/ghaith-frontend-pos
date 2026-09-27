@@ -119,6 +119,7 @@
   backdrop-filter: blur(3px);
 }
 .categories-feedback-overlay[hidden] { display: none; }
+#categoryReassignField[hidden] { display: none; }
 .categories-feedback {
   width: min(440px, calc(100% - (var(--space-4) * 2)));
   padding: var(--space-6);

@@ -269,7 +269,8 @@ class PrinterManager:
         width = round(config.receipt_width_mm / 25.4 * dpi)
         items = data.get("items") or []
         totals = data.get("totals") or []
-        image = Image.new("L", (width, 760 + len(items) * 72 + len(totals) * 50), "white")
+        meta = data.get("meta") if isinstance(data.get("meta"), list) else []
+        image = Image.new("L", (width, 900 + len(items) * 72 + len(totals) * 50 + len(meta) * 34), "white")
         draw = ImageDraw.Draw(image)
         logo, heading, normal, small, bold = font(42, True), font(28, True), font(22), font(18), font(22, True)
         y = 10
@@ -278,15 +279,16 @@ class PrinterManager:
             bounds = logo_image.getbbox()
             if bounds:
                 logo_image = logo_image.crop(bounds)
-            logo_image.thumbnail((250, 145), Image.Resampling.LANCZOS)
+            scale = min((width - 36) / logo_image.width, 190 / logo_image.height)
+            logo_image = logo_image.resize((max(1, round(logo_image.width * scale)), max(1, round(logo_image.height * scale))), Image.Resampling.LANCZOS)
             logo_base = Image.new("RGBA", logo_image.size, "white")
             logo_base.alpha_composite(logo_image)
             thermal_logo = logo_base.convert("L").point(lambda value: 0 if value < 245 else 255)
             image.paste(thermal_logo, ((width - thermal_logo.width) // 2, y))
             y += thermal_logo.height + 4
         except Exception:
-            draw_rtl(draw, (width // 2, y), "غيث", logo, "ma"); y += 52
-        draw_rtl(draw, (width // 2, y), "للزي الإسلامي الراقي", normal, "ma"); y += 34
+            draw_rtl(draw, (width // 2, y), "غيث", font(62, True), "ma"); y += 72
+        draw_rtl(draw, (width // 2, y), "للزي الإسلامي", normal, "ma"); y += 34
         draw_rtl(draw, (width // 2, y), data.get("title", "فاتورة مبيعات"), heading, "ma"); y += 42
         number = str(data.get("number") or "—")
         stamp = datetime.now()
@@ -296,6 +298,7 @@ class PrinterManager:
         draw_rtl(draw, (width // 2 - 10, y), f"الوقت: {data.get('time') or stamp.strftime('%H:%M')}", bold); y += 32
         rule(draw, y, width, True); y += 20
         info_pairs = [
+            ((str(data.get("partyLabel") or "الطرف"), "party"), ("", "")),
             (("العميل", "customer"), ("الهاتف", "customer_phone")),
             (("الكاشير", "cashier"), ("السيلز", "sales")),
             (("الدفع", "payment"), ("العنوان", "customer_address")),
@@ -308,6 +311,13 @@ class PrinterManager:
                 draw_rtl(draw, (width // 2 - 10, y), f"{left[0]}: {str(left_value)[:24]}", bold if left[1] == "sales" else small)
             if right_value or left_value:
                 y += 31
+        for row in meta:
+            if not isinstance(row, dict) or row.get("value") in (None, ""):
+                continue
+            label = str(row.get("label") or "بيان")[:20]
+            value = str(row.get("value"))[:32]
+            draw_rtl(draw, (width - 12, y), f"{label}: {value}", bold)
+            y += 31
         rule(draw, y, width, True); y += 23
         # Six fixed columns, ordered right-to-left for the Arabic receipt:
         # product/barcode, size, color, quantity, unit price, line total.
@@ -366,8 +376,10 @@ class PrinterManager:
         rule(draw, y, width, True); y += 23
         if data.get("note"):
             draw_rtl(draw, (width // 2, y), str(data["note"])[:55], small, "ma"); y += 32
-        draw_rtl(draw, (width // 2, y), "شكرًا لزيارتكم", heading, "ma"); y += 38
-        draw_rtl(draw, (width // 2, y), "احتفظ بالفاتورة للاستبدال أو الاسترجاع", small, "ma"); y += 34
+        draw_rtl(draw, (width // 2, y), str(data.get("footerTitle") or "شكرًا لزيارتكم")[:45], heading, "ma"); y += 42
+        if data.get("footerNote"):
+            draw_rtl(draw, (width // 2, y), str(data["footerNote"])[:65], small, "ma"); y += 34
+        policy = str(data.get("returnPolicy") or "استرجاع 14 يوم • استبدال 30 يوم • بعد المدة لا استرجاع أو استبدال")
         barcode_value = str(data.get("barcode") or number)
         try:
             code = Code128(barcode_value, writer=ImageWriter()).render({"module_height": 14, "module_width": .36, "quiet_zone": 3, "font_size": 0, "text_distance": 0, "dpi": dpi}).convert("L")
@@ -379,9 +391,13 @@ class PrinterManager:
             y += code.height + 8
         except Exception:
             pass
-        draw.text((width // 2, y), barcode_value, font=small, fill="black", anchor="ma"); y += 28
-        draw_rtl(draw, (width // 2, y), "امسح الباركود للبحث عن الفاتورة", small, "ma")
-        return image.crop((0, 0, width, y + 28))
+        draw.text((width // 2, y), barcode_value, font=small, fill="black", anchor="ma"); y += 27
+        draw_rtl(draw, (width // 2, y), "امسح الباركود للبحث عن الفاتورة", font(14), "ma"); y += 28
+        rule(draw, y, width, True); y += 12
+        policy_font = fitted_rtl_font(draw, policy, width - 28, maximum=15, minimum=8)
+        draw_rtl(draw, (width // 2, y), policy, policy_font, "ma"); y += 26
+        rule(draw, y, width, True)
+        return image.crop((0, 0, width, y + 8))
 
     def render_barcode(self, data: dict) -> Image.Image:
         dpi = config.dpi

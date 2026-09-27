@@ -26,6 +26,7 @@ function addApiFields() {
   document.querySelector(".products-form-section:nth-of-type(2)")?.insertAdjacentHTML("beforeend", productVariantsMarkup("productVariant"));
   document.querySelector(".products-page")?.insertAdjacentHTML("beforeend", '<div class="modal-overlay products-modal" id="productRevaluationsModal" hidden><section class="modal products-dialog" role="dialog" aria-modal="true" aria-labelledby="productRevaluationsTitle"><header class="modal__header products-dialog__header"><h2 class="modal__title" id="productRevaluationsTitle">سجل إعادة تقييم المنتج</h2><button class="btn-icon" id="closeProductRevaluations" type="button" aria-label="إغلاق">×</button></header><div class="products-dialog__body"><div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>السعر السابق</th><th>السعر الجديد</th><th>السبب</th></tr></thead><tbody id="productRevaluationsBody"></tbody></table></div></div></section></div>');
   document.querySelector(".products-page")?.insertAdjacentHTML("beforeend", '<div class="modal-overlay products-modal" id="productBarcodeModal" hidden><section class="modal products-dialog products-barcode-dialog" role="dialog" aria-modal="true" aria-labelledby="productBarcodeTitle"><header class="modal__header products-dialog__header"><h2 class="modal__title" id="productBarcodeTitle">طباعة باركود المنتج</h2><button class="btn-icon" id="closeProductBarcode" type="button" aria-label="إغلاق">×</button></header><div class="products-dialog__body"><p class="products-barcode-hint">اختر المقاس واللون المطلوبين وحدد عدد الملصقات لكل نسخة.</p><div class="products-barcode-list" id="productBarcodeList"></div><p class="products-field-error" id="productBarcodeError" hidden></p></div><footer class="modal__actions products-dialog__actions"><button class="btn btn-outline" id="cancelProductBarcode" type="button">إلغاء</button><button class="btn btn-primary" id="confirmProductBarcode" type="button">طباعة المحدد</button></footer></section></div>');
+  document.querySelector(".products-page")?.insertAdjacentHTML("beforeend", '<div class="modal-overlay products-modal" id="productDeleteModal" hidden><section class="modal products-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="productDeleteTitle"><span class="products-delete-icon" aria-hidden="true">!</span><h2 id="productDeleteTitle">حذف المنتج؟</h2><p>هل تريد حذف المنتج <strong id="productDeleteName"></strong>؟</p><small>سيتم حذف المنتج بعد الضغط على موافق.</small><div class="products-delete-actions"><button class="btn btn-outline" id="cancelProductDelete" type="button">إلغاء</button><button class="btn products-delete-confirm" id="confirmProductDelete" type="button">موافق، حذف المنتج</button></div></section></div>');
 }
 
 function getElements() {
@@ -43,15 +44,16 @@ function getElements() {
 
 function listFrom(response) { return Array.isArray(response) ? response : response?.items || response?.data || []; }
 function idempotencyKey() { return crypto.randomUUID(); }
+function referenceId(value) { return value && typeof value === "object" ? value.id || value.category_id || value.supplier_id || "" : value || ""; }
 
 function normalizeProduct(item, variant = item.variant || {}) {
   return {
     id: item.id, rowId: `${item.id}-${variant.id || "default"}`, nameAr: item.name_ar || item.name || "—", nameEn: item.name_internal || "", sku: variant.sku || item.sku || "—", barcode: variant.barcode || item.barcode || "—",
-    categoryId: item.category_id || "", category: categoryNames.get(item.category_id) || item.category?.name || "—",
+    categoryId: referenceId(item.category_id || item.category), category: categoryNames.get(referenceId(item.category_id || item.category)) || item.category_name || item.category?.name || "—",
     size: variant.size || item.size || item.variant_size || "—", color: variant.color || item.color || item.variant_color || "—",
     salePrice: Number(variant.sale_price ?? item.sale_price ?? item.sell_price ?? 0), costPrice: Number(variant.purchase_price ?? item.purchase_price ?? item.cost_price ?? 0),
     salesPercentage: Number(variant.commission_rate ?? item.commission_rate ?? 0), quantity: Number(variant.stock_quantity ?? variant.stock_qty ?? variant.quantity ?? item.stock_quantity ?? item.stock_qty ?? 0), minimum: Number(variant.low_stock_threshold ?? item.low_stock_threshold ?? item.min_qty ?? 0),
-    stockStatus: variant.stock_status || item.stock_status || "available", status: item.status || "active", supplierId: item.supplier_id || item.supplier?.id || item.default_supplier_id || "", supplierName: item.supplier_name || item.supplier?.name || "", version: Number(item.version || 1), variantId: variant.id || item.variant_id || "", variantVersion: Number(variant.version || item.variant_version || 0)
+    stockStatus: variant.stock_status || item.stock_status || "available", status: item.status || "active", supplierId: referenceId(item.supplier_id || item.supplier || item.default_supplier_id), supplierName: item.supplier_name || item.supplier?.name || "", version: Number(item.version || 1), variantId: variant.id || item.variant_id || "", variantVersion: Number(variant.version || item.variant_version || 0)
   };
 }
 
@@ -105,7 +107,7 @@ function stockLabel(product) {
 }
 
 function calculateProfit(sale, cost, commission) {
-  return sale > 0 ? ((sale - cost - sale * (commission / 100)) / sale) * 100 : 0;
+  return sale - cost - sale * (commission / 100);
 }
 
 function updateProfit(elements) {
@@ -121,7 +123,7 @@ async function previewPricing(elements) {
   try {
     const response = await api.post("/api/v1/admin/products/pricing-preview", { purchase_price: purchasePrice, sale_price: salePrice, commission_rate: commissionRate });
     if (sequence !== pricingPreviewSequence) return;
-    const value = Number(response?.net_profit_percentage ?? response?.profit_percentage ?? response?.margin_percentage);
+    const value = Number(response?.net_profit_amount ?? response?.profit_amount ?? response?.net_profit);
     if (Number.isFinite(value)) { elements.netProfitPercentage.value = value.toFixed(2); elements.netProfitPercentage.classList.toggle("is-negative", value < 0); }
   } catch { /* يبقى الحساب المحلي ظاهرًا عند تعذّر المعاينة. */ }
 }
@@ -162,7 +164,7 @@ function renderProducts(elements) {
       <td class="num">${money(product.costPrice)}</td><td class="num">${money(product.salePrice)}</td><td class="num">${product.salesPercentage}%</td><td class="num">${product.quantity}</td><td class="num">${product.minimum}</td>
       <td><span class="product-stock product-stock--${state}">${stockLabel(product)}</span></td>
       <td><button class="status-toggle status-toggle--table${product.status === "active" ? "" : " is-inactive"}" type="button" role="switch" aria-checked="${product.status === "active"}" data-action="toggle-status"><span class="status-toggle__label">${product.status === "active" ? "نشط" : "غير نشط"}</span><span class="status-toggle__track" aria-hidden="true"><span class="status-toggle__thumb"></span></span></button></td>
-      <td><div class="products-actions"><button class="products-action products-action--barcode" type="button" data-action="barcode" aria-label="طباعة باركود ${escapeHtml(product.nameAr)}" title="طباعة باركود">▥</button><button class="products-action" type="button" data-action="revaluations" aria-label="سجل تقييم ${escapeHtml(product.nameAr)}">↻</button><button class="products-action products-action--edit" type="button" data-action="edit" aria-label="تعديل ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="products-action products-action--delete" type="button" data-action="delete" aria-label="أرشفة ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div></td>
+      <td><div class="products-actions"><button class="products-action products-action--barcode" type="button" data-action="barcode" aria-label="طباعة باركود ${escapeHtml(product.nameAr)}" title="طباعة باركود">▥</button><button class="products-action" type="button" data-action="revaluations" aria-label="سجل تقييم ${escapeHtml(product.nameAr)}">↻</button><button class="products-action products-action--edit" type="button" data-action="edit" aria-label="تعديل ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="products-action products-action--delete" type="button" data-action="delete" aria-label="حذف ${escapeHtml(product.nameAr)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg></button></div></td>
     </tr>`;
   }).join("");
   elements.empty.hidden = pageProducts.length > 0;
@@ -244,9 +246,19 @@ function setModalTitle(elements, text) {
   if (buttonNode) buttonNode.textContent = text === "تعديل المنتج" ? "حفظ التعديلات" : "حفظ المنتج";
 }
 
+function selectCurrentReference(select, id, label) {
+  const value = String(id || "");
+  if (!value) return;
+  if (![...select.options].some(option => option.value === value)) select.add(new Option(label && label !== "—" ? `${label} (الحالي)` : "القيمة الحالية", value));
+  select.value = value;
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
 async function openProductModal(elements, product = null) {
   elements.form.reset(); elements.nameError.hidden = true;
-  elements.id.value = product?.id || ""; elements.nameAr.value = product?.nameAr || ""; elements.nameEn.value = product?.nameEn || ""; elements.category.value = product?.categoryId || ""; elements.supplier.value = product?.supplierId || "";
+  elements.id.value = product?.id || ""; elements.nameAr.value = product?.nameAr || ""; elements.nameEn.value = product?.nameEn || "";
+  selectCurrentReference(elements.category, product?.categoryId, product?.category);
+  selectCurrentReference(elements.supplier, product?.supplierId, product?.supplierName);
   elements.status.value = product?.status || "active"; elements.statusField.hidden = false;
   elements.salePrice.value = product?.salePrice ?? ""; elements.costPrice.value = product?.costPrice ?? ""; elements.salesPercentage.value = product?.salesPercentage ?? 0; elements.quantity.value = product?.quantity ?? 0; elements.minimum.value = product?.minimum ?? 5;
   elements.costPrice.readOnly = Boolean(product); elements.modal.dataset.variantId = ""; elements.modal.dataset.variantVersion = "";
@@ -254,10 +266,15 @@ async function openProductModal(elements, product = null) {
   let detailVariants = [];
   if (product) {
     try {
-      const detail = await api.get(`/api/v1/products/${encodeURIComponent(product.id)}`);
-      const variant = detail.product_variants?.[0];
-      detailVariants = (detail.product_variants || []).map(item => ({ id: item.id, version: Number(item.version || 0), size: item.size, color: item.color, quantity: Number(item.stock_qty || 0) }));
-      product.variantId = variant?.id || ""; product.variantVersion = Number(variant?.version || 0); product.quantity = Number(variant?.stock_qty ?? product.quantity);
+      const detailResponse = await api.get(`/api/v1/products/${encodeURIComponent(product.id)}`);
+      const detail = detailResponse?.product || detailResponse?.data?.product || detailResponse?.data || detailResponse;
+      const detailedProduct = normalizeProduct(detail);
+      selectCurrentReference(elements.category, detailedProduct.categoryId || product.categoryId, detailedProduct.category || product.category);
+      selectCurrentReference(elements.supplier, detailedProduct.supplierId || product.supplierId, detailedProduct.supplierName || product.supplierName);
+      const apiVariants = detail.product_variants || detail.variants || [];
+      const variant = apiVariants[0];
+      detailVariants = apiVariants.map(item => ({ id: item.id, version: Number(item.version || 0), size: item.size, color: item.color, quantity: Number(item.stock_qty ?? item.stock_quantity ?? item.quantity ?? 0) }));
+      product.variantId = variant?.id || ""; product.variantVersion = Number(variant?.version || 0); product.quantity = detailVariants.length ? detailVariants.reduce((sum, item) => sum + item.quantity, 0) : product.quantity;
       elements.quantity.value = product.quantity; elements.modal.dataset.variantId = product.variantId; elements.modal.dataset.variantVersion = String(product.variantVersion);
     } catch (error) { showToast(elements, error.message, true); }
   }
@@ -268,6 +285,39 @@ async function openProductModal(elements, product = null) {
 
 function closeProductModal(elements) { elements.modal.hidden = true; elements.form.reset(); elements.nameError.hidden = true; }
 function closeSuccess(elements) { elements.successModal.hidden = true; elements.successModal.style.display = ""; }
+
+function confirmProductDeletion(product) {
+  const modal = document.getElementById("productDeleteModal"), confirmButton = document.getElementById("confirmProductDelete"), cancelButton = document.getElementById("cancelProductDelete");
+  document.getElementById("productDeleteName").textContent = `«${product.nameAr}»`;
+  modal.hidden = false;
+  confirmButton.focus();
+  return new Promise(resolve => {
+    const finish = confirmed => { modal.hidden = true; confirmButton.removeEventListener("click", confirm); cancelButton.removeEventListener("click", cancel); modal.removeEventListener("click", backdrop); resolve(confirmed); };
+    const confirm = () => finish(true), cancel = () => finish(false), backdrop = event => { if (event.target === modal) finish(false); };
+    confirmButton.addEventListener("click", confirm); cancelButton.addEventListener("click", cancel); modal.addEventListener("click", backdrop);
+  });
+}
+
+function validateProductVariantTotal(elements) {
+  const editor = elements.form.querySelector("[data-variants-editor]");
+  if (!editor || editor.querySelector("[data-variants-mode]")?.value !== "multiple") return true;
+  const expected = Number(elements.quantity.value);
+  const quantityInputs = [...editor.querySelectorAll(".product-variant-quantity")];
+  const quantities = quantityInputs.map(input => Number(input.value));
+  const total = quantities.reduce((sum, quantity) => sum + (Number.isFinite(quantity) ? quantity : 0), 0);
+  const valid = Number.isInteger(expected) && expected >= 0 && quantities.every(quantity => Number.isInteger(quantity) && quantity >= 0) && total === expected;
+  if (valid) return true;
+  const message = !Number.isInteger(expected) || expected < 0
+    ? "إجمالي الكمية يجب أن يكون رقمًا صحيحًا لا يقل عن صفر."
+    : total > expected
+      ? `مجموع كميات المقاسات (${total}) أكبر من إجمالي الكمية (${expected}). صحح الكميات قبل الحفظ.`
+      : `مجموع كميات المقاسات (${total}) أقل من إجمالي الكمية (${expected}). المتبقي ${expected - total}، صحح الكميات قبل الحفظ.`;
+  const inlineError = editor.querySelector("[data-variants-total-error]");
+  if (inlineError) { inlineError.textContent = message; inlineError.hidden = false; }
+  showToast(elements, message, true);
+  (total === expected ? quantityInputs.find((input, index) => !Number.isInteger(quantities[index]) || quantities[index] < 0) : elements.quantity).focus();
+  return false;
+}
 
 function closeBarcodeModal() {
   const modal = document.getElementById("productBarcodeModal");
@@ -338,6 +388,7 @@ async function saveProduct(elements) {
   const salePrice = Number(elements.salePrice.value);
   if (!nameAr) { elements.nameError.hidden = false; elements.nameAr.focus(); return; }
   if (!categoryId || !supplierId || !Number.isFinite(salePrice) || salePrice <= 0) { showToast(elements, "اختر الفئة والمورد وأدخل سعر بيع أكبر من صفر.", true); return; }
+  if (!validateProductVariantTotal(elements)) return;
   elements.saveButton.disabled = true;
   try {
     const existing = products.find(product => String(product.id) === id);
@@ -345,8 +396,15 @@ async function saveProduct(elements) {
     const initialStock = variants.reduce((sum, variant) => sum + variant.quantity, 0);
     let response;
     if (existing) {
-      const currentVariants = JSON.parse(elements.modal.dataset.variants || "[]"), variantKey = item => `${item.size.trim().toLocaleLowerCase("ar")}::${item.color.trim().toLocaleLowerCase("ar")}`;
-      const adjustments = variants.map(variant => { const current = currentVariants.find(item => variantKey(item) === variantKey(variant)); if (!current) throw new Error("لا يمكن إضافة مقاس جديد من شاشة التعديل الحالية؛ أنشئ منتجًا جديدًا بهذا المقاس."); return { current, delta: variant.quantity - current.quantity }; }).filter(item => item.delta !== 0);
+      const currentVariants = JSON.parse(elements.modal.dataset.variants || "[]");
+      const normalizeVariantPart = value => String(value || "").trim().toLocaleLowerCase("ar") || "افتراضي";
+      const variantKey = item => `${normalizeVariantPart(item?.size)}::${normalizeVariantPart(item?.color)}`;
+      const matchedVariants = variants.map(variant => ({ variant, current: currentVariants.find(item => variantKey(item) === variantKey(variant)) }));
+      const additions = matchedVariants.filter(item => !item.current).map(({ variant }) => variant);
+      const adjustments = matchedVariants.filter(item => item.current).map(({ variant, current }) => ({ current, delta: variant.quantity - current.quantity })).filter(item => item.delta !== 0);
+      if (additions.length) {
+        throw new Error("السيرفر الحالي لا يدعم إضافة مقاس جديد أثناء تعديل المنتج. احفظ بيانات المنتج بدون المقاس الجديد لحين إضافة مسار المقاسات في الـAPI.");
+      }
       if (adjustments.some(({ current }) => !current.id || !current.version)) throw new Error("بيانات نسخة المنتج غير مكتملة. أعد تحميل المنتج وحاول مرة أخرى.");
       response = await api.patch(`/api/v1/admin/products/${encodeURIComponent(id)}`, {
         name_ar: nameAr, name_internal: elements.nameEn.value.trim() || null, category_id: categoryId, supplier_id: supplierId, sale_price: salePrice,
@@ -411,9 +469,11 @@ export function initProducts() {
       try { await api.patch(`/api/v1/admin/products/${encodeURIComponent(product.id)}`, { status, version: product.version }); showToast(elements, status === "active" ? "تم تفعيل المنتج" : "تم إيقاف المنتج"); await loadProducts(elements); }
       catch (error) { action.disabled = false; showToast(elements, error.message, true); }
     }
-    if (action.dataset.action === "delete" && window.confirm(`هل تريد أرشفة المنتج «${product.nameAr}»؟`)) {
-      try { await api.delete(`/api/v1/admin/products/${encodeURIComponent(product.id)}`); showToast(elements, "تمت أرشفة المنتج"); await loadProducts(elements); }
+    if (action.dataset.action === "delete" && await confirmProductDeletion(product)) {
+      action.disabled = true;
+      try { await api.delete(`/api/v1/admin/products/${encodeURIComponent(product.id)}`, { query: { version: product.version } }); products = products.filter(item => String(item.id) !== String(product.id)); summary.total = Math.max(0, summary.total - 1); renderProducts(elements); showToast(elements, "تم حذف المنتج بنجاح"); }
       catch (error) { showToast(elements, error.message, true); }
+      finally { action.disabled = false; }
     }
   };
   const handleSubmit = event => { event.preventDefault(); saveProduct(elements); };
@@ -429,8 +489,16 @@ export function initProducts() {
   document.getElementById("printProductBarcode").addEventListener("click", event => printSavedProductBarcodes(elements, event.currentTarget));
   elements.form.addEventListener("submit", handleSubmit); elements.tableBody.addEventListener("click", handleTable); elements.pagination.addEventListener("click", handlePagination);
   elements.search.addEventListener("input", refresh); elements.search.addEventListener("keydown", handleSearchScanner); elements.categoryFilter.addEventListener("change", refresh); elements.stockFilter.addEventListener("change", refresh);
-  const refreshPricing = debounce(() => previewPricing(elements), 350);
-  [elements.salePrice, elements.costPrice, elements.salesPercentage].forEach(input => input.addEventListener("input", () => { updateProfit(elements); refreshPricing(); }));
+  const handlePricingChange = () => {
+    // Keep the form calculation authoritative: the pricing-preview endpoint may
+    // return a stale/default commission and overwrite the value the user sees.
+    pricingPreviewSequence += 1;
+    updateProfit(elements);
+  };
+  [elements.salePrice, elements.costPrice, elements.salesPercentage].forEach(input => {
+    input.addEventListener("input", handlePricingChange);
+    input.addEventListener("change", handlePricingChange);
+  });
   elements.modal.addEventListener("click", event => { if (event.target === elements.modal) closeProductModal(elements); }); elements.successModal.addEventListener("click", event => { if (event.target === elements.successModal) closeSuccess(elements); }); document.addEventListener("keydown", handleEscape); document.addEventListener("keydown", handleGlobalScanner);
-  return () => { requestSequence += 1; pricingPreviewSequence += 1; refresh.cancel?.(); refreshPricing.cancel?.(); clearTimeout(scanResetTimer); elements.form.removeEventListener("submit", handleSubmit); elements.tableBody.removeEventListener("click", handleTable); elements.pagination.removeEventListener("click", handlePagination); elements.search.removeEventListener("keydown", handleSearchScanner); document.removeEventListener("keydown", handleEscape); document.removeEventListener("keydown", handleGlobalScanner); };
+  return () => { requestSequence += 1; pricingPreviewSequence += 1; refresh.cancel?.(); clearTimeout(scanResetTimer); elements.form.removeEventListener("submit", handleSubmit); elements.tableBody.removeEventListener("click", handleTable); elements.pagination.removeEventListener("click", handlePagination); elements.search.removeEventListener("keydown", handleSearchScanner); document.removeEventListener("keydown", handleEscape); document.removeEventListener("keydown", handleGlobalScanner); };
 }

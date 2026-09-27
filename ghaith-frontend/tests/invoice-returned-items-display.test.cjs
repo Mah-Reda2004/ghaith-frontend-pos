@@ -21,6 +21,7 @@ const assert = require('node:assert/strict');
         { id: 'line-open', product_variant_id: 'variant-open', product_name: 'طرحة', quantity: 2, returnable_quantity: 1, returned_quantity: 1, unit_price: 100 }
       ] };
       if (path === '/api/v1/sales-invoices') return route.fulfill({ json: { items: [invoice], total: 1 } });
+      if (path === '/api/v1/returns') return route.fulfill({ json: { items: [{ id: 'exchange-1', operation_type: 'exchange', original_invoice_id: invoice.id, return_number: 'RET-INTERNAL-1', exchange_number: 'EXC-1' }], total: 1 } });
       if (path === '/api/v1/sales-invoices/invoice-returned') return route.fulfill({ json: invoice });
       if (path === '/api/v1/sales-invoices/invoice-returned/operations') return route.fulfill({ json: { operations: [{ id: 'exchange-1', type: 'exchange' }] } });
       if (path === '/api/v1/exchanges/exchange-1') return route.fulfill({ json: { id: 'exchange-1', exchange_number: 'EXC-1', return_items: [{ invoice_item_id: 'line-returned', quantity: 1 }], replacement_items: [{ variant_id: 'variant-new', product_name: 'عباية بديلة', sku: 'NEW-1', quantity: 1, unit_price: 120 }] } });
@@ -31,6 +32,9 @@ const assert = require('node:assert/strict');
 
     await page.goto('http://127.0.0.1:8765/src/pages/cashier/cashier.html#invoices');
     await page.getByText('#INV-RETURNED', { exact: true }).waitFor();
+    await page.getByText('استبدال #EXC-1', { exact: true }).waitFor();
+    await page.getByText('مستبدلة جزئيًا', { exact: true }).waitFor();
+    assert.equal(await page.getByText(/مرتجع #RET-INTERNAL-1/, { exact: true }).count(), 0);
     await page.locator('[data-action="return-flow"]').click();
     const returnedRow = page.locator('[data-return-id="line-returned"]');
     await returnedRow.getByText('تم الارتجاع', { exact: true }).waitFor();

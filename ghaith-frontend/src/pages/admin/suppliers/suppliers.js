@@ -12,6 +12,8 @@ let activeSupplier = null;
 let requestSequence = 0;
 const supplierBalances = new Map();
 const supplierInvoicesById = new Map();
+const invoicePaymentsById = new Map();
+const purchaseVariantsById = new Map();
 
 function addApiUi() {
   if (document.getElementById("supplierAddress")) return;
@@ -41,8 +43,8 @@ function addApiUi() {
       </div><footer class="modal__actions suppliers-dialog__actions"><button class="btn btn-outline" id="cancelPurchaseInvoice" type="button">إلغاء</button><button class="btn btn-primary" id="savePurchaseInvoice" type="submit">حفظ الفاتورة</button></footer></form>
     </section></div>
     <div class="modal-overlay suppliers-modal" id="purchaseDetailModal" hidden><section class="modal suppliers-dialog purchase-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="purchaseDetailTitle">
-      <header class="modal__header suppliers-dialog__header"><div><h2 class="modal__title" id="purchaseDetailTitle">تفاصيل فاتورة الشراء</h2><p id="purchaseDetailMeta">—</p></div><button class="btn-icon" id="closePurchaseDetail" type="button" aria-label="إغلاق">×</button></header>
-      <div class="suppliers-dialog__body"><div class="purchase-detail-summary" id="purchaseDetailSummary"></div><h3 class="purchase-section-title">منتجات الفاتورة</h3><div class="table-responsive"><table class="data-table"><thead><tr><th>المنتج</th><th>التصنيف</th><th>المقاس</th><th>اللون</th><th>SKU / الباركود</th><th>الكمية</th><th>سعر الوحدة</th><th>خصم البند</th><th>الإجمالي</th></tr></thead><tbody id="purchaseDetailItems"></tbody></table></div><section class="purchase-payments"><div class="purchase-lines-head"><h3>دفعات الفاتورة</h3><span id="purchasePaymentBalance"></span></div><div class="table-responsive"><table class="data-table"><thead><tr><th>تاريخ الدفعة</th><th>المبلغ</th><th>طريقة الدفع</th><th>المرجع</th></tr></thead><tbody id="purchasePaymentsBody"></tbody></table></div><form class="purchase-payment-form" id="purchasePaymentForm"><p class="purchase-payment-notice" id="purchasePaymentNotice" role="status" hidden></p><div class="field"><label for="purchasePaymentAmount">قيمة الدفعة</label><input class="input num" id="purchasePaymentAmount" type="number" min="0.01" step="0.01" required></div><div class="field"><label for="purchasePaymentMethodDetail">طريقة الدفع</label><select class="select" id="purchasePaymentMethodDetail"><option value="cash">نقدي</option><option value="bank">بنك</option><option value="transfer">تحويل</option><option value="wallet">محفظة</option><option value="card">بطاقة</option><option value="instapay">إنستا باي</option></select></div><div class="field"><label for="purchasePaymentReference">مرجع الدفع (اختياري)</label><input class="input" id="purchasePaymentReference" type="text"></div><button class="btn btn-primary" id="savePurchasePayment" type="submit">تسجيل الدفعة</button></form></section><div class="supplier-detail__notes"><h2>ملاحظات الفاتورة</h2><p id="purchaseDetailNotes">—</p></div></div>
+      <header class="modal__header suppliers-dialog__header"><div><h2 class="modal__title" id="purchaseDetailTitle">تفاصيل فاتورة الشراء</h2><p id="purchaseDetailMeta">—</p></div><div><button class="btn btn-outline" id="printPurchaseInvoice" type="button">طباعة الفاتورة</button><button class="btn-icon" id="closePurchaseDetail" type="button" aria-label="إغلاق">×</button></div></header>
+      <div class="suppliers-dialog__body"><div class="purchase-detail-summary" id="purchaseDetailSummary"></div><h3 class="purchase-section-title">منتجات الفاتورة</h3><div class="table-responsive"><table class="data-table"><thead><tr><th>المنتج</th><th>التصنيف</th><th>المقاس</th><th>اللون</th><th>SKU / الباركود</th><th>الكمية</th><th>سعر الوحدة</th><th>خصم البند</th><th>الإجمالي</th></tr></thead><tbody id="purchaseDetailItems"></tbody></table></div><section class="purchase-payments"><div class="purchase-lines-head"><h3>دفعات الفاتورة</h3><span id="purchasePaymentBalance"></span></div><div class="table-responsive"><table class="data-table"><thead><tr><th>تاريخ الدفعة</th><th>المبلغ</th><th>طريقة الدفع</th><th>المرجع</th><th>الإيصال</th></tr></thead><tbody id="purchasePaymentsBody"></tbody></table></div><form class="purchase-payment-form" id="purchasePaymentForm"><p class="purchase-payment-notice" id="purchasePaymentNotice" role="status" hidden></p><div class="field"><label for="purchasePaymentAmount">قيمة الدفعة</label><input class="input num" id="purchasePaymentAmount" type="number" min="0.01" step="0.01" required></div><div class="field"><label for="purchasePaymentMethodDetail">طريقة الدفع</label><select class="select" id="purchasePaymentMethodDetail"><option value="cash">نقدي</option><option value="bank">بنك</option><option value="transfer">تحويل</option><option value="wallet">محفظة</option><option value="card">بطاقة</option><option value="instapay">إنستا باي</option></select></div><div class="field"><label for="purchasePaymentReference">مرجع الدفع (اختياري)</label><input class="input" id="purchasePaymentReference" type="text"></div><button class="btn btn-primary" id="savePurchasePayment" type="submit">تسجيل الدفعة وطباعة إيصال</button></form></section><div class="supplier-detail__notes"><h2>ملاحظات الفاتورة</h2><p id="purchaseDetailNotes">—</p></div></div>
     </section></div>
     <div class="modal-overlay suppliers-modal" id="supplierDeactivateModal" hidden><section class="modal suppliers-confirm" role="alertdialog" aria-modal="true" aria-labelledby="supplierDeactivateTitle"><span class="suppliers-confirm__icon">!</span><h2 id="supplierDeactivateTitle">أرشفة المورد؟</h2><p>سيتم أرشفة <b id="supplierDeactivateName"></b> وإزالته من قائمة الموردين النشطين.</p><div><button class="btn btn-outline" id="cancelSupplierDeactivate" type="button">إلغاء</button><button class="btn suppliers-confirm__submit" id="confirmSupplierDeactivate" type="button">أرشفة المورد</button></div></section></div>`);
   const paymentSection = document.querySelector("#purchaseDetailModal .purchase-payments");
@@ -76,6 +78,12 @@ function normalizeSupplier(item) { return { id: item.id, name: item.name || "—
 const PAYMENT_LABELS = { cash: "نقدي", bank: "بنك", transfer: "تحويل", wallet: "محفظة", card: "بطاقة", instapay: "إنستا باي", deferred: "آجل" };
 const STATUS_LABELS = { draft: "مسودة", unpaid: "غير مدفوعة", deferred: "غير مدفوعة", partial: "مدفوعة جزئيًا", partially_paid: "مدفوعة جزئيًا", paid: "مدفوعة بالكامل", fully_paid: "مدفوعة بالكامل", approved: "معتمدة", overdue: "متأخرة", void: "ملغاة", voided: "ملغاة", cancelled: "ملغاة" };
 function amount(invoice, ...keys) { for (const key of keys) if (invoice?.[key] != null) return Number(invoice[key]) || 0; return 0; }
+function unwrapInvoice(response) { return response?.invoice || response?.data?.invoice || response?.data?.item || response?.item || response?.data || response; }
+function invoiceNumber(invoice) { return invoice?.invoice_number || invoice?.purchase_invoice_number || invoice?.number || invoice?.code || invoice?.reference_number || "غير متوفر"; }
+function invoiceItems(invoice) { return invoice?.purchase_invoice_items || invoice?.items || invoice?.line_items || invoice?.lines || []; }
+function supplierName(invoice) { return activeSupplier?.name || invoice?.supplier_name || invoice?.supplier?.name || invoice?.supplier?.supplier_name || "غير متوفر"; }
+function supplierPhone(invoice) { return activeSupplier?.phone || invoice?.supplier_phone || invoice?.supplier?.phone || "غير متوفر"; }
+function supplierAddress(invoice) { return activeSupplier?.address || invoice?.supplier_address || invoice?.supplier?.address || "غير متوفر"; }
 function invoiceDueState(invoice) { const remaining = amount(invoice, "remaining_amount", "balance_due"); const raw = String(invoice.status || invoice.payment_status || "").toLowerCase(); if (["void", "voided", "cancelled", "draft"].includes(raw)) return raw; if (remaining <= 0) return "paid"; if (invoice.due_date) { const due = new Date(`${invoice.due_date}T23:59:59`); const today = new Date(); const days = Math.ceil((due - today) / 86400000); if (days < 0) return "overdue"; if (days <= 5) return "due-soon"; } return amount(invoice, "paid_amount", "total_paid") > 0 ? "partial" : "unpaid"; }
 function statusMarkup(invoice) { const state = invoiceDueState(invoice); const label = state === "due-soon" ? "يستحق خلال 5 أيام" : STATUS_LABELS[state] || STATUS_LABELS[String(invoice.status || "").toLowerCase()] || invoice.status || "—"; return `<span class="purchase-status purchase-status--${escapeHtml(state)}">${escapeHtml(label)}</span>`; }
 
@@ -201,27 +209,129 @@ async function showPurchaseDetailLegacy(elements, invoiceId) {
 }
 
 function renderPurchaseInvoice(elements, invoice) {
-  const items = invoice.purchase_invoice_items || invoice.items || [];
+  const items = invoiceItems(invoice);
   const remaining = amount(invoice, "remaining_amount", "balance_due");
   elements.purchaseDetailModal.dataset.invoiceVersion = String(invoice.version || 1);
-  elements.purchaseDetailMeta.textContent = `${invoice.invoice_number || "—"} · ${activeSupplier?.name || invoice.supplier_name || "—"} · ${activeSupplier?.phone || invoice.supplier_phone || "—"}`;
+  elements.purchaseDetailMeta.textContent = `${invoiceNumber(invoice)} · ${supplierName(invoice)} · ${supplierPhone(invoice)}`;
   elements.purchaseDetailSummary.innerHTML = `<span>تاريخ الفاتورة <b>${dateLabel(invoice.invoice_date || invoice.created_at)}</b></span><span>تاريخ الاستحقاق <b>${dateLabel(invoice.due_date)}</b></span><span>طريقة الدفع <b>${escapeHtml(PAYMENT_LABELS[invoice.payment_method] || invoice.payment_method || "—")}</b></span><span>الحالة <b>${statusMarkup(invoice)}</b></span><span>الإجمالي <b class="num">${money(amount(invoice, "total_amount", "grand_total", "total"))}</b></span><span>المدفوع <b class="num supplier-paid">${money(amount(invoice, "paid_amount", "total_paid"))}</b></span><span>المتبقي <b class="num supplier-balance">${money(remaining)}</b></span><span>الخصم / الشحن <b class="num">${money(amount(invoice, "discount_amount"))} / ${money(amount(invoice, "shipping_amount"))}</b></span>`;
   elements.purchaseDetailItems.innerHTML = items.map(item => {
-    const variant = item.product_variant || item.product_variants || item.variant || {};
+    const variantId = String(item.variant_id || item.product_variant_id || item.product_variant?.id || item.variant?.id || "");
+    const variant = { ...(purchaseVariantsById.get(variantId)?.variant || {}), ...(item.product_variant || item.product_variants || item.variant || {}) };
+    const catalogProduct = purchaseVariantsById.get(variantId)?.product || {};
     const product = variant.product || variant.products || item.product || {};
-    const name = product.name_ar || product.name || item.product_name || "منتج بدون اسم من الخادم";
+    const name = product.name_ar || product.name || item.product_name || catalogProduct.name_ar || catalogProduct.name || "منتج بدون اسم من الخادم";
     const sku = variant.sku || item.sku || item.variant_id || item.product_variant_id || "—";
-    return `<tr><td><strong>${escapeHtml(name)}</strong></td><td>${escapeHtml(product.category?.name || item.category_name || "—")}</td><td>${escapeHtml(variant.size || item.size || "—")}</td><td>${escapeHtml(variant.color || item.color || "—")}</td><td><span class="num" dir="ltr">${escapeHtml(sku)}</span><small class="num" dir="ltr">${escapeHtml(variant.barcode || item.barcode || "—")}</small></td><td class="num">${Number(item.quantity || 0).toLocaleString("en-US")}</td><td class="num">${money(amount(item, "unit_cost", "unit_price"))}</td><td class="num">${money(amount(item, "discount_amount"))}</td><td class="num">${money(amount(item, "line_total", "total"))}</td></tr>`;
+    return `<tr><td><strong>${escapeHtml(name)}</strong></td><td>${escapeHtml(product.category?.name || item.category_name || catalogProduct.category?.name || catalogProduct.category_name || "—")}</td><td>${escapeHtml(variant.size || item.size || "—")}</td><td>${escapeHtml(variant.color || item.color || "—")}</td><td><span class="num" dir="ltr">${escapeHtml(sku)}</span><small class="num" dir="ltr">${escapeHtml(variant.barcode || item.barcode || "—")}</small></td><td class="num">${Number(item.quantity || 0).toLocaleString("en-US")}</td><td class="num">${money(amount(item, "unit_cost", "unit_price"))}</td><td class="num">${money(amount(item, "discount_amount"))}</td><td class="num">${money(amount(item, "line_total", "total"))}</td></tr>`;
   }).join("") || '<tr><td colspan="9">لا توجد منتجات مسجلة في استجابة الفاتورة</td></tr>';
   elements.paymentBalance.textContent = `المتبقي: ${money(remaining)} EGP`;
   setPaymentFormState(elements, invoice);
   elements.purchaseDetailNotes.textContent = invoice.notes || "لا توجد ملاحظات";
 }
 
+function purchaseItem(item) {
+  const variantId = String(item.variant_id || item.product_variant_id || item.product_variant?.id || item.variant?.id || "");
+  const catalog = purchaseVariantsById.get(variantId) || {};
+  const variant = { ...(catalog.variant || {}), ...(item.product_variant || item.product_variants || item.variant || {}) };
+  const product = variant.product || variant.products || item.product || catalog.product || {};
+  const quantity = Number(item.quantity || item.qty || 0);
+  const price = amount(item, "unit_cost", "unit_price", "price");
+  return {
+    name: product.name_ar || product.name || item.product_name || "منتج غير معروف",
+    sku: variant.sku || item.sku || variantId,
+    barcode: variant.barcode || item.barcode || "",
+    size: variant.size || item.size || "—",
+    color: variant.color || item.color || "—",
+    qty: quantity,
+    price,
+    total: amount(item, "line_total", "total") || (quantity * price) - amount(item, "discount_amount")
+  };
+}
+
+function purchaseInvoiceReceipt(invoice) {
+  const total = amount(invoice, "total_amount", "grand_total", "total");
+  const subtotal = amount(invoice, "subtotal", "subtotal_amount") || invoiceItems(invoice).reduce((sum, item) => sum + Number(item.quantity || item.qty || 0) * amount(item, "unit_cost", "unit_price", "price"), 0);
+  const lineDiscount = amount(invoice, "line_discount_amount", "items_discount_amount");
+  return {
+    title: "فاتورة مشتريات مورد",
+    number: invoiceNumber(invoice),
+    date: dateLabel(invoice.invoice_date || invoice.created_at),
+    partyLabel: "المورد",
+    party: supplierName(invoice),
+    payment: PAYMENT_LABELS[invoice.payment_method] || invoice.payment_method || "—",
+    meta: [
+      { label: "هاتف المورد", value: supplierPhone(invoice) },
+      { label: "عنوان المورد", value: supplierAddress(invoice) },
+      { label: "الاستحقاق", value: dateLabel(invoice.due_date) },
+      { label: "الحالة", value: STATUS_LABELS[invoiceDueState(invoice)] || invoiceDueState(invoice) },
+      { label: "مرجع المورد", value: invoice.supplier_invoice_number || invoice.supplier_reference || invoice.payment_reference || "—" }
+    ],
+    items: invoiceItems(invoice).map(purchaseItem),
+    totals: [
+      { label: "إجمالي البنود", value: subtotal },
+      ...(lineDiscount ? [{ label: "خصومات البنود", value: lineDiscount, negative: true }] : []),
+      ...(amount(invoice, "discount_amount") ? [{ label: "خصم الفاتورة", value: amount(invoice, "discount_amount"), negative: true }] : []),
+      ...(amount(invoice, "shipping_amount") ? [{ label: "الشحن", value: amount(invoice, "shipping_amount") }] : []),
+      { label: "صافي الفاتورة", value: total, final: true },
+      { label: "المدفوع", value: amount(invoice, "paid_amount", "total_paid") },
+      { label: "المتبقي", value: amount(invoice, "remaining_amount", "balance_due"), emphasis: true }
+    ],
+    note: invoice.notes || "",
+    footerTitle: "فاتورة توريد معتمدة",
+    footerNote: "يرجى الاحتفاظ بالفاتورة للرجوع إليها عند السداد أو المراجعة",
+    returnPolicy: "فاتورة توريد مرتبطة بالمورد • احتفظ بها للسداد والمراجعة"
+  };
+}
+
+function paymentReceipt(invoice, payment) {
+  const method = payment.method || payment.payment_method;
+  const reference = payment.reference || payment.payment_reference;
+  return {
+    title: "إيصال سداد مورد",
+    number: payment.receipt_number || payment.payment_number || payment.id || `${invoice.invoice_number || invoice.id}-PAY`,
+    date: dateLabel(payment.paid_at || payment.payment_date || payment.created_at),
+    partyLabel: "المورد",
+    party: supplierName(invoice),
+    payment: PAYMENT_LABELS[method] || method || "—",
+    meta: [
+      { label: "فاتورة الشراء", value: invoiceNumber(invoice) },
+      { label: "مرجع الدفع", value: reference || "—" }
+    ],
+    totals: [
+      { label: "قيمة الدفعة", value: amount(payment, "amount", "paid_amount"), final: true },
+      { label: "المتبقي بعد السداد", value: amount(invoice, "remaining_amount", "balance_due") }
+    ],
+    footerTitle: "تم استلام وتسجيل الدفعة",
+    footerNote: "هذا الإيصال مرتبط بفاتورة الشراء الموضحة أعلاه"
+  };
+}
+
+async function printPurchaseInvoice(elements) {
+  const invoiceId = String(elements.purchaseDetailModal.dataset.invoiceId || "");
+  let invoice = supplierInvoicesById.get(invoiceId);
+  try {
+    const response = await api.get(`/api/v1/admin/purchase-invoices/${encodeURIComponent(invoiceId)}`);
+    invoice = unwrapInvoice(response);
+    if (invoice) supplierInvoicesById.set(invoiceId, invoice);
+    await loadPurchaseVariantCatalog().catch(() => {});
+  } catch (error) {
+    if (!invoice) { showToast(elements, error.message, true); return; }
+  }
+  if (!invoice) { showToast(elements, "انتظر حتى يكتمل تحميل بيانات الفاتورة.", true); return; }
+  window.GhaithPrint?.printReceipt(purchaseInvoiceReceipt(invoice));
+}
+
+function printPurchasePayment(elements, paymentIndex) {
+  const invoiceId = String(elements.purchaseDetailModal.dataset.invoiceId);
+  const invoice = supplierInvoicesById.get(invoiceId);
+  const payment = invoicePaymentsById.get(invoiceId)?.[paymentIndex];
+  if (!invoice || !payment) { showToast(elements, "تعذّر تجهيز إيصال الدفعة.", true); return; }
+  window.GhaithPrint?.printReceipt(paymentReceipt(invoice, payment));
+}
+
 async function showPurchaseDetail(elements, invoiceId) {
   elements.purchaseDetailModal.hidden = false;
   elements.purchaseDetailModal.dataset.invoiceId = invoiceId;
-  elements.paymentsBody.innerHTML = '<tr><td colspan="4">جاري تحميل الدفعات...</td></tr>';
+  elements.paymentsBody.innerHTML = '<tr><td colspan="5">جاري تحميل الدفعات...</td></tr>';
   const cachedInvoice = supplierInvoicesById.get(String(invoiceId));
   if (cachedInvoice) renderPurchaseInvoice(elements, cachedInvoice);
   else {
@@ -229,8 +339,8 @@ async function showPurchaseDetail(elements, invoiceId) {
     elements.purchaseDetailItems.innerHTML = '<tr><td colspan="9">جاري تحميل المنتجات...</td></tr>';
   }
   try {
-    const response = await api.get(`/api/v1/admin/purchase-invoices/${encodeURIComponent(invoiceId)}`);
-    const invoice = response?.invoice || response?.item || response?.data || response;
+    const [response] = await Promise.all([api.get(`/api/v1/admin/purchase-invoices/${encodeURIComponent(invoiceId)}`), loadPurchaseVariantCatalog().catch(() => {})]);
+    const invoice = unwrapInvoice(response);
     supplierInvoicesById.set(String(invoiceId), invoice);
     renderPurchaseInvoice(elements, invoice);
   } catch (error) {
@@ -240,18 +350,19 @@ async function showPurchaseDetail(elements, invoiceId) {
   await loadInvoicePayments(elements, invoiceId);
 }
 
-function paymentRowMarkup(payment) {
-  return `<tr><td>${dateLabel(payment.paid_at || payment.payment_date || payment.created_at)}</td><td class="num supplier-paid">${money(payment.amount || payment.paid_amount)}</td><td>${escapeHtml(PAYMENT_LABELS[payment.method || payment.payment_method] || payment.method || payment.payment_method || "—")}</td><td>${escapeHtml(payment.reference || payment.payment_reference || "—")}</td></tr>`;
+function paymentRowMarkup(payment, index = 0) {
+  return `<tr><td>${dateLabel(payment.paid_at || payment.payment_date || payment.created_at)}</td><td class="num supplier-paid">${money(payment.amount || payment.paid_amount)}</td><td>${escapeHtml(PAYMENT_LABELS[payment.method || payment.payment_method] || payment.method || payment.payment_method || "—")}</td><td>${escapeHtml(payment.reference || payment.payment_reference || "—")}</td><td><button class="btn btn-outline" type="button" data-print-payment="${index}">طباعة الإيصال</button></td></tr>`;
 }
 
 async function loadInvoicePayments(elements, invoiceId, { preserveOnError = false } = {}) {
   try {
     const response = await api.get(`/api/v1/admin/purchase-invoices/${encodeURIComponent(invoiceId)}/payments`, { query: { page: 1, page_size: 100 } });
     const payments = listFrom(response);
-    elements.paymentsBody.innerHTML = payments.map(paymentRowMarkup).join("") || '<tr><td colspan="4">لم تُسجل دفعات على هذه الفاتورة</td></tr>';
+    invoicePaymentsById.set(String(invoiceId), payments);
+    elements.paymentsBody.innerHTML = payments.map(paymentRowMarkup).join("") || '<tr><td colspan="5">لم تُسجل دفعات على هذه الفاتورة</td></tr>';
     return true;
   } catch {
-    if (!preserveOnError) elements.paymentsBody.innerHTML = '<tr><td colspan="4">سجل الدفعات غير متاح حاليًا</td></tr>';
+    if (!preserveOnError) elements.paymentsBody.innerHTML = '<tr><td colspan="5">سجل الدفعات غير متاح حاليًا</td></tr>';
     return false;
   }
 }
@@ -285,15 +396,19 @@ async function saveInvoicePayment(elements) {
     const returnedPayment = response?.payment || response?.data?.payment || (response?.amount ? response : null) || {};
     const loadedFromApi = await loadInvoicePayments(elements, invoiceId, { preserveOnError: true });
     if (!loadedFromApi) {
-      elements.paymentsBody.querySelector('td[colspan="4"]')?.closest("tr")?.remove();
+      elements.paymentsBody.querySelector('td[colspan="5"]')?.closest("tr")?.remove();
       elements.paymentsBody.insertAdjacentHTML("afterbegin", paymentRowMarkup({ ...payload, ...returnedPayment }));
     }
     const cached = supplierInvoicesById.get(String(invoiceId)), returnedInvoice = response?.invoice || response?.data?.invoice;
     const updatedInvoice = returnedInvoice || (cached ? { ...cached, paid_amount: amount(cached, "paid_amount", "total_paid") + amountValue, remaining_amount: Math.max(0, amount(cached, "remaining_amount", "balance_due") - amountValue), payment_status: maximum - amountValue <= 0 ? "paid" : "partial", version: Number(response?.version || cached.version || expectedVersion) + (response?.version ? 0 : 1) } : null);
     if (updatedInvoice) { supplierInvoicesById.set(String(invoiceId), updatedInvoice); renderPurchaseInvoice(elements, updatedInvoice); }
+    const printablePayment = { ...payload, ...returnedPayment };
+    const currentPayments = invoicePaymentsById.get(String(invoiceId)) || [];
+    if (!loadedFromApi) invoicePaymentsById.set(String(invoiceId), [printablePayment, ...currentPayments]);
     supplierBalances.delete(String(activeSupplier.id));
     elements.paymentAmount.value = ""; elements.paymentReference.value = "";
     showToast(elements, "تم تسجيل الدفعة وظهرت في سجل الفاتورة.");
+    if (updatedInvoice) await window.GhaithPrint?.printReceipt(paymentReceipt(updatedInvoice, printablePayment));
   } catch (error) { showToast(elements, error.message, true); }
   finally { elements.savePayment.disabled = Number(elements.paymentAmount.max) <= 0; }
 }
@@ -310,7 +425,17 @@ async function saveInvoicePaymentLegacy(elements) {
 
 function confirmDeactivation(elements, supplier) { elements.deactivateName.textContent = supplier.name; elements.deactivateModal.hidden = false; return new Promise(resolve => { const finish = value => { elements.deactivateModal.hidden = true; document.getElementById("confirmSupplierDeactivate").removeEventListener("click", yes); document.getElementById("cancelSupplierDeactivate").removeEventListener("click", no); resolve(value); }; const yes = () => finish(true), no = () => finish(false); document.getElementById("confirmSupplierDeactivate").addEventListener("click", yes); document.getElementById("cancelSupplierDeactivate").addEventListener("click", no); }); }
 
-async function loadProductOptions() { if (products.length) return; products = (await fetchAll("/api/v1/admin/products", { status: "active" })).map(item => ({ id: item.id, name: item.name_ar || item.name, price: Number(item.purchase_price || 0) })); }
+function rememberPurchaseProduct(product) {
+  const variants = product.product_variants || product.variants || [];
+  variants.forEach(variant => purchaseVariantsById.set(String(variant.id || variant.variant_id), { product, variant }));
+}
+async function loadPurchaseVariantCatalog() {
+  if (purchaseVariantsById.size && products.length) return;
+  const records = await fetchAll("/api/v1/admin/products", { status: "active" });
+  records.forEach(rememberPurchaseProduct);
+  products = records.map(item => ({ id: item.id, name: item.name_ar || item.name, price: Number(item.purchase_price || 0) }));
+}
+async function loadProductOptions() { if (!products.length) await loadPurchaseVariantCatalog(); }
 function addPurchaseLine(elements) { const row = document.createElement("div"); row.className = "purchase-line"; row.innerHTML = `<select class="select purchase-product" aria-label="المنتج"><option value="">اختر المنتج...</option>${products.map(product => `<option value="${escapeHtml(String(product.id))}" data-price="${product.price}">${escapeHtml(product.name)}</option>`).join("")}</select><select class="select purchase-variant" aria-label="نسخة المنتج" disabled><option value="">اختر المنتج أولًا</option></select><input class="input num purchase-qty" type="number" min="1" value="1" aria-label="الكمية"><input class="input num purchase-price" type="number" min="0" step="0.01" value="0" aria-label="سعر الوحدة"><button class="suppliers-action suppliers-action--delete purchase-remove" type="button" aria-label="حذف البند">×</button>`; elements.purchaseLines.append(row); }
 function variantLabel(variant) {
   const attributes = [variant.color, variant.size, variant.sku].filter(Boolean);
@@ -324,6 +449,7 @@ async function loadLineVariants(row, productId) {
   try {
     const detail = await api.get(`/api/v1/products/${encodeURIComponent(productId)}`);
     const variants = detail.product_variants || detail.variants || [];
+    rememberPurchaseProduct(detail);
     select.innerHTML = `<option value="">اختر النسخة...</option>${variants.map(variant => `<option value="${escapeHtml(String(variant.id))}" data-version="${escapeHtml(String(variant.version ?? ""))}">${escapeHtml(variantLabel(variant))}</option>`).join("")}`;
     select.disabled = variants.length === 0;
     if (!variants.length) select.innerHTML = '<option value="">لا توجد نسخ متاحة</option>';
@@ -350,7 +476,7 @@ function closePurchase(elements) { elements.purchaseModal.hidden = true; }
 async function savePurchase(elements) {
   const rows = [...elements.purchaseLines.querySelectorAll(".purchase-line")]; const items = [];
   try { for (const row of rows) { const productId = row.querySelector(".purchase-product").value; if (!productId) throw new Error("اختر منتجًا لكل بند."); const variantSelect = row.querySelector(".purchase-variant"); const variantId = variantSelect.value; const variantVersion = variantSelect.selectedOptions[0]?.dataset.version; if (!variantId) throw new Error("اختر اللون أو المقاس الصحيح لكل منتج."); if (!variantVersion) throw new Error("بيانات نسخة المنتج غير مكتملة. أعد اختيار المنتج وحاول مرة أخرى."); items.push({ variant_id: variantId, quantity: Math.max(1, Number(row.querySelector(".purchase-qty").value) || 1), unit_price: Math.max(0, Number(row.querySelector(".purchase-price").value) || 0), expected_version: Number(variantVersion) }); }
-    const deferred = elements.paymentMethod.value === "deferred", total = items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0), paid = Math.max(0, Number(elements.paidAmount.value) || 0); if (paid > total) throw new Error("المبلغ المدفوع لا يمكن أن يتجاوز إجمالي الفاتورة."); if (deferred && !elements.dueDate.value) throw new Error("حدد تاريخ الاستحقاق للفاتورة الآجلة."); elements.savePurchase.disabled = true; await api.post(`/api/v1/admin/suppliers/${encodeURIComponent(activeSupplier.id)}/purchase-invoices`, { payment_method: elements.paymentMethod.value, paid_amount: paid, due_date: deferred ? elements.dueDate.value : null, notes: elements.purchaseNotes.value.trim() || null, items }, { headers: { "Idempotency-Key": crypto.randomUUID() } }); supplierBalances.delete(String(activeSupplier.id)); closePurchase(elements); showToast(elements, "تمت إضافة فاتورة الشراء"); await showSupplierDetail(elements, activeSupplier); } catch (error) { showToast(elements, error.message, true); } finally { elements.savePurchase.disabled = false; }
+    const deferred = elements.paymentMethod.value === "deferred", total = items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0), paid = Math.max(0, Number(elements.paidAmount.value) || 0); if (paid > total) throw new Error("المبلغ المدفوع لا يمكن أن يتجاوز إجمالي الفاتورة."); if (deferred && !elements.dueDate.value) throw new Error("حدد تاريخ الاستحقاق للفاتورة الآجلة."); elements.savePurchase.disabled = true; const response = await api.post(`/api/v1/admin/suppliers/${encodeURIComponent(activeSupplier.id)}/purchase-invoices`, { payment_method: elements.paymentMethod.value, paid_amount: paid, due_date: deferred ? elements.dueDate.value : null, notes: elements.purchaseNotes.value.trim() || null, items }, { headers: { "Idempotency-Key": crypto.randomUUID() } }); const created = unwrapInvoice(response); supplierBalances.delete(String(activeSupplier.id)); closePurchase(elements); showToast(elements, "تمت إضافة فاتورة الشراء"); await showSupplierDetail(elements, activeSupplier); if (created?.id) { await showPurchaseDetail(elements, created.id); await printPurchaseInvoice(elements); } } catch (error) { showToast(elements, error.message, true); } finally { elements.savePurchase.disabled = false; }
 }
 
 export function initSuppliers() {
@@ -385,5 +511,7 @@ export function initSuppliers() {
   elements.search.addEventListener("input", refresh); elements.statusFilter.addEventListener("change", refresh); document.getElementById("addSupplierBtn").addEventListener("click", () => openSupplierModal(elements)); document.getElementById("closeSupplierModal").addEventListener("click", () => closeSupplierModal(elements)); document.getElementById("cancelSupplierModal").addEventListener("click", () => closeSupplierModal(elements)); document.getElementById("backToSuppliers").addEventListener("click", () => setView(elements, "list")); document.getElementById("newSupplierPayment").addEventListener("click", () => openPurchase(elements));
   document.getElementById("addPurchaseLine").addEventListener("click", () => addPurchaseLine(elements)); elements.purchaseLines.addEventListener("change", async event => { if (!event.target.matches(".purchase-product")) return; const option = event.target.selectedOptions[0]; const row = event.target.closest(".purchase-line"); row.querySelector(".purchase-price").value = option?.dataset.price || 0; try { await loadLineVariants(row, event.target.value); } catch (error) { showToast(elements, error.message, true); } }); elements.purchaseLines.addEventListener("click", event => event.target.closest(".purchase-remove")?.closest(".purchase-line")?.remove()); elements.purchaseForm.addEventListener("submit", event => { event.preventDefault(); savePurchase(elements); }); document.getElementById("closePurchaseInvoice").addEventListener("click", () => closePurchase(elements)); document.getElementById("cancelPurchaseInvoice").addEventListener("click", () => closePurchase(elements)); elements.paymentMethod.addEventListener("change", () => { elements.dueDateField.hidden = elements.paymentMethod.value !== "deferred"; });
   elements.invoicesBody.addEventListener("click", event => { const row = event.target.closest("[data-invoice-id]"); if (row) showPurchaseDetail(elements, row.dataset.invoiceId); }); elements.invoicesBody.addEventListener("keydown", event => { const row = event.target.closest("[data-invoice-id]"); if (row && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); showPurchaseDetail(elements, row.dataset.invoiceId); } }); elements.paymentForm.addEventListener("submit", event => { event.preventDefault(); saveInvoicePayment(elements); }); elements.paymentAmount.addEventListener("focus", () => { if (Number(elements.paymentAmount.max) <= 0) showToast(elements, "الفاتورة مسددة بالكامل، لا يوجد عليك أي مبلغ مستحق.", true); }); document.getElementById("closePurchaseDetail").addEventListener("click", () => { elements.purchaseDetailModal.hidden = true; });
+  document.getElementById("printPurchaseInvoice").addEventListener("click", () => printPurchaseInvoice(elements));
+  elements.paymentsBody.addEventListener("click", event => { const button = event.target.closest("[data-print-payment]"); if (button) printPurchasePayment(elements, Number(button.dataset.printPayment)); });
   return () => { requestSequence += 1; refresh.cancel?.(); stopInvoicePagination(); elements.tableBody.removeEventListener("click", toggleStatus); elements.tableBody.removeEventListener("click", tableClick); };
 }
