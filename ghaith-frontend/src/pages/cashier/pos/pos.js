@@ -71,6 +71,8 @@ import { formatMoney } from "../../../core/utils.js";
     confirmPaymentBtn: document.getElementById("confirmPaymentBtn"),
     confirmTotalLabel: document.getElementById("confirmTotalLabel"),
     customerTypeSelect: document.getElementById("customerTypeSelect"),
+    manualDiscountType: document.getElementById("manualDiscountType"),
+    manualDiscountUnit: document.getElementById("manualDiscountUnit"),
     salesSelect: document.getElementById("salesSelect"),
     paymentMethodGroup: document.getElementById("paymentMethodGroup"),
     // عناصر الملخص الجديدة
@@ -94,7 +96,6 @@ import { formatMoney } from "../../../core/utils.js";
     closeVariantPicker: document.getElementById("closeVariantPicker"),
   };
 
-  let selectedCustomerDiscount = { type: "amount", value: 0 };
   let activeVariantGroup = [];
   let selectedVariantSize = "";
 
@@ -306,20 +307,9 @@ import { formatMoney } from "../../../core/utils.js";
       try { customerTypes = listFrom(await api.get("/api/v1/customer-types")); }
       catch { /* أنواع العملاء لا تمنع عرض الكتالوج */ }
       if (els.customerTypeSelect && customerTypes.length) {
-        els.customerTypeSelect.innerHTML = customerTypes.map(type => {
-          const discount = Number(type.discount_value ?? type.discount_amount ?? type.discount_percent ?? type.discount_rate ?? type.discount ?? 0);
-          const discountType = type.discount_type || (type.discount_value !== undefined || type.discount_amount !== undefined ? "amount" : "percentage");
-          const code = type.code || type.slug || type.type || "walk_in";
-          return `<option value="${escapeHtml(type.id)}" data-code="${escapeHtml(code)}" data-discount="${discount}" data-discount-type="${escapeHtml(discountType)}">${escapeHtml(type.name)}</option>`;
-        }).join("");
-        const defaultIndex = customerTypes.findIndex(type => {
-          const code = String(type.code || type.slug || type.type || "").trim().toLowerCase();
-          const discount = Number(type.discount_value ?? type.discount_amount ?? type.discount_percent ?? type.discount_rate ?? type.discount ?? 0);
-          return ["walk_in", "regular", "normal", "عادي"].includes(code) || discount === 0;
-        });
+        els.customerTypeSelect.innerHTML = customerTypes.map(type => `<option value="${escapeHtml(type.id)}">${escapeHtml(type.name)}</option>`).join("");
+        const defaultIndex = customerTypes.findIndex(type => ["walk_in", "regular", "normal", "عادي"].includes(String(type.code || type.slug || type.type || type.name || "").trim().toLowerCase()));
         els.customerTypeSelect.selectedIndex = defaultIndex >= 0 ? defaultIndex : 0;
-        const selected = els.customerTypeSelect.selectedOptions[0];
-        selectedCustomerDiscount = { type: selected?.dataset.discountType || "amount", value: Number(selected?.dataset.discount || 0) };
       }
     } catch (error) {
       products = [];
@@ -370,12 +360,10 @@ import { formatMoney } from "../../../core/utils.js";
 
   function getCartTotals() {
     const subtotal = state.cart.reduce((sum, i) => sum + i.price * i.qty, 0);
-    const categoryDiscountValue = selectedCustomerDiscount.type === "percentage"
-      ? (subtotal * selectedCustomerDiscount.value) / 100
-      : selectedCustomerDiscount.value;
     const enteredDiscount = Number(els.manualDiscountAmount?.value);
     const hasManualDiscount = els.manualDiscountAmount?.value !== "" && Number.isFinite(enteredDiscount) && enteredDiscount >= 0;
-    const discountValue = Math.min(hasManualDiscount ? enteredDiscount : categoryDiscountValue, subtotal);
+    const requestedDiscount = (els.manualDiscountType?.value || "amount") === "percentage" ? subtotal * enteredDiscount / 100 : enteredDiscount;
+    const discountValue = Math.min(hasManualDiscount ? requestedDiscount : 0, subtotal);
     const total = subtotal - discountValue;
     return { subtotal, discountValue, total, hasManualDiscount };
   }
@@ -815,10 +803,12 @@ import { formatMoney } from "../../../core/utils.js";
     [els.customerName, els.customerPhone, els.customerAddress, els.manualDiscountAmount, els.paidAmount, els.remainingAmount]
       .filter(Boolean).forEach(input => { input.value = ""; });
     if (els.salesSelect) els.salesSelect.value = "";
-    const defaultCustomerOption = [...(els.customerTypeSelect?.options || [])].find(option => Number(option.dataset.discount || 0) === 0);
-    if (defaultCustomerOption) els.customerTypeSelect.value = defaultCustomerOption.value;
-    const defaultDiscountOption = els.customerTypeSelect?.selectedOptions?.[0];
-    selectedCustomerDiscount = { type: defaultDiscountOption?.dataset.discountType || "amount", value: Number(defaultDiscountOption?.dataset.discount || 0) };
+    if (els.customerTypeSelect) {
+      const defaultCustomerOption = [...els.customerTypeSelect.options].find(option => ["عادي", "regular", "normal"].includes(option.textContent.trim().toLowerCase()));
+      if (defaultCustomerOption) els.customerTypeSelect.value = defaultCustomerOption.value;
+    }
+    if (els.manualDiscountType) els.manualDiscountType.value = "amount";
+    if (els.manualDiscountUnit) els.manualDiscountUnit.textContent = "ج.م";
     els.paymentMethodGroup.querySelectorAll(".method-btn").forEach(button => button.classList.toggle("is-active", button.dataset.method === "نقدي"));
     toggleCashInputs("نقدي");
   }
@@ -837,9 +827,9 @@ import { formatMoney } from "../../../core/utils.js";
         if (els.discountBadge) {
           const selectedOption = els.customerTypeSelect ? els.customerTypeSelect.options[els.customerTypeSelect.selectedIndex] : null;
           const typeName = selectedOption?.textContent?.trim() || "";
-          const discountLabel = hasManualDiscount
-            ? " خصم يدوي"
-            : ` خصم ${typeName} ${selectedCustomerDiscount.value}${selectedCustomerDiscount.type === "percentage" ? "%" : " ج.م"}`;
+          const discountType = els.manualDiscountType?.value || "amount";
+          const enteredDiscount = Number(els.manualDiscountAmount?.value || 0);
+          const discountLabel = ` خصم ${typeName} ${enteredDiscount.toLocaleString("en-US", { maximumFractionDigits: 2 })}${discountType === "percentage" ? "%" : " ج.م"}`;
           els.discountBadge.querySelector ?
             (els.discountBadge.lastChild.textContent = discountLabel) :
             null;
@@ -870,18 +860,20 @@ import { formatMoney } from "../../../core/utils.js";
   }
 
   if (els.customerTypeSelect) {
-    els.customerTypeSelect.addEventListener("change", (e) => {
-      const selectedOption = els.customerTypeSelect.options[els.customerTypeSelect.selectedIndex];
-      selectedCustomerDiscount = { type: selectedOption.dataset.discountType || "amount", value: Number(selectedOption.dataset.discount) || 0 };
+    els.customerTypeSelect.addEventListener("change", () => {
       renderCart();
       updatePaymentTotals();
     });
   }
 
-  els.manualDiscountAmount?.addEventListener("input", () => {
+  const updateManualDiscount = () => {
+    if (els.manualDiscountAmount) els.manualDiscountAmount.max = els.manualDiscountType?.value === "percentage" ? "100" : String(state.cart.reduce((sum, item) => sum + item.price * item.qty, 0));
+    if (els.manualDiscountUnit) els.manualDiscountUnit.textContent = els.manualDiscountType?.value === "percentage" ? "%" : "ج.م";
     renderCart();
     updatePaymentTotals();
-  });
+  };
+  els.manualDiscountAmount?.addEventListener("input", updateManualDiscount);
+  els.manualDiscountType?.addEventListener("change", updateManualDiscount);
   els.paymentMethodGroup.addEventListener("click", (e) => {
     const btn = e.target.closest(".method-btn");
     if (!btn) return;
@@ -927,17 +919,12 @@ import { formatMoney } from "../../../core/utils.js";
     const name = els.customerName?.value.trim();
     const phone = els.customerPhone?.value.trim();
     const address = els.customerAddress?.value.trim();
-    const customerTypeValue = String(els.customerTypeSelect?.value || "").trim();
-    const customerTypeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(customerTypeValue)
-      ? customerTypeValue
-      : null;
-    if (!name && !phone && !address && selectedCustomerDiscount.value <= 0) return null;
-    if (!name) throw new Error(selectedCustomerDiscount.value > 0 ? "أدخل اسم العميل لتطبيق خصم فئة العميل على الفاتورة." : "اسم العميل مطلوب عند تسجيل بيانات العميل.");
+    if (!name && !phone && !address) return null;
+    if (!name) throw new Error("اسم العميل مطلوب عند تسجيل بيانات العميل.");
     const customer = await api.post("/api/v1/customers", {
       name,
       phone: phone || null,
-      address: address || null,
-      customer_type_id: customerTypeId
+      address: address || null
     });
     return customer?.id || customer?.customer?.id || customer?.data?.id;
   }
@@ -958,8 +945,10 @@ import { formatMoney } from "../../../core/utils.js";
     const cartItems = state.cart.map(item => ({ variant_id: item.id, qty: item.qty, expected_version: item.version }));
     const enteredDiscount = Number(els.manualDiscountAmount?.value || 0);
     const subtotal = state.cart.reduce((sum, item) => sum + item.price * item.qty, 0);
-    if (!Number.isFinite(enteredDiscount) || enteredDiscount < 0 || enteredDiscount > subtotal) {
-      showToast("قيمة الخصم يجب أن تكون بين صفر وإجمالي المنتجات.", "error");
+    const discountType = els.manualDiscountType?.value || "amount";
+    const discountLimit = discountType === "percentage" ? 100 : subtotal;
+    if (!Number.isFinite(enteredDiscount) || enteredDiscount < 0 || enteredDiscount > discountLimit) {
+      showToast(discountType === "percentage" ? "نسبة الخصم يجب أن تكون بين صفر و100%." : "قيمة الخصم يجب أن تكون بين صفر وإجمالي المنتجات.", "error");
       els.manualDiscountAmount?.focus();
       return;
     }
@@ -971,24 +960,18 @@ import { formatMoney } from "../../../core/utils.js";
       els.paidAmount?.focus();
       return;
     }
-    // Customer-category discounts are calculated by the server from
-    // customer_id. Sending that amount again applies it twice and makes the
-    // paid amount differ from the server total. Only manual discounts belong
-    // in CheckoutRequest.discount_amount.
-    const discountPayload = totals.hasManualDiscount && discountAmount > 0
-      ? { discount_amount: moneyPayload(discountAmount) }
-      : {};
+    const discountPayload = { discount_amount: moneyPayload(discountAmount) };
+    const customerTypeValue = String(els.customerTypeSelect?.value || "");
+    const customerTypeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(customerTypeValue) ? customerTypeValue : null;
     const originalLabel = els.confirmPaymentBtn.innerHTML;
     els.confirmPaymentBtn.disabled = true;
     els.confirmPaymentBtn.textContent = "جاري تسجيل البيع...";
     try {
       const customerId = await resolveCustomerId();
-      const quoteResponse = await api.post("/api/v1/pos/sales/quote", { items: cartItems, customer_id: customerId });
+      const quoteResponse = await api.post("/api/v1/pos/sales/quote", { items: cartItems, customer_id: customerId, customer_type_id: customerTypeId, ...discountPayload });
       const quote = quoteResponse?.quote || quoteResponse?.data || quoteResponse || {};
       const quotedSubtotal = Number(quote.subtotal_amount ?? quote.subtotal ?? subtotal);
-      const quotedTotal = totals.hasManualDiscount
-        ? Math.max(quotedSubtotal - discountAmount, 0)
-        : Number(quote.total_amount ?? quote.total ?? totals.total);
+      const quotedTotal = Math.max(quotedSubtotal - discountAmount, 0);
       const paidAmount = paymentMethod === "deferred" ? deferredPaidAmount : quotedTotal;
       if (paidAmount > quotedTotal) throw new Error("المبلغ المدفوع لا يمكن أن يتجاوز إجمالي الفاتورة بعد الخصم.");
       // The API validates electronic settlements for exact Decimal equality.
@@ -998,6 +981,7 @@ import { formatMoney } from "../../../core/utils.js";
       const sale = await api.post("/api/v1/sales/checkout", {
         items: cartItems,
         customer_id: customerId,
+        customer_type_id: customerTypeId,
         sales_person_id: els.salesSelect.value,
         payment_method: paymentMethod,
         paid_amount: paidAmountPayload,
@@ -1041,10 +1025,10 @@ import { formatMoney } from "../../../core/utils.js";
     const { subtotal, discountValue, total, hasManualDiscount } = getCartTotals();
     const selectedDiscountOption = els.customerTypeSelect?.selectedOptions?.[0];
     const selectedDiscountName = selectedDiscountOption?.textContent?.trim() || "فئة العميل";
-    const selectedDiscountValue = Number(selectedCustomerDiscount.value || 0);
+    const selectedDiscountValue = Number(els.manualDiscountAmount?.value || 0);
     const discountLabel = hasManualDiscount
-      ? "خصم يدوي"
-      : `خصم ${selectedDiscountName} ${selectedDiscountValue.toLocaleString("en-US", { maximumFractionDigits: 2 })}${selectedCustomerDiscount.type === "percentage" ? "%" : " ج.م"}`;
+      ? `خصم ${selectedDiscountName} ${selectedDiscountValue.toLocaleString("en-US", { maximumFractionDigits: 2 })}${els.manualDiscountType?.value === "percentage" ? "%" : " ج.م"}`
+      : `نوع العميل: ${selectedDiscountName}`;
     const now = new Date();
     const date = now.toLocaleDateString("ar-EG");
     const time = now.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
@@ -1074,7 +1058,7 @@ import { formatMoney } from "../../../core/utils.js";
         items: state.cart.map(item => ({
           name: item.name,
           sku: item.sku,
-          barcode: item.barcode || item.sku,
+          barcode: item.barcode,
           qty: item.qty,
           price: item.price,
           total: item.price * item.qty,
@@ -1115,7 +1099,7 @@ import { formatMoney } from "../../../core/utils.js";
           <tbody>
             ${state.cart.map(item => `
               <tr>
-                <td class="item-name">${escapeHtml(item.name)}<small>${escapeHtml(item.barcode || item.sku || "")}</small></td>
+                <td class="item-name">${escapeHtml(item.name)}<small>${escapeHtml(item.barcode || "")}</small></td>
                 <td>${escapeHtml(visibleVariantValue(item.size))}</td>
                 <td>${escapeHtml(visibleVariantValue(item.color))}</td>
                 <td class="item-qty">${item.qty}</td>

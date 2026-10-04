@@ -81,6 +81,11 @@ function amount(invoice, ...keys) { for (const key of keys) if (invoice?.[key] !
 function unwrapInvoice(response) { return response?.invoice || response?.data?.invoice || response?.data?.item || response?.item || response?.data || response; }
 function invoiceNumber(invoice) { return invoice?.invoice_number || invoice?.purchase_invoice_number || invoice?.number || invoice?.code || invoice?.reference_number || "غير متوفر"; }
 function invoiceItems(invoice) { return invoice?.purchase_invoice_items || invoice?.items || invoice?.line_items || invoice?.lines || []; }
+function purchaseItemVariant(item) {
+  const variantId = String(item?.variant_id || item?.product_variant_id || item?.product_variant?.id || item?.variant?.id || "");
+  const raw = item?.product_variant || item?.variant || (Array.isArray(item?.product_variants) ? item.product_variants.find(variant => String(variant.id || variant.variant_id) === variantId) || item.product_variants[0] : item?.product_variants) || {};
+  return { ...(purchaseVariantsById.get(variantId)?.variant || {}), ...raw };
+}
 function supplierName(invoice) { return activeSupplier?.name || invoice?.supplier_name || invoice?.supplier?.name || invoice?.supplier?.supplier_name || "غير متوفر"; }
 function supplierPhone(invoice) { return activeSupplier?.phone || invoice?.supplier_phone || invoice?.supplier?.phone || "غير متوفر"; }
 function supplierAddress(invoice) { return activeSupplier?.address || invoice?.supplier_address || invoice?.supplier?.address || "غير متوفر"; }
@@ -216,7 +221,7 @@ function renderPurchaseInvoice(elements, invoice) {
   elements.purchaseDetailSummary.innerHTML = `<span>تاريخ الفاتورة <b>${dateLabel(invoice.invoice_date || invoice.created_at)}</b></span><span>تاريخ الاستحقاق <b>${dateLabel(invoice.due_date)}</b></span><span>طريقة الدفع <b>${escapeHtml(PAYMENT_LABELS[invoice.payment_method] || invoice.payment_method || "—")}</b></span><span>الحالة <b>${statusMarkup(invoice)}</b></span><span>الإجمالي <b class="num">${money(amount(invoice, "total_amount", "grand_total", "total"))}</b></span><span>المدفوع <b class="num supplier-paid">${money(amount(invoice, "paid_amount", "total_paid"))}</b></span><span>المتبقي <b class="num supplier-balance">${money(remaining)}</b></span><span>الخصم / الشحن <b class="num">${money(amount(invoice, "discount_amount"))} / ${money(amount(invoice, "shipping_amount"))}</b></span>`;
   elements.purchaseDetailItems.innerHTML = items.map(item => {
     const variantId = String(item.variant_id || item.product_variant_id || item.product_variant?.id || item.variant?.id || "");
-    const variant = { ...(purchaseVariantsById.get(variantId)?.variant || {}), ...(item.product_variant || item.product_variants || item.variant || {}) };
+    const variant = purchaseItemVariant(item);
     const catalogProduct = purchaseVariantsById.get(variantId)?.product || {};
     const product = variant.product || variant.products || item.product || {};
     const name = product.name_ar || product.name || item.product_name || catalogProduct.name_ar || catalogProduct.name || "منتج بدون اسم من الخادم";
@@ -231,7 +236,7 @@ function renderPurchaseInvoice(elements, invoice) {
 function purchaseItem(item) {
   const variantId = String(item.variant_id || item.product_variant_id || item.product_variant?.id || item.variant?.id || "");
   const catalog = purchaseVariantsById.get(variantId) || {};
-  const variant = { ...(catalog.variant || {}), ...(item.product_variant || item.product_variants || item.variant || {}) };
+  const variant = purchaseItemVariant(item);
   const product = variant.product || variant.products || item.product || catalog.product || {};
   const quantity = Number(item.quantity || item.qty || 0);
   const price = amount(item, "unit_cost", "unit_price", "price");

@@ -738,6 +738,7 @@
   color: var(--color-text-muted);
   pointer-events: none;
 }
+.input-with-icon .discount-unit { position: absolute; inset-inline-start: 12px; top: 50%; transform: translateY(-50%); color: var(--color-text-muted); font-size: var(--fs-xs); pointer-events: none; }
 
 /* Chip Groups */
 .chip-group {

@@ -46,6 +46,29 @@ export function initPurchaseInvoice() {
   };
   let teardownProductVariants = () => {};
   const closeProductOverlay = () => { teardownProductVariants(); teardownProductVariants = () => {}; $("#piModalOverlay").hidden = true; $("#piModalBody").innerHTML = ""; };
+  const validateQuickProductQuantities = form => {
+    const editor = form.querySelector("[data-variants-editor]");
+    if (!editor || editor.querySelector("[data-variants-mode]").value !== "multiple") return true;
+    const totalInput = form.elements.purchase_quantity, expected = Number(totalInput.value);
+    const inputs = [...editor.querySelectorAll(".product-variant-quantity")];
+    const quantities = inputs.map(input => input.value.trim() === "" ? NaN : Number(input.value));
+    const total = quantities.reduce((sum, quantity) => sum + (Number.isFinite(quantity) ? quantity : 0), 0);
+    const inputsValid = quantities.every(quantity => Number.isInteger(quantity) && quantity >= 0 && quantity <= expected);
+    const valid = Number.isInteger(expected) && expected >= 1 && inputsValid && total === expected;
+    inputs.forEach((input, index) => {
+      const invalid = !Number.isInteger(quantities[index]) || quantities[index] < 0 || quantities[index] > expected;
+      input.setAttribute("aria-invalid", String(invalid));
+      if (Number.isInteger(expected) && expected >= 0) input.max = String(expected);
+      else input.removeAttribute("max");
+    });
+    const error = $("#piQuickProductError");
+    if (valid) { error.textContent = ""; return true; }
+    error.textContent = total > expected || quantities.some(quantity => quantity > expected)
+      ? `أدخلت عددًا زائدًا: مجموع كميات المقاسات ${total}، بينما إجمالي الكمية ${expected}. قلّل الكميات حتى يساوي مجموعها الإجمالي.`
+      : `مجموع كميات المقاسات ${total}، ويجب أن يساوي إجمالي الكمية ${expected}. المتبقي ${Math.max(0, expected - total)}.`;
+    (inputs.find((input, index) => !Number.isInteger(quantities[index]) || quantities[index] < 0 || quantities[index] > expected) || inputs[0])?.focus();
+    return false;
+  };
   const openSupplierOverlay = () => {
     $("#piModalTitle").textContent = "إضافة مورد جديد";
     $("#piModalBody").innerHTML = `<form id="piSupplierForm" novalidate><div class="products-dialog__body"><div class="products-form-grid"><div class="field"><label for="piSupplierName">اسم المورد <b>*</b></label><input class="input" id="piSupplierName" name="name" maxlength="200" required></div><div class="field"><label for="piSupplierPhone">رقم الهاتف <b>*</b></label><input class="input" id="piSupplierPhone" name="phone" type="tel" dir="ltr" maxlength="50" required></div><div class="field"><label for="piSupplierAddress">العنوان</label><input class="input" id="piSupplierAddress" name="address"></div><div class="field"><label for="piSupplierStatus">الحالة</label><select class="select" id="piSupplierStatus" name="status"><option value="active">نشط</option><option value="inactive">غير نشط</option></select></div><div class="field products-form-grid__full"><label for="piSupplierNotes">ملاحظات</label><textarea class="input" id="piSupplierNotes" name="notes" rows="3"></textarea></div></div><p class="purchase-error" id="piSupplierError"></p></div><footer class="modal__actions"><button class="btn btn-outline" type="button" data-close-supplier>إلغاء</button><button class="btn btn-primary" type="submit">حفظ المورد واختياره</button></footer></form>`;
@@ -76,6 +99,27 @@ export function initPurchaseInvoice() {
     $("#piProductSku")?.closest(".field")?.remove();
     $("#piModalOverlay").hidden = false;
     const quickForm = $("#piQuickProductForm");
+    const costPriceInput = quickForm.elements.purchase_price;
+    costPriceInput.readOnly = true;
+    costPriceInput.closest(".field")?.insertAdjacentHTML("beforebegin", '<div class="field"><label for="piProductCostCode">كود سعر الشراء (آخر 4 أرقام)</label><input class="input num" id="piProductCostCode" type="text" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="0000" autocomplete="off"><small id="piProductCostCodeStatus" aria-live="polite">أدخل آخر 4 أرقام لعرض سعر الشراء؛ 0000 يعني غير معروف.</small></div>');
+    const costCodeInput = quickForm.querySelector("#piProductCostCode"), costCodeStatus = quickForm.querySelector("#piProductCostCodeStatus");
+    let costCodeLookupSequence = 0;
+    const lookupCostCode = async () => {
+      const code = String(costCodeInput.value || "").trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+      const sequence = ++costCodeLookupSequence;
+      if (!/^[0-9]{4}$/.test(code)) { costPriceInput.value = ""; costCodeStatus.textContent = "أدخل 4 أرقام صحيحة."; return; }
+      costCodeInput.value = code;
+      if (code === "0000") { costPriceInput.value = ""; costCodeStatus.textContent = "سعر الشراء غير معروف للكود 0000."; return; }
+      costCodeStatus.textContent = "جاري البحث عن سعر الشراء...";
+      let response;
+      try { response = await api.get(`/api/v1/admin/products/cost-codes/${encodeURIComponent(code)}`); }
+      catch (error) { if (sequence === costCodeLookupSequence) { costPriceInput.value = ""; costCodeStatus.textContent = error.message; } throw error; }
+      if (sequence !== costCodeLookupSequence) return;
+      const result = response?.data || response, price = result?.purchase_price;
+      if (price === null || price === undefined || !Number.isFinite(Number(price))) { costPriceInput.value = ""; costCodeStatus.textContent = `لا يوجد سعر شراء للكود ${code}.`; return; }
+      costPriceInput.value = String(Number(price)); costCodeStatus.textContent = `سعر الشراء للكود ${code}: ${money(Number(price))} ج.م.`;
+    };
+    costCodeInput.addEventListener("input", () => { lookupCostCode().catch(() => {}); });
     const quantityInput = quickForm.elements.purchase_quantity;
     teardownProductVariants = setupProductVariants(quickForm, quantityInput);
     const updateProfit = () => { const sale = Number(quickForm.elements.sale_price.value) || 0, cost = Number(quickForm.elements.purchase_price.value) || 0, commission = Number(quickForm.elements.commission_rate.value) || 0, profit = sale > 0 ? ((sale - cost - sale * commission / 100) / sale) * 100 : 0; const output = $("#piProductNetProfitPercentage"); output.value = profit.toFixed(2); output.classList.toggle("is-negative", profit < 0); };
@@ -84,7 +128,7 @@ export function initPurchaseInvoice() {
     quickForm.querySelector("[data-new-category]").addEventListener("click", () => { categoryForm.hidden = false; requestAnimationFrame(() => categoryName.focus()); });
     quickForm.querySelector("[data-cancel-category]").addEventListener("click", () => { categoryForm.hidden = true; categoryName.value = ""; $("#piNewCategoryDescription").value = ""; categoryForm.querySelector("[data-category-error]").textContent = ""; });
     quickForm.querySelector("[data-save-category]").addEventListener("click", async event => { const saveButton = event.currentTarget, name = categoryName.value.trim(), errorNode = categoryForm.querySelector("[data-category-error]"); if (!name) { errorNode.textContent = "يرجى إدخال اسم الفئة."; categoryName.focus(); return; } saveButton.disabled = true; errorNode.textContent = ""; try { const response = await api.post("/api/v1/admin/categories", { name, description: $("#piNewCategoryDescription").value.trim() || null, status: $("#piNewCategoryStatus").value }); const category = response?.category || response?.data || response; if (!category?.id) throw new Error("تم حفظ الفئة لكن لم يرجع الخادم بياناتها."); categories.push(category); const option = new Option(category.name || name, category.id, true, true); quickForm.elements.category_id.add(option); categoryForm.hidden = true; categoryName.value = ""; $("#piNewCategoryDescription").value = ""; } catch (error) { errorNode.textContent = error.message; } finally { saveButton.disabled = false; } });
-    quickForm.addEventListener("submit", async event => { event.preventDefault(); const button = quickForm.querySelector('[type="submit"]'); button.disabled = true; try { await createProduct(quickForm); } catch (error) { $("#piQuickProductError").textContent = error.message; } finally { button.disabled = false; } });
+    quickForm.addEventListener("submit", async event => { event.preventDefault(); if (!validateQuickProductQuantities(quickForm)) return; const code = costCodeInput.value.trim(); if (!/^[0-9]{4}$/.test(code)) { $("#piQuickProductError").textContent = "أدخل كود سعر الشراء المكوّن من 4 أرقام؛ استخدم 0000 إذا كان غير معروف."; costCodeInput.focus(); return; } const button = quickForm.querySelector('[type="submit"]'); button.disabled = true; try { if (code !== "0000") { await lookupCostCode(); if (!costPriceInput.value) throw new Error("لم يتم العثور على سعر شراء لهذا الكود."); } await createProduct(quickForm); } catch (error) { $("#piQuickProductError").textContent = error.message; } finally { button.disabled = false; } });
     quickForm.querySelector("[data-close-product]").addEventListener("click", closeProductOverlay);
     requestAnimationFrame(() => quickForm.elements.name_ar.focus());
   };

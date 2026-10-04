@@ -6,14 +6,15 @@
       <fieldset class="settings-card">
         <legend>تكامل واتساب</legend>
         <label class="settings-switch"><input id="whatsappEnabled" name="whatsapp_enabled" type="checkbox"><span>تفعيل إشعارات واتساب</span></label>
-        <label class="settings-field"><span>رابط WhatsApp API</span><input class="input" id="whatsappApiUrl" name="whatsapp_api_url" type="url" dir="ltr" placeholder="https://api.example.com" autocomplete="url"><small>مطلوب عند تفعيل واتساب.</small></label>
-        <label class="settings-field"><span>مفتاح WhatsApp API</span><div class="settings-secret"><input class="input" id="whatsappApiKey" name="whatsapp_api_key" type="password" dir="ltr" autocomplete="off"><button type="button" id="toggleWhatsappKey">إظهار</button></div><small>يُرسل للخادم ولا يتم عرضه كنص واضح.</small></label>
-        <label class="settings-field"><span>رقم واتساب المدير</span><input class="input" id="managerWhatsappPhone" name="manager_whatsapp_phone" type="tel" dir="ltr" placeholder="+201000000000" autocomplete="tel"><small>اكتب كود الدولة قبل الرقم.</small></label>
+        <label class="settings-field"><span>رابط WhatsApp API</span><input class="input" id="whatsappApiUrl" name="whatsapp_api_url" type="text" maxlength="2048" dir="ltr" placeholder="https://api.example.com" autocomplete="url"></label>
+        <label class="settings-field"><span>مفتاح WhatsApp API</span><div class="settings-secret"><input class="input" id="whatsappApiKey" name="whatsapp_api_key" type="password" maxlength="4096" dir="ltr" autocomplete="off"><button type="button" id="toggleWhatsappKey">إظهار</button></div><small>يُرسل للخادم ولا يتم عرضه كنص واضح.</small></label>
+        <label class="settings-field"><span>رقم واتساب المدير</span><input class="input" id="managerWhatsappPhone" name="manager_whatsapp_phone" type="tel" maxlength="20" dir="ltr" placeholder="+201000000000" autocomplete="tel"></label>
       </fieldset>
       <fieldset class="settings-card">
         <legend>تكامل البريد الإلكتروني</legend>
-        <label class="settings-switch"><input id="emailEnabled" name="email_enabled" type="checkbox"><span>تفعيل إشعارات البريد الإلكتروني</span></label>
-        <label class="settings-field"><span>البريد الإلكتروني للمدير</span><input class="input" id="managerEmail" name="manager_email" type="email" dir="ltr" placeholder="manager@example.com" autocomplete="email"><small>مطلوب عند تفعيل البريد الإلكتروني.</small></label>
+        <label class="settings-switch"><input id="emailEnabled" name="email_enabled" type="checkbox"><span>إرسال ملخص الوردية بالبريد الإلكتروني</span></label>
+        <label class="settings-field"><span>بريد المالك المستقبِل</span><input class="input" id="managerEmail" name="manager_email" type="email" maxlength="320" dir="ltr" placeholder="owner@example.com" autocomplete="email"></label>
+        <div class="settings-email-test"><button class="btn btn-outline" id="testEmailButton" type="button">إرسال رسالة اختبار</button><p id="emailTestFeedback" role="status" aria-live="polite"></p></div>
       </fieldset>
     </div>
     <footer class="settings-actions"><button class="btn btn-primary" id="saveIntegrations" type="submit">حفظ الإعدادات</button><p id="integrationsFeedback" role="status" aria-live="polite"></p></footer>

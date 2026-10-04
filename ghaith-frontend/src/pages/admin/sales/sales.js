@@ -39,6 +39,10 @@ function invoiceItems(invoice) {
   return invoice.items || invoice.invoice_items || invoice.sale_items || invoice.lines || [];
 }
 
+function unwrapInvoice(response) {
+  return response?.invoice || response?.data?.invoice || response?.data?.item || response?.item || response?.data || response;
+}
+
 function invoiceItemCount(invoice) {
   const explicit = invoice.items_count ?? invoice.item_count ?? invoice.products_count ?? invoice.products_count_total ?? invoice.total_items ?? invoice.total_quantity;
   if (explicit !== undefined && explicit !== null) return Number(explicit) || 0;
@@ -66,6 +70,7 @@ function needsInvoiceDetails(invoice) {
 
 function enrichInvoice(invoice) {
   const customer = { ...(references.customers.get(String(invoice.customer_id || "")) || {}), ...(typeof invoice.customer === "object" && invoice.customer ? invoice.customer : {}) };
+  if (!customer.name && typeof invoice.customer === "string") customer.name = invoice.customer;
   const cashierId = invoice.cashier_id || invoice.created_by_id || invoice.cashier?.id || invoice.created_by?.id;
   const salesId = invoice.sales_person_id || invoice.sales_user_id || invoice.sales_person?.id || invoice.sales_user?.id;
   const items = invoiceItems(invoice).map(item => ({ ...references.variants.get(String(item.variant_id || item.product_variant_id || item.variant?.id || "")), ...item }));
@@ -105,10 +110,81 @@ function renderSummary(summary) {
   });
 }
 
+function invoiceTotals(invoice) {
+  const lines = invoiceItems(invoice);
+  const subtotal = Number(invoice.subtotal_amount ?? invoice.subtotal ?? invoice.gross_amount ?? lines.reduce((sum, item) => sum + Number(item.line_total ?? item.subtotal ?? ((item.quantity ?? item.qty ?? 0) * (item.unit_price ?? item.price ?? 0))), 0));
+  const tax = Number(invoice.tax_amount ?? invoice.vat_amount ?? invoice.vat ?? 0);
+  const discount = Number(invoice.discount_amount ?? invoice.total_discount ?? (typeof invoice.discount === "object" ? invoice.discount.amount : invoice.discount) ?? 0);
+  const total = Number(invoice.net_total ?? invoice.total_amount ?? invoice.grand_total ?? invoice.total ?? subtotal + tax - discount);
+  const paid = Number(invoice.paid_amount ?? invoice.amount_paid ?? invoice.paid ?? 0);
+  return { subtotal, tax, total, paid, remaining: Number(invoice.remaining_amount ?? invoice.balance_due ?? Math.max(0, total - paid)), change: Number(invoice.change_amount ?? 0), discount };
+}
+
+function salesInvoiceReceipt(invoice) {
+  const totals = invoiceTotals(invoice);
+  const customer = typeof invoice.customer === "object" && invoice.customer ? invoice.customer : {};
+  const items = invoiceItems(invoice).map(item => {
+    const variant = item.product_variant || item.variant || {};
+    const quantity = Number(item.quantity ?? item.qty ?? 0);
+    const price = Number(item.unit_price ?? item.price ?? item.sale_price ?? 0);
+    return {
+      name: item.product_name || item.name || item.product?.name_ar || item.product?.name || variant.product?.name_ar || variant.product?.name || "منتج",
+      sku: item.sku || variant.sku || "",
+      qty: quantity,
+      price,
+      total: Number(item.line_total ?? item.subtotal ?? quantity * price),
+      size: item.size || item.variant_size || variant.size || "",
+      color: item.color || item.variant_color || variant.color || ""
+    };
+  });
+  const payment = invoice.payment || invoice.payment_details || invoice.payments?.[0] || {};
+  const method = invoicePaymentMethod(invoice);
+  return {
+    title: "فاتورة مبيعات",
+    number: invoice.invoice_number || invoice.number || invoice.id,
+    date: dateLabel(invoice.created_at || invoice.invoice_date),
+    customer: customer.name || invoice.customer_name || (typeof invoice.customer === "string" ? invoice.customer : "عميل نقدي"),
+    customer_phone: customer.phone || invoice.customer_phone || invoice.phone || "",
+    cashier: invoice.cashierName || personName(invoice.cashier || invoice.cashier_user || invoice.created_by) || invoice.cashier_name || "—",
+    sales: invoice.salesName || personName(invoice.sales_person || invoice.sales_user) || invoice.sales_person_name || "—",
+    payment: method,
+    meta: [
+      { label: "الحالة", value: STATUS_LABELS[invoice.status] || invoice.status || "مكتملة" },
+      { label: "نوع العميل", value: customer.customer_type?.name || invoice.customer_type_name || "" },
+      { label: "مرجع الدفع", value: payment.reference || payment.payment_reference || invoice.payment_reference || "" }
+    ].filter(row => row.value),
+    items,
+    totals: [
+      { label: "الإجمالي قبل الخصم", value: totals.subtotal },
+      ...(totals.discount ? [{ label: "الخصم", value: totals.discount, negative: true }] : []),
+      ...(totals.tax ? [{ label: "الضريبة", value: totals.tax }] : []),
+      { label: "الإجمالي النهائي", value: totals.total, final: true },
+      { label: "المدفوع", value: totals.paid },
+      { label: "المتبقي", value: totals.remaining, emphasis: true },
+      ...(totals.change ? [{ label: "الباقي للعميل", value: totals.change }] : [])
+    ],
+    note: invoice.notes || "",
+    footerTitle: "شكرًا لزيارتكم",
+    footerNote: "نرجو الاحتفاظ بالفاتورة للمراجعة"
+  };
+}
+
 function renderInvoiceModal(invoice) {
+  const customer = typeof invoice.customer === "object" && invoice.customer ? invoice.customer : {};
+  const totals = invoiceTotals(invoice);
   document.getElementById("invoiceTitle").textContent = `#${invoice.invoice_number || invoice.number || "—"}`;
-  document.getElementById("invoiceCustomer").textContent = invoice.customer?.name || invoice.customer_name || "عميل نقدي";
-  document.querySelector(".invoice-products").innerHTML = (invoice.items || invoice.invoice_items || []).map(item => `<div><strong>${escapeHtml(item.product_name || item.name || "منتج")}</strong><small dir="ltr">${escapeHtml(item.sku || "—")}</small><span>${Number(item.quantity || item.qty)} × ${money(item.unit_price || item.price)}</span><b>${money(item.line_total || Number(item.quantity || item.qty) * Number(item.unit_price || item.price))}</b></div>`).join("") || "<p>لا توجد بنود.</p>";
+  document.getElementById("invoiceInfo").innerHTML = `<div><span>العميل</span><strong>${escapeHtml(customer.name || invoice.customer_name || (typeof invoice.customer === "string" ? invoice.customer : "عميل نقدي"))}</strong><small>${escapeHtml(customer.phone || invoice.customer_phone || invoice.phone || "بدون هاتف")}</small></div><div><span>التاريخ والحالة</span><strong>${dateLabel(invoice.created_at || invoice.invoice_date)}</strong><small>${escapeHtml(STATUS_LABELS[invoice.status] || invoice.status || "—")}</small></div><div><span>الكاشير</span><strong>${escapeHtml(invoice.cashierName || personName(invoice.cashier || invoice.cashier_user || invoice.created_by) || invoice.cashier_name || "—")}</strong></div><div><span>موظف المبيعات</span><strong>${escapeHtml(invoice.salesName || personName(invoice.sales_person || invoice.sales_user) || invoice.sales_person_name || "—")}</strong></div><div><span>طريقة الدفع</span><strong>${escapeHtml(invoicePaymentMethod(invoice))}</strong></div>`;
+  document.querySelector(".invoice-products").innerHTML = invoiceItems(invoice).map(item => {
+    const variant = item.product_variant || item.variant || {};
+    const product = item.product || variant.product || {};
+    const quantity = Number(item.quantity ?? item.qty ?? 0), price = Number(item.unit_price ?? item.price ?? item.sale_price ?? 0);
+    const lineTotal = Number(item.line_total ?? item.subtotal ?? quantity * price);
+    const specs = [item.size || variant.size, item.color || variant.color].filter(Boolean).join(" · ");
+    return `<div><strong>${escapeHtml(item.product_name || item.name || product.name_ar || product.name || "منتج")}${specs ? `<small>${escapeHtml(specs)}</small>` : ""}</strong><small dir="ltr">${escapeHtml(item.sku || variant.sku || "—")}</small><span>${quantity.toLocaleString("en-US")} × ${money(price)}</span><b>${money(lineTotal)}</b></div>`;
+  }).join("") || "<p>لا توجد بنود.</p>";
+  const payments = Array.isArray(invoice.payments) ? invoice.payments : [];
+  const paymentRows = payments.map(item => `<p><span>دفعة ${escapeHtml(PAYMENT_LABELS[item.method || item.payment_method] || item.method || item.payment_method || "")}</span><b>${money(item.amount ?? item.paid_amount)}</b></p>`).join("");
+  document.getElementById("invoiceSummary").innerHTML = `<section><h3>ملخص الفاتورة</h3><p><span>الإجمالي قبل الخصم</span><b>${money(totals.subtotal)}</b></p>${totals.discount ? `<p><span>الخصم</span><b>− ${money(totals.discount)}</b></p>` : ""}${totals.tax ? `<p><span>الضريبة</span><b>${money(totals.tax)}</b></p>` : ""}<p><span>الإجمالي النهائي</span><b>${money(totals.total)}</b></p><p><span>المدفوع</span><b>${money(totals.paid)}</b></p><p><span>المتبقي</span><b>${money(totals.remaining)}</b></p>${totals.change ? `<p><span>الباقي للعميل</span><b>${money(totals.change)}</b></p>` : ""}</section>${paymentRows ? `<section><h3>الدفعات</h3>${paymentRows}</section>` : ""}`;
 }
 
 function createExportTable(invoices) {
@@ -135,17 +211,29 @@ export function initSales() {
         empty.hidden = false; body.hidden = true; info.textContent = "حدد فترة صحيحة ثم اضغط تطبيق"; return;
       }
       const query = queryFor();
-      const [response, summary] = await Promise.all([api.get("/api/v1/admin/sales", { query }), api.get("/api/v1/admin/sales/summary", { query: queryFor(1, 50, false) })]);
+      const summaryPromise = api.get("/api/v1/admin/sales/summary", { query: queryFor(1, 50, false) }).catch(() => null);
+      const response = await api.get("/api/v1/admin/sales", { query });
       if (request !== sequence) return;
-      await loadReferenceData();
-      const invoices = (await hydrateInvoices(listFrom(response))).map(enrichInvoice);
-      if (request !== sequence) return;
-      currentSummary = summary?.summary || summary; renderRows(body, invoices); renderSummary(currentSummary);
+      const sourceInvoices = listFrom(response);
+      const invoices = sourceInvoices.map(enrichInvoice);
+      renderRows(body, invoices);
       empty.hidden = invoices.length > 0; body.hidden = !invoices.length; info.textContent = invoices.length ? `عرض ${invoices.length} من أصل ${response.total ?? invoices.length} نتيجة` : "لا توجد نتائج";
+      summaryPromise.then(summary => {
+        if (summary && request === sequence) {
+          currentSummary = summary.summary || summary;
+          renderSummary(currentSummary);
+        }
+      });
+      // Names and catalog data improve labels, but must not hold up the sales table.
+      loadReferenceData().then(() => {
+        if (request !== sequence) return;
+        const enriched = sourceInvoices.map(enrichInvoice);
+        renderRows(body, enriched);
+      });
     } catch (error) { body.innerHTML = ""; empty.hidden = false; empty.querySelector("p").textContent = error.message; }
   };
   const delayedLoad = debounce(load, 300);
-  const open = async id => { try { const response = await api.get(`/api/v1/admin/sales/${encodeURIComponent(id)}`); activeInvoice = enrichInvoice(response?.invoice || response?.data || response); renderInvoiceModal(activeInvoice); modal.hidden = false; document.body.style.overflow = "hidden"; } catch (error) { window.alert(error.message); } };
+  const open = async id => { try { const response = await api.get(`/api/v1/admin/sales/${encodeURIComponent(id)}`); activeInvoice = enrichInvoice(unwrapInvoice(response)); renderInvoiceModal(activeInvoice); modal.hidden = false; document.body.style.overflow = "hidden"; } catch (error) { window.alert(error.message); } };
   const close = () => { modal.hidden = true; document.body.style.overflow = ""; };
   const onBody = event => { const button = event.target.closest(".sales-view"); if (button) open(button.closest("tr").dataset.id); };
   const periods = document.querySelector(".sales-periods");
@@ -182,10 +270,13 @@ export function initSales() {
   search.addEventListener("input", delayedLoad); payment.addEventListener("change", load); status.addEventListener("change", load); cashier.addEventListener("change", load); salesPerson.addEventListener("change", load); applyDates.addEventListener("click", load); resetFilters.addEventListener("click", reset); body.addEventListener("click", onBody); periods.addEventListener("click", onPeriods); modal.addEventListener("click", event => { if (event.target.closest("[data-close-modal]")) close(); });
   document.getElementById("printInvoice").addEventListener("click", async () => {
     if (!activeInvoice) return;
+    let printData = {};
     try {
       const response = await api.get(`/api/v1/admin/sales/${encodeURIComponent(activeInvoice.id)}/print`);
-      window.GhaithPrint?.printReceipt(response?.print || response?.data || response);
-    } catch (error) { window.alert(error.message); }
+      printData = response?.print || response?.receipt || response?.data?.print || response?.data?.receipt || response?.data?.invoice || response?.data || response;
+    } catch { /* Use the full invoice detail already loaded for this modal. */ }
+    const invoice = enrichInvoice({ ...activeInvoice, ...(printData && typeof printData === "object" ? printData : {}) });
+    window.GhaithPrint?.printReceipt(salesInvoiceReceipt(invoice));
   });
   document.getElementById("salesExportPdf").addEventListener("click", event => runExport(event.currentTarget, "pdf"));
   document.getElementById("salesExportExcel").addEventListener("click", event => runExport(event.currentTarget, "excel"));

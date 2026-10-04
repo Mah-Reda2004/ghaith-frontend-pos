@@ -660,6 +660,9 @@
 .exchange-summary__columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
 .exchange-card { min-height: 260px; padding: var(--space-5); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); }
 .exchange-summary-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3); background: var(--color-surface-alt); border-radius: var(--radius-sm); }
+.exchange-discount-controls { display: grid; grid-template-columns: 1fr 1fr; }
+.exchange-discount-controls label, .exchange-discount-controls small { grid-column: 1 / -1; }
+.exchange-discount-controls small { color: var(--color-danger); }
 .difference-card { margin-top: var(--space-5); padding: var(--space-5); background: var(--color-surface); border: 1px solid color-mix(in srgb, var(--color-primary) 40%, var(--color-border)); border-radius: var(--radius-md); }
 .difference-value { color: var(--color-primary); font-size: var(--fs-xl); font-weight: var(--fw-bold); }
 .payment-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); max-width: 520px; }

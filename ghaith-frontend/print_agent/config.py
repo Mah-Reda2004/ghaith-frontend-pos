@@ -21,6 +21,7 @@ DEFAULTS = {
     "local_port": 17891,
     "api_key": "ghaith-local-print-v1",
     "receipt_all_printers": True,
+    "receipt_printer_names": [],
     "barcode_printer_names": [],
     "receipt_width_mm": 80,
     # 80 mm mechanisms normally expose a 72 mm / 576-dot printable area.
@@ -74,6 +75,10 @@ class PrintAgentConfig:
     def api_key(self): return str(self.get("api_key"))
     @property
     def receipt_all_printers(self): return bool(self.get("receipt_all_printers"))
+    @property
+    def receipt_printer_names(self):
+        names = self.get("receipt_printer_names", [])
+        return [str(name) for name in names] if isinstance(names, list) else []
     @property
     def barcode_printer_names(self):
         names = self.get("barcode_printer_names", [])

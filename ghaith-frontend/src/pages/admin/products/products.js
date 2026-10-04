@@ -14,6 +14,7 @@ let summary = { total: 0, low: 0, empty: 0, value: 0 };
 let currentPage = 1;
 let requestSequence = 0;
 let pricingPreviewSequence = 0;
+let costCodeLookupSequence = 0;
 let barcodeProduct = null;
 
 function addApiFields() {
@@ -37,7 +38,7 @@ function getElements() {
     totalStat: document.getElementById("productsTotalStat"), lowStat: document.getElementById("productsLowStat"), emptyStat: document.getElementById("productsEmptyStat"), valueStat: document.getElementById("productsValueStat"),
     modal: document.getElementById("productModal"), modalTitle: document.getElementById("productModalTitle"), form: document.getElementById("productForm"), id: document.getElementById("productId"),
     nameAr: document.getElementById("productNameAr"), nameEn: document.getElementById("productNameEn"), category: document.getElementById("productCategory"), supplier: document.getElementById("productSupplier"), status: document.getElementById("productStatus"), statusField: document.getElementById("productStatusField"),
-    salePrice: document.getElementById("productSalePrice"), costPrice: document.getElementById("productCostPrice"), salesPercentage: document.getElementById("productSalesPercentage"), netProfitPercentage: document.getElementById("productNetProfitPercentage"), quantity: document.getElementById("productQuantity"), minimum: document.getElementById("productMinimum"), nameError: document.getElementById("productNameError"), saveButton: document.getElementById("saveProductBtn"),
+    salePrice: document.getElementById("productSalePrice"), costCode: document.getElementById("productCostCode"), costCodeStatus: document.getElementById("productCostCodeStatus"), costPrice: document.getElementById("productCostPrice"), salesPercentage: document.getElementById("productSalesPercentage"), netProfitPercentage: document.getElementById("productNetProfitPercentage"), quantity: document.getElementById("productQuantity"), minimum: document.getElementById("productMinimum"), nameError: document.getElementById("productNameError"), saveButton: document.getElementById("saveProductBtn"),
     successModal: document.getElementById("productSuccessModal"), successTitle: document.getElementById("productSuccessTitle"), successName: document.getElementById("successProductName"), successSku: document.getElementById("successProductSku"), successCategory: document.getElementById("successProductCategory"), successQuantity: document.getElementById("successProductQuantity"), toastStack: document.getElementById("productsToastStack")
   };
 }
@@ -48,7 +49,7 @@ function referenceId(value) { return value && typeof value === "object" ? value.
 
 function normalizeProduct(item, variant = item.variant || {}) {
   return {
-    id: item.id, rowId: `${item.id}-${variant.id || "default"}`, nameAr: item.name_ar || item.name || "—", nameEn: item.name_internal || "", sku: variant.sku || item.sku || "—", barcode: variant.barcode || item.barcode || "—",
+    id: item.id, rowId: `${item.id}-${variant.id || "default"}`, nameAr: item.name_ar || item.name || "—", nameEn: item.name_internal || "", sku: variant.sku || item.sku || "—", barcode: variant.barcode || "—",
     categoryId: referenceId(item.category_id || item.category), category: categoryNames.get(referenceId(item.category_id || item.category)) || item.category_name || item.category?.name || "—",
     size: variant.size || item.size || item.variant_size || "—", color: variant.color || item.color || item.variant_color || "—",
     salePrice: Number(variant.sale_price ?? item.sale_price ?? item.sell_price ?? 0), costPrice: Number(variant.purchase_price ?? item.purchase_price ?? item.cost_price ?? 0),
@@ -116,6 +117,43 @@ function updateProfit(elements) {
   elements.netProfitPercentage.classList.toggle("is-negative", value < 0);
 }
 
+async function lookupPurchaseCost(elements, rawCode) {
+  const code = String(rawCode || "").trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+  const sequence = ++costCodeLookupSequence;
+  if (!/^[0-9]{4}$/.test(code)) {
+    elements.costPrice.value = "";
+    elements.costCodeStatus.textContent = "أدخل 4 أرقام صحيحة لعرض سعر الشراء.";
+    updateProfit(elements);
+    return;
+  }
+  if (elements.costCode.value !== code) elements.costCode.value = code;
+  if (code === "0000") {
+    elements.costPrice.value = "";
+    elements.costCodeStatus.textContent = "سعر الشراء غير معروف للكود 0000.";
+    updateProfit(elements);
+    return;
+  }
+  elements.costCodeStatus.textContent = "جاري البحث عن سعر الشراء...";
+  try {
+    const response = await api.get(`/api/v1/admin/products/cost-codes/${encodeURIComponent(code)}`);
+    if (sequence !== costCodeLookupSequence) return;
+    const result = response?.data || response, price = result?.purchase_price;
+    if (price === null || price === undefined || !Number.isFinite(Number(price))) {
+      elements.costPrice.value = "";
+      elements.costCodeStatus.textContent = `لا يوجد سعر شراء مسجل للكود ${code}.`;
+    } else {
+      elements.costPrice.value = String(Number(price));
+      elements.costCodeStatus.textContent = `سعر الشراء للكود ${code}: ${money(Number(price))} ج.م.`;
+    }
+    updateProfit(elements);
+  } catch (error) {
+    if (sequence !== costCodeLookupSequence) return;
+    elements.costPrice.value = "";
+    elements.costCodeStatus.textContent = error.message || "تعذّر البحث عن كود سعر الشراء.";
+    updateProfit(elements);
+  }
+}
+
 async function previewPricing(elements) {
   const sequence = ++pricingPreviewSequence;
   const purchasePrice = Math.max(0, Number(elements.costPrice.value) || 0), salePrice = Number(elements.salePrice.value) || 0, commissionRate = Math.min(100, Math.max(0, Number(elements.salesPercentage.value) || 0));
@@ -159,7 +197,7 @@ function renderProducts(elements) {
     const state = stockState(product);
     return `<tr data-product-id="${escapeHtml(String(product.id))}">
       <td><span class="product-name-cell"><strong>${escapeHtml(product.nameAr)}</strong><small>${escapeHtml(product.nameEn)}</small></span></td>
-      <td><span class="product-barcode-cell"><b class="num" dir="ltr">${escapeHtml(product.barcode !== "—" ? product.barcode : product.sku)}</b></span></td>
+      <td><span class="product-barcode-cell"><b class="num" dir="ltr">${escapeHtml(product.barcode)}</b></span></td>
       <td>${escapeHtml(product.category)}</td><td>${renderVariantBadges(product.variants || [product])}</td><td>${escapeHtml(product.supplierName || "—")}</td>
       <td class="num">${money(product.costPrice)}</td><td class="num">${money(product.salePrice)}</td><td class="num">${product.salesPercentage}%</td><td class="num">${product.quantity}</td><td class="num">${product.minimum}</td>
       <td><span class="product-stock product-stock--${state}">${stockLabel(product)}</span></td>
@@ -255,13 +293,14 @@ function selectCurrentReference(select, id, label) {
 }
 
 async function openProductModal(elements, product = null) {
+  costCodeLookupSequence += 1;
   elements.form.reset(); elements.nameError.hidden = true;
   elements.id.value = product?.id || ""; elements.nameAr.value = product?.nameAr || ""; elements.nameEn.value = product?.nameEn || "";
   selectCurrentReference(elements.category, product?.categoryId, product?.category);
   selectCurrentReference(elements.supplier, product?.supplierId, product?.supplierName);
   elements.status.value = product?.status || "active"; elements.statusField.hidden = false;
-  elements.salePrice.value = product?.salePrice ?? ""; elements.costPrice.value = product?.costPrice ?? ""; elements.salesPercentage.value = product?.salesPercentage ?? 0; elements.quantity.value = product?.quantity ?? 0; elements.minimum.value = product?.minimum ?? 5;
-  elements.costPrice.readOnly = Boolean(product); elements.modal.dataset.variantId = ""; elements.modal.dataset.variantVersion = "";
+  elements.salePrice.value = product?.salePrice ?? ""; elements.costPrice.value = product?.costPrice ?? ""; elements.costCode.value = "0000"; elements.costCodeStatus.textContent = "أدخل آخر 4 أرقام لعرض سعر الشراء؛ 0000 يعني غير معروف."; elements.salesPercentage.value = product?.salesPercentage ?? 0; elements.quantity.value = product?.quantity ?? 0; elements.minimum.value = product?.minimum ?? 5;
+  elements.modal.dataset.variantId = ""; elements.modal.dataset.variantVersion = "";
   setModalTitle(elements, product ? "تعديل المنتج" : "إضافة منتج جديد"); elements.modal.hidden = false; updateProfit(elements);
   let detailVariants = [];
   if (product) {
@@ -273,6 +312,10 @@ async function openProductModal(elements, product = null) {
       selectCurrentReference(elements.supplier, detailedProduct.supplierId || product.supplierId, detailedProduct.supplierName || product.supplierName);
       const apiVariants = detail.product_variants || detail.variants || [];
       const variant = apiVariants[0];
+      const costCode = String(variant?.barcode || "").match(/([0-9]{4})$/)?.[1] || "0000";
+      elements.costCode.value = costCode;
+      elements.costCodeStatus.textContent = costCode === "0000" ? "سعر الشراء غير معروف للكود 0000." : `كود الشراء الحالي ${costCode}؛ السعر المسجل ${money(detailedProduct.costPrice)} ج.م.`;
+      elements.costPrice.value = costCode === "0000" ? "" : (detailedProduct.costPrice ?? product.costPrice ?? "");
       detailVariants = apiVariants.map(item => ({ id: item.id, version: Number(item.version || 0), size: item.size, color: item.color, quantity: Number(item.stock_qty ?? item.stock_quantity ?? item.quantity ?? 0) }));
       product.variantId = variant?.id || ""; product.variantVersion = Number(variant?.version || 0); product.quantity = detailVariants.length ? detailVariants.reduce((sum, item) => sum + item.quantity, 0) : product.quantity;
       elements.quantity.value = product.quantity; elements.modal.dataset.variantId = product.variantId; elements.modal.dataset.variantVersion = String(product.variantVersion);
@@ -283,7 +326,7 @@ async function openProductModal(elements, product = null) {
   requestAnimationFrame(() => elements.nameAr.focus());
 }
 
-function closeProductModal(elements) { elements.modal.hidden = true; elements.form.reset(); elements.nameError.hidden = true; }
+function closeProductModal(elements) { costCodeLookupSequence += 1; elements.modal.hidden = true; elements.form.reset(); elements.nameError.hidden = true; }
 function closeSuccess(elements) { elements.successModal.hidden = true; elements.successModal.style.display = ""; }
 
 function confirmProductDeletion(product) {
@@ -326,14 +369,14 @@ function closeBarcodeModal() {
 
 function openBarcodeModal(product) {
   barcodeProduct = product;
-  const variants = (product.variants || [product]).map((variant, index) => ({ variant, index })).filter(({ variant }) => variant.barcode !== "—" || variant.sku !== "—");
+  const variants = (product.variants || [product]).map((variant, index) => ({ variant, index })).filter(({ variant }) => variant.barcode && variant.barcode !== "—");
   document.getElementById("productBarcodeTitle").textContent = `طباعة باركود «${product.nameAr}»`;
   document.getElementById("productBarcodeList").innerHTML = variants.map(({ variant, index }) => `<div class="products-barcode-row" data-variant-index="${index}">
     <input type="checkbox" data-barcode-select value="${index}" aria-label="اختيار ${escapeHtml(variant.size)} ${escapeHtml(variant.color)}">
-    <span><strong>${escapeHtml(variant.size === "—" ? "بدون مقاس" : variant.size)}</strong><small>${escapeHtml(variant.color === "—" ? "بدون لون" : variant.color)} · <b dir="ltr">${escapeHtml(variant.barcode !== "—" ? variant.barcode : variant.sku)}</b></small></span>
+    <span><strong>${escapeHtml(variant.size === "—" ? "بدون مقاس" : variant.size)}</strong><small>${escapeHtml(variant.color === "—" ? "بدون لون" : variant.color)} · <b dir="ltr">${escapeHtml(variant.barcode)}</b></small></span>
     <em>المتاح: ${Math.max(0, Number(variant.quantity) || 0)}</em>
     <label class="products-barcode-count">عدد الملصقات<input class="input num" type="number" min="1" max="10000" value="1" data-barcode-copies disabled></label>
-  </div>`).join("") || '<div class="empty-state"><h3>لا توجد نسخ قابلة للطباعة</h3><p>أضف باركودًا أو SKU للمنتج أولًا.</p></div>';
+  </div>`).join("") || '<div class="empty-state"><h3>لا توجد نسخ قابلة للطباعة</h3><p>لا يوجد باركود صالح مُرجع من الخادم لهذا المنتج.</p></div>';
   document.getElementById("productBarcodeError").hidden = true;
   document.getElementById("productBarcodeModal").hidden = false;
 }
@@ -345,7 +388,8 @@ async function printSelectedBarcodes(button) {
     if (!row.querySelector("[data-barcode-select]").checked) return [];
     const variant = variants[Number(row.dataset.variantIndex)], copies = Math.floor(Number(row.querySelector("[data-barcode-copies]").value));
     if (!variant || copies < 1) return [];
-    return [{ name: barcodeProduct.nameAr, barcode: variant.barcode !== "—" ? variant.barcode : variant.sku, sku: variant.sku !== "—" ? variant.sku : variant.barcode, price: variant.salePrice ?? barcodeProduct.salePrice, size: variant.size === "—" ? "" : variant.size, color: variant.color === "—" ? "" : variant.color, copies }];
+    if (!variant?.barcode || variant.barcode === "—") { document.getElementById("productBarcodeError").textContent = "الباركود غير موجود في بيانات النسخة الراجعة من الخادم."; document.getElementById("productBarcodeError").hidden = false; return []; }
+    return [{ name: barcodeProduct.nameAr, barcode: variant.barcode, price: variant.salePrice ?? barcodeProduct.salePrice, size: variant.size === "—" ? "" : variant.size, color: variant.color === "—" ? "" : variant.color, copies }];
   });
   const error = document.getElementById("productBarcodeError");
   if (!printable.length) { error.textContent = "اختر مقاسًا ولونًا واحدًا على الأقل وحدد عدد الملصقات."; error.hidden = false; return; }
@@ -370,8 +414,8 @@ function showSuccess(elements, product, edited = false) {
 async function printSavedProductBarcodes(elements, button) {
   const product = products.find(item => String(item.id) === elements.successModal.dataset.productId);
   if (!product) { showToast(elements, "تعذّر العثور على نسخ المنتج. أعد تحميل الصفحة وحاول مرة أخرى.", true); return; }
-  const printable = (product.variants || [product]).filter(variant => Number(variant.quantity) > 0 && (variant.barcode !== "—" || variant.sku !== "—")).map(variant => ({
-    name: product.nameAr, barcode: variant.barcode !== "—" ? variant.barcode : variant.sku, sku: variant.sku !== "—" ? variant.sku : variant.barcode,
+  const printable = (product.variants || [product]).filter(variant => Number(variant.quantity) > 0 && variant.barcode && variant.barcode !== "—").map(variant => ({
+    name: product.nameAr, barcode: variant.barcode,
     price: variant.salePrice ?? product.salePrice, size: variant.size === "—" ? "" : variant.size, color: variant.color === "—" ? "" : variant.color, copies: variant.quantity
   }));
   if (!printable.length) { showToast(elements, "لا توجد نسخ لها باركود وكمية متاحة للطباعة.", true); return; }
@@ -386,12 +430,20 @@ async function saveProduct(elements) {
   const categoryId = elements.category.value;
   const supplierId = elements.supplier.value;
   const salePrice = Number(elements.salePrice.value);
+  const costCode = String(elements.costCode.value || "").trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
   if (!nameAr) { elements.nameError.hidden = false; elements.nameAr.focus(); return; }
   if (!categoryId || !supplierId || !Number.isFinite(salePrice) || salePrice <= 0) { showToast(elements, "اختر الفئة والمورد وأدخل سعر بيع أكبر من صفر.", true); return; }
+  if (!/^[0-9]{4}$/.test(costCode)) { showToast(elements, "أدخل كود سعر الشراء المكوّن من 4 أرقام؛ استخدم 0000 إذا كان غير معروف.", true); elements.costCode.focus(); return; }
   if (!validateProductVariantTotal(elements)) return;
   elements.saveButton.disabled = true;
   try {
+    if (costCode !== "0000") {
+      await lookupPurchaseCost(elements, costCode);
+      if (!elements.costPrice.value) throw new Error("لم يتم العثور على سعر شراء لهذا الكود؛ راجع الكود قبل الحفظ.");
+    }
+    const purchasePrice = Math.max(0, Number(elements.costPrice.value) || 0);
     const existing = products.find(product => String(product.id) === id);
+    const purchasePriceChanged = !existing || Number(existing.costPrice || 0) !== purchasePrice;
     const variants = readProductVariants(elements.form, elements.quantity);
     const initialStock = variants.reduce((sum, variant) => sum + variant.quantity, 0);
     let response;
@@ -407,20 +459,36 @@ async function saveProduct(elements) {
       }
       if (adjustments.some(({ current }) => !current.id || !current.version)) throw new Error("بيانات نسخة المنتج غير مكتملة. أعد تحميل المنتج وحاول مرة أخرى.");
       response = await api.patch(`/api/v1/admin/products/${encodeURIComponent(id)}`, {
-        name_ar: nameAr, name_internal: elements.nameEn.value.trim() || null, category_id: categoryId, supplier_id: supplierId, sale_price: salePrice,
+        name_ar: nameAr, name_internal: elements.nameEn.value.trim() || null, category_id: categoryId, supplier_id: supplierId, purchase_price: purchasePrice, sale_price: salePrice,
         low_stock_threshold: Math.max(0, Number(elements.minimum.value) || 0), commission_rate: Math.min(100, Math.max(0, Number(elements.salesPercentage.value) || 0)), status: elements.status.value, version: existing.version
       });
       await Promise.all(adjustments.map(({ current, delta }) => api.post(`/api/v1/admin/products/${encodeURIComponent(id)}/stock-adjustments`, { variant_id: current.id, qty_delta: delta, expected_version: current.version, reason: "تعديل يدوي من لوحة الإدارة" }, { headers: { "Idempotency-Key": idempotencyKey() } })));
     } else {
       response = await api.post("/api/v1/admin/products", {
         name_ar: nameAr, name_internal: elements.nameEn.value.trim() || null, category_id: categoryId, supplier_id: supplierId,
-        purchase_price: Math.max(0, Number(elements.costPrice.value) || 0), sale_price: salePrice, initial_stock: 0, variants,
+        purchase_price: purchasePrice, sale_price: salePrice, initial_stock: 0, variants,
         low_stock_threshold: Math.max(0, Number(elements.minimum.value) || 0), commission_rate: Math.min(100, Math.max(0, Number(elements.salesPercentage.value) || 0)), status: elements.status.value
       }, { headers: { "Idempotency-Key": idempotencyKey() } });
     }
+    let responseProduct = response?.product || response?.data?.product || response?.data || response;
+    if (purchasePriceChanged && responseProduct?.id) {
+      try {
+        const latest = await api.get(`/api/v1/products/${encodeURIComponent(responseProduct.id)}`);
+        responseProduct = latest?.product || latest?.data?.product || latest?.data || latest;
+      } catch { /* نعتمد على القائمة المُحدّثة إذا تعذّر جلب التفاصيل بعد الحفظ. */ }
+    }
     closeProductModal(elements); currentPage = 1; await loadProducts(elements);
-    const responseProduct = response?.product || response?.data || response;
-    const savedId = responseProduct?.id;
+    const savedId = responseProduct?.id || id;
+    if (purchasePriceChanged && savedId && (responseProduct?.product_variants || responseProduct?.variants)?.length) {
+      const freshProduct = normalizeProductRows(responseProduct)[0];
+      if (freshProduct?.variants?.some(variant => variant.barcode && variant.barcode !== "—")) {
+        const listed = products.find(product => String(product.id) === String(savedId));
+        const refreshedProduct = { ...listed, ...freshProduct, category: listed?.category || freshProduct.category, supplierName: listed?.supplierName || freshProduct.supplierName || "—" };
+        if (listed) products = products.map(product => String(product.id) === String(savedId) ? refreshedProduct : product);
+        else products.unshift(refreshedProduct);
+        renderProducts(elements);
+      }
+    }
     const saved = products.find(product => String(product.id) === String(savedId || "")) || products.find(product => product.nameAr === nameAr) || normalizeProduct(responseProduct || { name_ar: nameAr, category_id: categoryId });
     showSuccess(elements, saved, Boolean(existing));
     const state = stockState(saved);
@@ -488,6 +556,7 @@ export function initProducts() {
   document.getElementById("addAnotherProduct").addEventListener("click", () => { closeSuccess(elements); openProductModal(elements); }); document.getElementById("backToProducts").addEventListener("click", () => closeSuccess(elements));
   document.getElementById("printProductBarcode").addEventListener("click", event => printSavedProductBarcodes(elements, event.currentTarget));
   elements.form.addEventListener("submit", handleSubmit); elements.tableBody.addEventListener("click", handleTable); elements.pagination.addEventListener("click", handlePagination);
+  elements.costCode.addEventListener("input", () => lookupPurchaseCost(elements, elements.costCode.value));
   elements.search.addEventListener("input", refresh); elements.search.addEventListener("keydown", handleSearchScanner); elements.categoryFilter.addEventListener("change", refresh); elements.stockFilter.addEventListener("change", refresh);
   const handlePricingChange = () => {
     // Keep the form calculation authoritative: the pricing-preview endpoint may

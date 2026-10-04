@@ -82,6 +82,11 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     filters: {},
     allData: [],
     allInvoices: [],
+    rawInvoices: null,
+    invoiceListRequest: 0,
+    returnOperationsLoaded: false,
+    returnOperationsPromise: null,
+    catalogDirectoryPromise: null,
     returnOperations: [],
     total: 0,
     operations: [],
@@ -91,6 +96,8 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     replacementProducts: [],
     replacementCategories: [],
     exchangeCart: [],
+    exchangeDiscountType: "amount",
+    exchangeDiscountValue: "",
     refundMethod: "store-credit",
     returnReason: "",
     paymentMethod: "cash",
@@ -232,27 +239,38 @@ import { debounce, formatMoney } from "../../../core/utils.js";
   function rememberCompletedOperation(operation, type, invoiceId) {
     const completed = { ...operation, type, operation_type: type, original_invoice_id: operation.original_invoice_id || invoiceId };
     state.recentOperations = [completed, ...state.recentOperations.filter(item => operationKey(item) !== operationKey(completed))];
+    state.returnOperations = [completed, ...state.returnOperations.filter(item => operationKey(item) !== operationKey(completed))];
     return completed;
   }
 
-  async function loadReturnOperations() {
-    try {
-      const first = await api.get("/api/v1/returns", { query: { page: 1, page_size: 100 } });
-      const pages = [first];
-      const firstItems = listFrom(first);
-      const total = Number(first?.total ?? first?.data?.total ?? firstItems.length);
-      for (let page = 2; page <= Math.ceil(total / 100); page += 1) {
-        pages.push(await api.get("/api/v1/returns", { query: { page, page_size: 100 } }));
-      }
-      const fromApi = pages.flatMap(listFrom).map(operation => ({ ...operation, type: operationType(operation) }));
-      const merged = new Map(fromApi.map(operation => [operationKey(operation), operation]));
-      state.recentOperations.forEach(operation => { if (!merged.has(operationKey(operation))) merged.set(operationKey(operation), operation); });
-      state.returnOperations = [...merged.values()];
-    } catch {
-      // يظل سجل فواتير البيع متاحًا حتى لو تعذر تحميل قائمة المرتجعات.
-      state.returnOperations = [...state.recentOperations];
+  async function loadReturnOperations({ refresh = false } = {}) {
+    if (refresh) {
+      state.returnOperationsLoaded = false;
+      state.returnOperationsPromise = null;
     }
-    return state.returnOperations;
+    if (state.returnOperationsLoaded) return state.returnOperations;
+    if (state.returnOperationsPromise) return state.returnOperationsPromise;
+    state.returnOperationsPromise = (async () => {
+      try {
+        const first = await api.get("/api/v1/returns", { query: { page: 1, page_size: 100 } });
+        const pages = [first];
+        const firstItems = listFrom(first);
+        const total = Number(first?.total ?? first?.data?.total ?? firstItems.length);
+        for (let page = 2; page <= Math.ceil(total / 100); page += 1) {
+          pages.push(await api.get("/api/v1/returns", { query: { page, page_size: 100 } }));
+        }
+        const fromApi = pages.flatMap(listFrom).map(operation => ({ ...operation, type: operationType(operation) }));
+        const merged = new Map(fromApi.map(operation => [operationKey(operation), operation]));
+        state.recentOperations.forEach(operation => { if (!merged.has(operationKey(operation))) merged.set(operationKey(operation), operation); });
+        state.returnOperations = [...merged.values()];
+      } catch {
+        // يظل سجل فواتير البيع متاحًا حتى لو تعذر تحميل قائمة المرتجعات.
+        state.returnOperations = [...state.recentOperations];
+      }
+      state.returnOperationsLoaded = true;
+      return state.returnOperations;
+    })();
+    return state.returnOperationsPromise;
   }
 
   function operationType(operation) {
@@ -340,21 +358,6 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     return state.operations;
   }
 
-  async function fetchInvoiceOperationSummary(invoice) {
-    const fallback = invoice.returnOperations || [];
-    try {
-      const response = await api.get(`/api/v1/sales-invoices/${encodeURIComponent(invoice.id)}/operations`);
-      const listed = Array.isArray(response?.operations) ? response.operations : listFrom(response);
-      const hydrated = await Promise.all(listed.map(hydrateOperation));
-      const authoritative = hydrated.length ? hydrated : fallback;
-      const recentForInvoice = state.recentOperations.filter(operation => operationOriginalInvoiceId(operation) === invoice.id);
-      const merged = new Map([...authoritative, ...recentForInvoice].map(operation => [operationKey(operation), operation]));
-      return { ...invoice, returnOperations: [...merged.values()] };
-    } catch {
-      return invoice;
-    }
-  }
-
   function personName(person, ...fallbacks) {
     if (typeof person === "string") return person;
     return person?.name || person?.full_name || person?.username || fallbacks.find(Boolean) || "—";
@@ -379,33 +382,8 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     return translatedEnum(method, PAYMENT_LABELS);
   }
 
-  function needsInvoiceDetails(item) {
-    const customer = item.customer || {};
-    const items = invoiceItems(item);
-    const hasItems = items.length > 0 || [item.items_count, item.item_count, item.products_count, item.total_items, item.total_quantity].some(value => value != null);
-    const hasPhone = customer.phone != null || item.customer_phone != null || item.phone != null;
-    const hasCashier = item.cashier != null || item.cashier_user != null || item.created_by != null || item.cashier_name != null || item.created_by_name != null;
-    const hasSales = item.sales_person != null || item.sales_user != null || item.sales != null || item.sales_person_name != null || item.sales_user_name != null || item.sales_name != null;
-    const payment = item.payment || item.payment_details || item.payments?.[0] || {};
-    const hasPayment = item.payment_method != null || item.method != null || payment.method != null || payment.payment_method != null;
-    return !hasItems || !hasPhone || !hasCashier || !hasSales || !hasPayment;
-  }
-
   function invoiceFromResponse(response) {
     return response?.invoice || response?.data?.invoice || response?.data?.item || response?.item || response?.data || response;
-  }
-
-  async function hydrateInvoices(invoices) {
-    return Promise.all(invoices.map(async item => {
-      if (!item?.id || !needsInvoiceDetails(item)) return item;
-      try {
-        const response = await api.get(`/api/v1/sales-invoices/${encodeURIComponent(item.id)}`);
-        const details = invoiceFromResponse(response);
-        return { ...item, ...details };
-      } catch {
-        return item;
-      }
-    }));
   }
 
   function isDerivedOperationInvoice(item) {
@@ -450,19 +428,22 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     } catch { state.customersById = new Map(); }
   }
 
-  async function loadCatalogDirectory() {
-    try {
-      const first = await api.get("/api/v1/pos/catalog", { query: { page: 1, page_size: 100 } });
-      const pages = [first], total = Number(first?.total ?? first?.data?.total ?? listFrom(first).length);
-      for (let page = 2; page <= Math.ceil(total / 100); page += 1) pages.push(await api.get("/api/v1/pos/catalog", { query: { page, page_size: 100 } }));
-      const variants = pages.flatMap(listFrom).flatMap(product => (product.variants || product.product_variants || [product]).map(variant => ({
-        ...variant,
-        name: product.name_ar || product.name || variant.name_ar || variant.name,
-        category_name: product.category?.name || product.category_name || variant.category?.name || variant.category_name,
-        product
-      })));
-      state.variantsById = new Map(variants.map(variant => [String(variant.variant_id || variant.id), variant]));
-    } catch { state.variantsById = new Map(); }
+  function loadCatalogDirectory() {
+    if (!state.catalogDirectoryPromise) state.catalogDirectoryPromise = (async () => {
+      try {
+        const first = await api.get("/api/v1/pos/catalog", { query: { page: 1, page_size: 100 } });
+        const pages = [first], total = Number(first?.total ?? first?.data?.total ?? listFrom(first).length);
+        for (let page = 2; page <= Math.ceil(total / 100); page += 1) pages.push(await api.get("/api/v1/pos/catalog", { query: { page, page_size: 100 } }));
+        const variants = pages.flatMap(listFrom).flatMap(product => (product.variants || product.product_variants || [product]).map(variant => ({
+          ...variant,
+          name: product.name_ar || product.name || variant.name_ar || variant.name,
+          category_name: product.category?.name || product.category_name || variant.category?.name || variant.category_name,
+          product
+        })));
+        state.variantsById = new Map(variants.map(variant => [String(variant.variant_id || variant.id), variant]));
+      } catch { state.variantsById = new Map(); }
+    })();
+    return state.catalogDirectoryPromise;
   }
 
   async function loadCustomerTypesDirectory() {
@@ -473,7 +454,7 @@ import { debounce, formatMoney } from "../../../core/utils.js";
   }
 
   function loadReferenceData() {
-    if (!state.referenceDataPromise) state.referenceDataPromise = Promise.all([loadUserDirectory(), loadCustomerDirectory(), loadCatalogDirectory(), loadCustomerTypesDirectory()]);
+    if (!state.referenceDataPromise) state.referenceDataPromise = Promise.all([loadUserDirectory(), loadCustomerDirectory(), loadCustomerTypesDirectory()]);
     return state.referenceDataPromise;
   }
 
@@ -560,28 +541,41 @@ import { debounce, formatMoney } from "../../../core/utils.js";
   /* ------------------------------------------------------------------ */
   /* 7) تحميل البيانات من الخادم                                         */
   /* ------------------------------------------------------------------ */
-  async function loadData() {
-    showState("loading");
+  async function loadData({ refresh = false } = {}) {
+    const request = ++state.invoiceListRequest;
+    if (!state.rawInvoices || refresh) showState("loading");
     try {
-      const response = await api.get("/api/v1/sales-invoices", { query: { page: 1, page_size: 100 } });
-      const rawInvoices = [...listFrom(response)];
-      const apiTotal = Number(response?.total ?? response?.data?.total ?? rawInvoices.length);
-      for (let page = 2; page <= Math.ceil(apiTotal / 100); page += 1) {
-        rawInvoices.push(...listFrom(await api.get("/api/v1/sales-invoices", { query: { page, page_size: 100 } })));
+      if (!state.rawInvoices || refresh) {
+        const response = await api.get("/api/v1/sales-invoices", { query: { page: 1, page_size: 100 } });
+        const rawInvoices = [...listFrom(response)];
+        const apiTotal = Number(response?.total ?? response?.data?.total ?? rawInvoices.length);
+        for (let page = 2; page <= Math.ceil(apiTotal / 100); page += 1) {
+          rawInvoices.push(...listFrom(await api.get("/api/v1/sales-invoices", { query: { page, page_size: 100 } })));
+        }
+        if (request !== state.invoiceListRequest) return;
+        state.rawInvoices = rawInvoices;
       }
-      await Promise.all([loadReferenceData(), loadReturnOperations()]);
-      state.allInvoices = (await hydrateInvoices(uniqueOriginalInvoices(rawInvoices))).map(normalizeInvoice).map(invoice => ({
-        ...invoice,
-        returnOperations: state.returnOperations.filter(operation => operationOriginalInvoiceId(operation) === invoice.id)
-      }));
-      syncCashierOptions(state.allInvoices);
-      const filtered = filterInvoices(state.allInvoices);
-      state.total = filtered.length;
-      const start = (state.page - 1) * state.pageSize;
-      state.allData = await Promise.all(filtered.slice(start, start + state.pageSize).map(fetchInvoiceOperationSummary));
-      renderTable();
+
+      const renderCurrentList = () => {
+        if (request !== state.invoiceListRequest) return;
+        state.allInvoices = uniqueOriginalInvoices(state.rawInvoices).map(normalizeInvoice).map(invoice => ({
+          ...invoice,
+          returnOperations: state.returnOperations.filter(operation => operationOriginalInvoiceId(operation) === invoice.id)
+        }));
+        syncCashierOptions(state.allInvoices);
+        const filtered = filterInvoices(state.allInvoices);
+        state.total = filtered.length;
+        const start = (state.page - 1) * state.pageSize;
+        state.allData = filtered.slice(start, start + state.pageSize);
+        renderTable();
+      };
+
+      renderCurrentList();
+      // These directories and the return history improve labels and status details,
+      // but the invoice list can render without waiting for them.
+      Promise.all([loadReferenceData(), loadReturnOperations({ refresh })]).then(renderCurrentList);
     } catch (e) {
-      showState("error");
+      if (request === state.invoiceListRequest) showState("error");
     }
   }
 
@@ -782,7 +776,7 @@ import { debounce, formatMoney } from "../../../core/utils.js";
   els.searchBtn.addEventListener("click", applyFilters);
   els.resetBtn.addEventListener("click", resetFilters);
   els.emptyResetBtn.addEventListener("click", resetFilters);
-  els.retryBtn.addEventListener("click", loadData);
+  els.retryBtn.addEventListener("click", () => loadData({ refresh: true }));
 
   /* ------------------------------------------------------------------ */
   /* 12) Row Actions — View / Print                                      */
@@ -794,6 +788,9 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     if (!id) return;
     let inv = state.allData.find(i => i.id === id);
     if (!inv) return;
+    const returnContextPromise = btn?.dataset.action === "return-flow"
+      ? Promise.all([loadReferenceData(), loadCatalogDirectory()])
+      : Promise.resolve();
 
     if (!btn || ["view", "print", "return-flow"].includes(btn.dataset.action)) {
       try {
@@ -806,7 +803,7 @@ import { debounce, formatMoney } from "../../../core/utils.js";
 
     if (!btn || btn.dataset.action === "view") openDetailModal(inv);
     if (btn && btn.dataset.action === "print") { await loadInvoiceOperations(inv.id); printSingleInvoice(inv); }
-    if (btn && btn.dataset.action === "return-flow") openReturnFlow(inv);
+    if (btn && btn.dataset.action === "return-flow") { await returnContextPromise; openReturnFlow(inv); }
   });
 
   els.invoicesTbody.addEventListener("keydown", e => {
@@ -864,9 +861,13 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     return { grossSubtotal, discount, subtotal, tax, total: roundMoney(subtotal + tax), taxRate, discountRate };
   }
 
-  function getExchangeTotal() {
-    return roundMoney(state.exchangeCart.reduce((sum, item) => sum + item.price * item.qty, 0));
+  function getExchangeSubtotal() { return roundMoney(state.exchangeCart.reduce((sum, item) => sum + item.price * item.qty, 0)); }
+  function getExchangeDiscountAmount() {
+    const subtotal = getExchangeSubtotal(), entered = Number(state.exchangeDiscountValue);
+    if (state.exchangeDiscountValue === "" || !Number.isFinite(entered) || entered <= 0) return 0;
+    return roundMoney(Math.min(state.exchangeDiscountType === "percentage" ? subtotal * entered / 100 : entered, subtotal));
   }
+  function getExchangeTotal() { return roundMoney(Math.max(0, getExchangeSubtotal() - getExchangeDiscountAmount())); }
 
   async function getCurrentShiftId() {
     if (state.currentShift?.id || state.currentShift?.shift_id) {
@@ -1031,6 +1032,8 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     state.replacementProducts = [];
     state.replacementCategories = [];
     state.exchangeCart = [];
+    state.exchangeDiscountType = "amount";
+    state.exchangeDiscountValue = "";
     state.refundMethod = mode === "exchange" ? "exchange" : "store-credit";
     state.returnReason = "";
     state.paymentMethod = "cash";
@@ -1070,27 +1073,31 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     const response = await api.post(path, payload, { headers: { "Idempotency-Key": idempotencyKey() } });
     state.lastOperation = rememberCompletedOperation(response?.return || response?.data || response, "return", state.currentInvoice.id);
     state.lastOperationType = "return";
-    state.returnStep = "success"; renderReturnFlow(); await loadData();
+    state.returnStep = "success"; renderReturnFlow(); await loadData({ refresh: true });
   }
 
   async function submitExchange() {
+    const enteredDiscount = Number(state.exchangeDiscountValue || 0), discountLimit = state.exchangeDiscountType === "percentage" ? 100 : getExchangeSubtotal();
+    if (!Number.isFinite(enteredDiscount) || enteredDiscount < 0 || enteredDiscount > discountLimit) throw new Error(state.exchangeDiscountType === "percentage" ? "خصم البدائل يجب أن يكون بين صفر و100%." : "خصم البدائل يجب ألا يتجاوز إجمالي المنتجات البديلة.");
     const difference = roundMoney(getExchangeTotal() - getReturnTotals().total);
+    const discountAmount = getExchangeDiscountAmount();
     const payload = {
       reason: state.returnReason.trim() || "استبدال",
       refund_method: difference < 0 ? "cash" : null,
       return_items: getSelectedReturnItems().map(item => ({ invoice_item_id: item.id, quantity: item.qty })),
       replacement_items: state.exchangeCart.map(item => ({ variant_id: item.id, quantity: item.qty, expected_version: item.version })),
+      discount_amount: discountAmount,
       difference_payment: difference > 0 ? { method: state.paymentMethod, amount: difference, cash_amount: state.paymentMethod === "cash" ? difference : 0, card_amount: state.paymentMethod === "card" ? difference : 0 } : null,
       sales_person_id: state.currentInvoice.sales_person_id || state.currentInvoice.sales_user?.id || null,
       shift_id: await getCurrentShiftId()
     };
     const path = `/api/v1/sales-invoices/${encodeURIComponent(state.currentInvoice.id)}/exchanges`;
-    const quotePayload = { reason: payload.reason, refund_method: payload.refund_method, return_items: payload.return_items, replacement_items: payload.replacement_items, difference_payment: payload.difference_payment };
+    const quotePayload = { reason: payload.reason, refund_method: payload.refund_method, return_items: payload.return_items, replacement_items: payload.replacement_items, discount_amount: discountAmount, difference_payment: payload.difference_payment };
     await api.post(`${path}/quote`, quotePayload);
     const response = await api.post(path, payload, { headers: { "Idempotency-Key": idempotencyKey() } });
     state.lastOperation = rememberCompletedOperation(response?.exchange || response?.operation || response?.result?.exchange || response?.result || response?.data?.exchange || response?.data || response, "exchange", state.currentInvoice.id);
     state.lastOperationType = "exchange";
-    state.returnStep = "success"; renderReturnFlow(); await loadData();
+    state.returnStep = "success"; renderReturnFlow(); await loadData({ refresh: true });
   }
 
   function closeReturnFlow() {
@@ -1214,17 +1221,36 @@ import { debounce, formatMoney } from "../../../core/utils.js";
   function renderExchangeSummary() {
     setFlowHeading("ملخص عملية الاستبدال");
     const returnTotal = getReturnTotals().total;
+    const exchangeSubtotal = getExchangeSubtotal();
+    const discountAmount = getExchangeDiscountAmount();
     const exchangeTotal = getExchangeTotal();
     const difference = roundMoney(exchangeTotal - returnTotal);
     els.returnFlowBody.innerHTML = `
       <div class="exchange-summary">
         <div class="exchange-summary__columns">
           <section class="exchange-card"><h3>المنتجات المرتجعة</h3>${getSelectedReturnItems().map(item => `<div class="exchange-summary-row"><span>${escapeHtml(item.name)} × ${item.qty}</span><span class="num">${formatMoney(item.price * item.qty)} ج.م</span></div>`).join("")}<div class="return-breakdown__total">إجمالي المرتجعات: <span class="num">${formatMoney(returnTotal)} ج.م</span></div></section>
-          <section class="exchange-card"><h3>المنتجات البديلة</h3>${state.exchangeCart.map(item => `<div class="exchange-summary-row"><span>${escapeHtml(item.name)} × ${item.qty}</span><span class="num">${formatMoney(item.price * item.qty)} ج.م</span></div>`).join("")}<div class="return-breakdown__total">إجمالي البدائل: <span class="num">${formatMoney(exchangeTotal)} ج.م</span></div></section>
+          <section class="exchange-card"><h3>المنتجات البديلة</h3>${state.exchangeCart.map(item => `<div class="exchange-summary-row"><span>${escapeHtml(item.name)} × ${item.qty}</span><span class="num">${formatMoney(item.price * item.qty)} ج.م</span></div>`).join("")}<div class="exchange-summary-row exchange-discount-controls"><label for="exchangeDiscountType">خصم جديد على البدائل</label><select class="input" id="exchangeDiscountType"><option value="amount" ${state.exchangeDiscountType === "amount" ? "selected" : ""}>مبلغ ثابت (ج.م)</option><option value="percentage" ${state.exchangeDiscountType === "percentage" ? "selected" : ""}>نسبة مئوية (%)</option></select><input class="input num" id="exchangeDiscountValue" type="number" min="0" step="0.01" max="${state.exchangeDiscountType === "percentage" ? 100 : exchangeSubtotal}" value="${escapeHtml(state.exchangeDiscountValue)}" placeholder="بدون خصم" aria-label="قيمة خصم المنتجات البديلة"><small id="exchangeDiscountError" aria-live="polite"></small></div><div class="exchange-summary-row"><span>إجمالي المنتجات البديلة</span><span class="num" data-exchange-subtotal>${formatMoney(exchangeSubtotal)} ج.م</span></div><div class="exchange-summary-row"><span>الخصم الجديد</span><span class="num" data-exchange-discount>-${formatMoney(discountAmount)} ج.م</span></div><div class="return-breakdown__total">صافي البدائل: <span class="num" data-exchange-total>${formatMoney(exchangeTotal)} ج.م</span></div></section>
         </div>
-        <section class="difference-card"><div><span>${difference >= 0 ? "الفرق المستحق للدفع" : "الفرق المستحق للعميل"}</span><strong class="difference-value num">${formatMoney(Math.abs(difference))} ج.م</strong></div>${difference > 0 ? `<p>اختر طريقة تحصيل الفارق:</p><div class="payment-options">${paymentOption("cash", "نقدي")}${paymentOption("card", "بطاقة")}</div>` : ""}</section>
+        <section class="difference-card"><div><span data-exchange-difference-label>${difference >= 0 ? "الفرق المستحق للدفع" : "الفرق المستحق للعميل"}</span><strong class="difference-value num" data-exchange-difference>${formatMoney(Math.abs(difference))} ج.م</strong></div><p data-exchange-payment-hint ${difference > 0 ? "" : "hidden"}>اختر طريقة تحصيل الفارق:</p><div class="payment-options" data-exchange-payment-options ${difference > 0 ? "" : "hidden"}>${paymentOption("cash", "نقدي")}${paymentOption("card", "بطاقة")}</div></section>
         <div class="return-footer"><span>حالة العملية: بانتظار التأكيد</span><div class="return-actions"><button class="btn btn-outline flow-back-button" data-flow-action="back-exchange"><span aria-hidden="true">→</span> رجوع</button><button class="btn btn-primary" data-flow-action="finish-exchange">تأكيد الاستبدال وإنهاء</button></div></div>
       </div>`;
+  }
+
+  function updateExchangeSummaryValues() {
+    const root = els.returnFlowBody;
+    const entered = Number(state.exchangeDiscountValue || 0), limit = state.exchangeDiscountType === "percentage" ? 100 : getExchangeSubtotal();
+    const error = root.querySelector("#exchangeDiscountError");
+    if (error) error.textContent = !Number.isFinite(entered) || entered < 0 ? "أدخل خصمًا صحيحًا لا يقل عن صفر." : entered > limit ? (state.exchangeDiscountType === "percentage" ? "النسبة لا تتجاوز 100%." : "الخصم أكبر من إجمالي البدائل.") : "";
+    const input = root.querySelector("#exchangeDiscountValue");
+    if (input) input.max = String(limit);
+    const discountAmount = getExchangeDiscountAmount(), total = getExchangeTotal(), difference = roundMoney(total - getReturnTotals().total);
+    const amount = root.querySelector("[data-exchange-discount]"), totalNode = root.querySelector("[data-exchange-total]"), diffNode = root.querySelector("[data-exchange-difference]"), diffLabel = root.querySelector("[data-exchange-difference-label]");
+    if (amount) amount.textContent = `-${formatMoney(discountAmount)} ج.م`;
+    if (totalNode) totalNode.textContent = `${formatMoney(total)} ج.م`;
+    if (diffNode) diffNode.textContent = `${formatMoney(Math.abs(difference))} ج.م`;
+    if (diffLabel) diffLabel.textContent = difference >= 0 ? "الفرق المستحق للدفع" : "الفرق المستحق للعميل";
+    root.querySelector("[data-exchange-payment-hint]")?.toggleAttribute("hidden", difference <= 0);
+    root.querySelector("[data-exchange-payment-options]")?.toggleAttribute("hidden", difference <= 0);
   }
 
   function paymentOption(value, label) {
@@ -1297,12 +1323,15 @@ import { debounce, formatMoney } from "../../../core/utils.js";
 
   els.returnFlowBody.addEventListener("change", event => {
     if (event.target.dataset.flowAction === "refund-method") { state.refundMethod = event.target.value; renderReturnManagement(); }
+    if (event.target.id === "exchangeDiscountType") { state.exchangeDiscountType = event.target.value; updateExchangeSummaryValues(); }
+    if (event.target.id === "exchangeDiscountValue") { state.exchangeDiscountValue = event.target.value; updateExchangeSummaryValues(); }
   });
 
   const updateExchangeSearch = debounce(async value => { state.exchangeQuery = value; await loadReplacementProducts(); }, 350);
   els.returnFlowBody.addEventListener("input", event => {
     if (event.target.id === "returnReason") state.returnReason = event.target.value;
     if (event.target.id === "exchangeSearch") updateExchangeSearch(event.target.value);
+    if (event.target.id === "exchangeDiscountValue") { state.exchangeDiscountValue = event.target.value; updateExchangeSummaryValues(); }
   });
 
   els.returnFlowBody.addEventListener("keydown", event => {

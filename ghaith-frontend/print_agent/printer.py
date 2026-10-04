@@ -6,6 +6,7 @@ import threading
 import time
 import ctypes
 import winreg
+from uuid import uuid4
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -83,6 +84,8 @@ class PrinterManager:
 
     def __init__(self):
         self._jobs = queue.Queue()
+        self._job_results: dict[str, dict] = {}
+        self._job_results_lock = threading.Lock()
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
 
@@ -101,6 +104,50 @@ class PrinterManager:
 
     def physical_printers(self) -> list[str]:
         return [name for name in self.get_printers() if not any(value in name.lower() for value in self.VIRTUAL_PRINTERS)]
+
+    def printer_details(self, name: str) -> dict:
+        handle = None
+        try:
+            handle = win32print.OpenPrinter(name)
+            details = win32print.GetPrinter(handle, 2)
+            status = int(details.get("Status") or 0)
+            attributes = int(details.get("Attributes") or 0)
+            flags = (
+                ("error", "خطأ في تعريف ويندوز", "PRINTER_STATUS_ERROR"),
+                ("offline", "غير متصلة في تعريف ويندوز", "PRINTER_STATUS_OFFLINE"),
+                ("paper_out", "الورق منتهٍ", "PRINTER_STATUS_PAPER_OUT"),
+                ("door_open", "غطاء الطابعة مفتوح", "PRINTER_STATUS_DOOR_OPEN"),
+                ("paused", "الطباعة متوقفة مؤقتًا", "PRINTER_STATUS_PAUSED"),
+            )
+            status_labels = [label for _key, label, constant in flags if status & getattr(win32print, constant, 0)]
+            if attributes & getattr(win32print, "PRINTER_ATTRIBUTE_WORK_OFFLINE", 0x400):
+                status_labels.append("تعريف ويندوز مضبوط على وضع عدم الاتصال")
+            return {
+                "name": name,
+                "port": str(details.get("pPortName") or ""),
+                "driver": str(details.get("pDriverName") or ""),
+                "kind": self.printer_kind(name),
+                "status": status,
+                "status_labels": status_labels,
+                "pending_jobs": int(details.get("cJobs") or 0),
+                "work_offline": bool(attributes & getattr(win32print, "PRINTER_ATTRIBUTE_WORK_OFFLINE", 0x400)),
+            }
+        except Exception as exc:
+            return {"name": name, "port": "", "kind": "unknown", "status_labels": [str(exc)], "pending_jobs": 0, "work_offline": False}
+        finally:
+            if handle is not None:
+                win32print.ClosePrinter(handle)
+
+    def printer_port(self, name: str) -> str:
+        handle = None
+        try:
+            handle = win32print.OpenPrinter(name)
+            return str(win32print.GetPrinter(handle, 2).get("pPortName") or "").upper()
+        except Exception:
+            return ""
+        finally:
+            if handle is not None:
+                win32print.ClosePrinter(handle)
 
     def connected_usb_ports(self) -> set[str]:
         """Read the ports of USB printers that Plug and Play says are present now."""
@@ -158,6 +205,16 @@ class PrinterManager:
         identity = f"{name} {details.get('pDriverName', '')}".lower()
         return "barcode" if any(marker in identity for marker in self.BARCODE_MARKERS) else "receipt"
 
+    def _targets_for_kind(self, configured_names: list[str], kind: str) -> list[str]:
+        available = self.online_printers()
+        selected = [name for name in configured_names if name in available]
+        if selected:
+            # A dual-mode device can use one Windows queue for both receipt
+            # and label jobs; honor that explicit selection without swapping
+            # to another queue that happens to share its USB port.
+            return list(dict.fromkeys(selected))
+        return [name for name in available if self.printer_kind(name) == kind][:1]
+
     def online_printers(self) -> list[str]:
         """Return installed physical printers that Windows has not marked offline."""
         connected_ports = self.connected_usb_ports()
@@ -200,13 +257,10 @@ class PrinterManager:
         return online
 
     def receipt_targets(self) -> list[str]:
-        printers = self.online_printers()
-        printers = [name for name in printers if self.printer_kind(name) == "receipt"]
-        # Windows may keep several queues for the same USB mechanism (for
-        # example XP-80C and XP-Q371U on USB005). Sending one receipt through
-        # both drivers makes the second job appear as pages of garbage. Keep
-        # one receipt queue per physical port. Q371 queues are classified as
-        # barcode/label queues above, while XP-80 is the ESC/POS receipt queue.
+        printers = self._targets_for_kind(config.receipt_printer_names, "receipt")
+        # A selected dual-mode queue may be used for both labels and receipts.
+        # Keep only one receipt queue per physical port if Windows has several
+        # aliases installed for the same printer.
         queues_by_port: dict[str, list[str]] = {}
         for name in printers:
             port = name
@@ -231,26 +285,37 @@ class PrinterManager:
         return printers[:1]
 
     def barcode_targets(self) -> list[str]:
-        available = self.online_printers()
-        selected = [name for name in config.barcode_printer_names if name in available]
-        if selected:
-            return selected
-        return [name for name in available if self.printer_kind(name) == "barcode"][:1]
+        return self._targets_for_kind(config.barcode_printer_names, "barcode")
 
-    def queue_receipt(self, payload: dict) -> bool:
+    def queue_receipt(self, payload: dict):
         if not payload:
             return False
-        self._jobs.put({"kind": "receipt", "payload": payload, "copies": 1})
-        return True
+        return self._queue_job("receipt", payload, 1)
 
-    def queue_barcode(self, payload: dict) -> bool:
+    def queue_barcode(self, payload: dict):
         if not payload:
             return False
         copies = max(1, min(int(payload.get("copies") or payload.get("quantity") or 1), 1000))
-        self._jobs.put({"kind": "barcode", "payload": payload, "copies": copies})
-        return True
+        return self._queue_job("barcode", payload, copies)
 
-    def test_print(self) -> bool:
+    def _queue_job(self, kind: str, payload: dict, copies: int):
+        job_id = uuid4().hex
+        with self._job_results_lock:
+            self._job_results[job_id] = {"id": job_id, "state": "queued", "ok": False, "printers": [], "error": None}
+        self._jobs.put({"id": job_id, "kind": kind, "payload": payload, "copies": copies})
+        return job_id
+
+    def job_status(self, job_id: str):
+        with self._job_results_lock:
+            result = self._job_results.get(job_id)
+            return dict(result) if result else None
+
+    def _set_job_status(self, job_id: str, **updates):
+        with self._job_results_lock:
+            if job_id in self._job_results:
+                self._job_results[job_id].update(updates)
+
+    def test_print(self):
         return self.queue_receipt({
             "title": "فاتورة تجريبية",
             "number": "TEST-0001",
@@ -340,7 +405,7 @@ class PrinterManager:
             name = str(item.get("name") or "صنف")
             shown = name[:15] + ("…" if len(name) > 15 else "")
             draw_rtl(draw, (product_x, y), shown, small)
-            product_barcode = str(item.get("barcode") or item.get("sku") or "").strip()
+            product_barcode = str(item.get("barcode") or "").strip()
             if product_barcode:
                 draw.text((product_x, y + 25), product_barcode[:20], font=barcode_font, fill="black", anchor="ra")
             draw_rtl(draw, (size_x, y), str(item.get("size") or "—")[:8], table_font, "ma")
@@ -433,7 +498,9 @@ class PrinterManager:
         # The scanner must receive the real product barcode, not the internal SKU.
         # Two-dot modules at 203 dpi and a proper quiet zone make Code 128 much
         # more reliable on small thermal labels.
-        barcode_value = numeric_barcode(data.get("barcode") or data.get("sku"))
+        barcode_value = str(data.get("barcode") or "").strip()
+        if not barcode_value:
+            raise ValueError("Barcode value is required; SKU is not a barcode.")
         code = Code128(barcode_value, writer=ImageWriter()).render({
             "module_height": 9,
             "module_width": .254,
@@ -470,7 +537,7 @@ class PrinterManager:
                     bitmap[row + x // 8] &= ~(0x80 >> (x % 8))
 
         prefix = (
-            f"SIZE {config.barcode_width_mm} mm,{config.barcode_height_mm - 0.5:g} mm\r\n"
+            f"SIZE {config.barcode_width_mm} mm,{config.barcode_height_mm} mm\r\n"
             "GAP 3 mm,0 mm\r\n"
             "OFFSET 0 mm\r\n"
             "DIRECTION 1\r\n"
@@ -481,13 +548,18 @@ class PrinterManager:
             f"BITMAP 0,14,{width_bytes},{info.height},0,"
         ).encode("ascii")
         label_width = round(config.barcode_width_mm / 25.4 * config.dpi)
+        label_height = round(config.barcode_height_mm / 25.4 * config.dpi)
         value_x = max(8, (label_width - len(barcode_value) * 12) // 2)
-        # Encode only the numeric portion so HID scanners are independent of
-        # keyboard language. Keep the complete stored value printed below.
-        encoded_value = "".join(character for character in barcode_value if character.isdigit()) or barcode_value
+        # Keep the complete server-issued barcode; never derive it from SKU.
+        encoded_value = barcode_value
         barcode_type = "128"
         module_count = len(Code128(encoded_value).build()[0])
-        barcode_x = max(8, (label_width - module_count * 2) // 2)
+        module_width = max(1, min(2, (label_width - 16) // max(1, module_count)))
+        barcode_x = max(8, (label_width - module_count * module_width) // 2)
+        barcode_y = 56
+        barcode_height = min(62, max(32, label_height - 122))
+        value_y = barcode_y + barcode_height + 5
+        price_y = max(value_y + 25, label_height - 34)
         price_command = ""
         if price not in (None, ""):
             try:
@@ -495,12 +567,12 @@ class PrinterManager:
                 amount_text = f"{amount:,.2f}".rstrip("0").rstrip(".")
                 price_text = f"{amount_text} EGP"
                 price_x = max(8, (label_width - len(price_text) * 12) // 2)
-                price_command = f'TEXT {price_x},162,"2",0,1,1,"{price_text}"\r\n'
+                price_command = f'TEXT {price_x},{price_y},"2",0,1,1,"{price_text}"\r\n'
             except (TypeError, ValueError):
                 pass
         suffix = (
-            f'\r\nBARCODE {barcode_x},58,"{barcode_type}",78,0,0,2,4,"{encoded_value}"\r\n'
-            f'TEXT {value_x},143,"2",0,1,1,"{barcode_value}"\r\n'
+            f'\r\nBARCODE {barcode_x},{barcode_y},"{barcode_type}",{barcode_height},0,0,{module_width},{module_width * 2},"{encoded_value}"\r\n'
+            f'TEXT {value_x},{value_y},"2",0,1,1,"{barcode_value}"\r\n'
             f"{price_command}"
             f"PRINT 1,{max(1, copies)}\r\n"
         ).encode("ascii")
@@ -623,19 +695,28 @@ class PrinterManager:
     def _run(self):
         while True:
             job = self._jobs.get()
+            job_id = job.get("id")
             try:
                 kind, payload, copies = job["kind"], job["payload"], job["copies"]
+                if job_id:
+                    self._set_job_status(job_id, state="printing")
                 image = self.render_receipt(payload) if kind == "receipt" else self.render_barcode(payload)
                 attempts = 8 if kind == "receipt" else 1
                 printed = False
+                last_error = None
+                used_printers = []
                 for attempt in range(attempts):
                     targets = self.receipt_targets() if kind == "receipt" else self.barcode_targets()
+                    if job_id:
+                        self._set_job_status(job_id, printers=targets)
                     for printer_name in targets:
                         try:
                             repeat = 1 if kind == "receipt" else copies
                             document_name = f"Ghaith {payload.get('number') or payload.get('barcode') or payload.get('sku') or kind}"
                             if kind == "barcode":
-                                barcode_value = numeric_barcode(payload.get("barcode") or payload.get("sku"))
+                                barcode_value = str(payload.get("barcode") or "").strip()
+                                if not barcode_value:
+                                    raise ValueError("Barcode value is required; SKU is not a barcode.")
                                 try:
                                     self._print_barcode_raw(image, printer_name, document_name, barcode_value, payload.get("price"), repeat)
                                 except Exception:
@@ -645,8 +726,10 @@ class PrinterManager:
                                 for copy_number in range(repeat):
                                     self._print_receipt_raw(image, printer_name, document_name)
                             printed = True
+                            used_printers.append(printer_name)
                             log.info("تمت طباعة %s على %s بعدد %s", kind, printer_name, repeat)
                         except Exception as exc:
+                            last_error = str(exc)
                             log.exception("فشلت الطباعة على %s: %s", printer_name, exc)
                     if printed or attempt == attempts - 1:
                         break
@@ -658,8 +741,14 @@ class PrinterManager:
                         self._save_preview(image, kind, copies)
                     else:
                         log.error("لا توجد طابعة فعلية جاهزة")
+                    if job_id:
+                        self._set_job_status(job_id, state="failed", ok=False, error=last_error or "لم تظهر طابعة إيصالات متاحة. تأكد من اختيار الطابعة ووضع الورق.", printers=used_printers)
+                elif job_id:
+                    self._set_job_status(job_id, state="completed", ok=True, printers=used_printers, error=None)
             except Exception as exc:
                 log.exception("فشل أمر الطباعة: %s", exc)
+                if job_id:
+                    self._set_job_status(job_id, state="failed", ok=False, error=str(exc))
             finally:
                 self._jobs.task_done()
 

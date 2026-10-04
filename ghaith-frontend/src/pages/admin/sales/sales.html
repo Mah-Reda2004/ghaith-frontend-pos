@@ -51,8 +51,9 @@
 
   <div class="sales-modal" id="salesModal" hidden><div class="sales-modal__backdrop" data-close-modal></div><article class="sales-modal__panel" role="dialog" aria-modal="true" aria-labelledby="invoiceTitle">
     <header><div><span class="sales-modal__eyebrow">تفاصيل الفاتورة</span><h2 id="invoiceTitle" dir="ltr">—</h2></div><div class="sales-modal__actions"><button class="btn btn-outline" type="button" id="printInvoice">طباعة الفاتورة</button><button class="sales-modal__close" type="button" data-close-modal aria-label="إغلاق">×</button></div></header>
-    <section class="invoice-customer"><div><span>معلومات العميل</span><strong id="invoiceCustomer">—</strong></div></section>
+    <section class="invoice-customer" id="invoiceInfo"></section>
     <section class="invoice-block"><h3>المنتجات</h3><div class="invoice-products"></div></section>
+    <div class="invoice-summary" id="invoiceSummary"></div>
     <footer><button class="btn btn-outline" type="button" data-close-modal>إغلاق</button></footer>
   </article></div>
 </section>

@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
     await page.addInitScript(() => { sessionStorage.setItem('ghaith-access-token', 'admin-test'); sessionStorage.setItem('ghaith-current-user', JSON.stringify({ id: 'admin-1', name: 'مدير', role: 'admin' })); });
     await page.route('https://test-3f530955.fastapicloud.dev/**', route => {
       const request = route.request(), url = new URL(request.url());
-      if (url.pathname === '/api/v1/customer-types' && request.method() === 'GET') return route.fulfill({ json: { items: [{ id: 'type-1', name: 'عادي', discount_percent: 0 }] } });
+      if (url.pathname === '/api/v1/customer-types' && request.method() === 'GET') return route.fulfill({ json: { items: [{ id: 'type-1', name: 'عادي', status: 'active' }] } });
       if (url.pathname === '/api/v1/expense-types') return route.fulfill({ json: { items: [{ id: 'expense-1', name: 'صيانة' }] } });
       if (url.pathname === '/api/v1/admin/customer-types/type-1' && request.method() === 'PATCH') { patchBody = request.postDataJSON(); return route.fulfill({ json: { id: 'type-1', ...patchBody } }); }
       if (url.pathname === '/api/v1/admin/customer-types' && request.method() === 'POST') { createTypeBody = request.postDataJSON(); return route.fulfill({ status: 201, json: { id: 'type-2', ...createTypeBody } }); }
@@ -21,21 +21,16 @@ const assert = require('node:assert/strict');
     await page.locator('tr[data-id="type-1"] .discount-edit').waitFor();
     await page.locator('tr[data-id="type-1"] .discount-edit').click();
     await page.locator('#discountName').fill('عميل مميز');
-    await page.locator('#discountValue').fill('15');
     await page.locator('#saveDiscount').click();
     await page.waitForFunction(() => !document.querySelector('#discountSuccess')?.hidden);
-    assert.deepEqual(patchBody, { name: 'عميل مميز', discount_percent: 15 });
+    assert.deepEqual(patchBody, { name: 'عميل مميز' });
     await page.locator('#closeSuccess').click();
-    await page.locator('tr[data-id="type-1"] .discount-delete').click();
-    await page.waitForFunction(() => !document.querySelector('#discountSuccess')?.hidden);
-    assert.match(await page.locator('#discountSuccess p').textContent(), /لا يوفر عملية حذف/);
-    await page.locator('#closeSuccess').click();
+    assert.equal(await page.locator('tr[data-id="type-1"] .discount-delete').isDisabled(), true);
     await page.locator('#addDiscount').click();
     await page.locator('#discountName').fill('جملة');
-    await page.locator('#discountValue').fill('20');
     await page.locator('#saveDiscount').click();
     await page.waitForFunction(() => !document.querySelector('#discountSuccess')?.hidden);
-    assert.deepEqual(createTypeBody, { name: 'جملة', discount_percent: 20 });
+    assert.deepEqual(createTypeBody, { name: 'جملة' });
     await page.locator('#expenseTypeName').fill('شحن');
     await page.locator('#saveExpenseType').click();
     await page.waitForFunction(() => document.querySelector('#expenseTypeName')?.value === '');
