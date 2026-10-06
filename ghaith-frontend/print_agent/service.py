@@ -18,6 +18,8 @@ class AgentSettings(BaseModel):
     barcode_printer_names: list[str] = Field(default_factory=list)
     receipt_all_printers: bool = True
     preview_when_no_printer: bool = True
+    barcode_width_mm: int = Field(default=40, ge=20, le=100)
+    barcode_height_mm: int = Field(default=23, ge=10, le=80)
 
 
 @asynccontextmanager
@@ -72,7 +74,7 @@ def printers():
 
 @app.get("/api/settings")
 def get_settings():
-    return {"receipt_printer_names": config.receipt_printer_names, "barcode_printer_names": config.barcode_printer_names, "receipt_all_printers": config.receipt_all_printers, "preview_when_no_printer": config.preview_when_no_printer}
+    return {"receipt_printer_names": config.receipt_printer_names, "barcode_printer_names": config.barcode_printer_names, "receipt_all_printers": config.receipt_all_printers, "preview_when_no_printer": config.preview_when_no_printer, "barcode_width_mm": config.barcode_width_mm, "barcode_height_mm": config.barcode_height_mm}
 
 
 @app.post("/api/settings")
@@ -85,6 +87,8 @@ def save_settings(settings: AgentSettings):
     config.set("barcode_printer_names", list(dict.fromkeys(settings.barcode_printer_names)))
     config.set("receipt_all_printers", settings.receipt_all_printers)
     config.set("preview_when_no_printer", settings.preview_when_no_printer)
+    config.set("barcode_width_mm", settings.barcode_width_mm)
+    config.set("barcode_height_mm", settings.barcode_height_mm)
     if not config.save():
         raise HTTPException(status_code=500, detail="Could not save settings")
     return {"ok": True}

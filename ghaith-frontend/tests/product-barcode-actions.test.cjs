@@ -21,7 +21,7 @@ const assert = require('node:assert/strict');
       const requestUrl = new URL(route.request().url()), path = requestUrl.pathname;
       if (path === '/api/v1/admin/products' && route.request().method() === 'POST') {
         const body = route.request().postDataJSON();
-        createdProduct = { id: 'product-2', name_ar: body.name_ar, category_id: body.category_id, supplier_id: body.supplier_id, sale_price: body.sale_price, status: 'active', product_variants: body.variants.map((variant, index) => ({ id: `created-${index}`, sku: `NEW-${index + 1}`, barcode: `70000000${index + 1}`, size: variant.size, color: variant.color, sale_price: body.sale_price, stock_qty: variant.quantity })) };
+        createdProduct = { id: 'product-2', name_ar: body.name_ar, category_id: body.category_id, supplier_id: body.supplier_id, purchase_price: body.purchase_price, sale_price: body.sale_price, low_stock_threshold: body.low_stock_threshold, commission_rate: body.commission_rate, status: 'active', product_variants: body.variants.map((variant, index) => ({ id: `created-${index}`, sku: `NEW-${index + 1}`, barcode: `70000000${index + 1}`, size: variant.size, color: variant.color, sale_price: body.sale_price, stock_qty: variant.quantity })) };
         return route.fulfill({ json: createdProduct });
       }
       if (path === '/api/v1/products/product-1') return route.fulfill({ json: { id: 'product-1', product_variants: [
@@ -80,8 +80,10 @@ const assert = require('node:assert/strict');
     await page.locator('#productSupplier').selectOption('supplier-1');
     await page.locator('#productSalePrice').fill('600');
     await page.locator('#productCostPrice').fill('300');
+    assert.equal(await page.locator('#productCostCode').count(), 0);
     await page.locator('#productSalesPercentage').fill('10');
     assert.equal(await page.locator('#productNetProfitPercentage').inputValue(), '240.00');
+    await page.locator('#productMinimum').fill('7');
     await page.locator('#productQuantity').fill('5');
     await page.locator('[data-variants-mode]').selectOption('multiple');
     let variantRows = page.locator('.product-variant-row');
@@ -103,10 +105,15 @@ const assert = require('node:assert/strict');
     await page.locator('#productQuantity').fill('5');
     await page.locator('#saveProductBtn').click();
     await page.getByText('تمت إضافة المنتج بنجاح', { exact: true }).waitFor();
+    assert.equal(createdProduct.purchase_price, 300);
+    assert.deepEqual(createdProduct.product_variants.map(variant => variant.barcode), ['700000001', '700000002']);
+    assert.equal(createdProduct.low_stock_threshold, 7);
+    assert.equal(createdProduct.commission_rate, 10);
     assert.equal(await page.locator('#productSuccessModal').isVisible(), true);
     await page.locator('#printProductBarcode').click();
     await page.waitForFunction(() => document.getElementById('localPrintToast')?.textContent.includes('5'));
     assert.deepEqual(printRequests.slice(1).map(item => ({ size: item.size, color: item.color, copies: item.copies })), [{ size: 'L', color: 'أسود', copies: 2 }, { size: 'L', color: 'أبيض', copies: 3 }]);
+    assert.deepEqual(printRequests.slice(1).map(item => item.barcode), ['700000001', '700000002']);
     await page.locator('#backToProducts').click();
     await page.getByRole('button', { name: 'حذف منتج جديد متعدد' }).click();
     await page.locator('#productDeleteModal').waitFor({ state: 'visible' });

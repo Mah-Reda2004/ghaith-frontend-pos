@@ -13,8 +13,6 @@ let categoryNames = new Map();
 let summary = { total: 0, low: 0, empty: 0, value: 0 };
 let currentPage = 1;
 let requestSequence = 0;
-let pricingPreviewSequence = 0;
-let costCodeLookupSequence = 0;
 let barcodeProduct = null;
 
 function addApiFields() {
@@ -24,7 +22,7 @@ function addApiFields() {
     <div class="field"><label for="productSupplier">المورد <b>*</b></label><select class="select" id="productSupplier" required><option value="">اختر المورد...</option></select></div>
     <div class="field" id="productStatusField"><label for="productStatus">حالة المنتج</label><select class="select" id="productStatus"><option value="active">نشط</option><option value="inactive">غير نشط</option></select></div>
     <p class="products-api-note">ينشئ الخادم متغير المخزون الافتراضي تلقائيًا. المقاس واللون غير متاحين حاليًا في API إنشاء المنتجات.</p>`);
-  document.querySelector(".products-form-section:nth-of-type(2)")?.insertAdjacentHTML("beforeend", productVariantsMarkup("productVariant"));
+  document.querySelector(".products-form-section:nth-of-type(2) .products-form-grid")?.insertAdjacentHTML("beforeend", productVariantsMarkup("productVariant"));
   document.querySelector(".products-page")?.insertAdjacentHTML("beforeend", '<div class="modal-overlay products-modal" id="productRevaluationsModal" hidden><section class="modal products-dialog" role="dialog" aria-modal="true" aria-labelledby="productRevaluationsTitle"><header class="modal__header products-dialog__header"><h2 class="modal__title" id="productRevaluationsTitle">سجل إعادة تقييم المنتج</h2><button class="btn-icon" id="closeProductRevaluations" type="button" aria-label="إغلاق">×</button></header><div class="products-dialog__body"><div class="table-responsive"><table class="data-table"><thead><tr><th>التاريخ</th><th>السعر السابق</th><th>السعر الجديد</th><th>السبب</th></tr></thead><tbody id="productRevaluationsBody"></tbody></table></div></div></section></div>');
   document.querySelector(".products-page")?.insertAdjacentHTML("beforeend", '<div class="modal-overlay products-modal" id="productBarcodeModal" hidden><section class="modal products-dialog products-barcode-dialog" role="dialog" aria-modal="true" aria-labelledby="productBarcodeTitle"><header class="modal__header products-dialog__header"><h2 class="modal__title" id="productBarcodeTitle">طباعة باركود المنتج</h2><button class="btn-icon" id="closeProductBarcode" type="button" aria-label="إغلاق">×</button></header><div class="products-dialog__body"><p class="products-barcode-hint">اختر المقاس واللون المطلوبين وحدد عدد الملصقات لكل نسخة.</p><div class="products-barcode-list" id="productBarcodeList"></div><p class="products-field-error" id="productBarcodeError" hidden></p></div><footer class="modal__actions products-dialog__actions"><button class="btn btn-outline" id="cancelProductBarcode" type="button">إلغاء</button><button class="btn btn-primary" id="confirmProductBarcode" type="button">طباعة المحدد</button></footer></section></div>');
   document.querySelector(".products-page")?.insertAdjacentHTML("beforeend", '<div class="modal-overlay products-modal" id="productDeleteModal" hidden><section class="modal products-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="productDeleteTitle"><span class="products-delete-icon" aria-hidden="true">!</span><h2 id="productDeleteTitle">حذف المنتج؟</h2><p>هل تريد حذف المنتج <strong id="productDeleteName"></strong>؟</p><small>سيتم حذف المنتج بعد الضغط على موافق.</small><div class="products-delete-actions"><button class="btn btn-outline" id="cancelProductDelete" type="button">إلغاء</button><button class="btn products-delete-confirm" id="confirmProductDelete" type="button">موافق، حذف المنتج</button></div></section></div>');
@@ -38,7 +36,7 @@ function getElements() {
     totalStat: document.getElementById("productsTotalStat"), lowStat: document.getElementById("productsLowStat"), emptyStat: document.getElementById("productsEmptyStat"), valueStat: document.getElementById("productsValueStat"),
     modal: document.getElementById("productModal"), modalTitle: document.getElementById("productModalTitle"), form: document.getElementById("productForm"), id: document.getElementById("productId"),
     nameAr: document.getElementById("productNameAr"), nameEn: document.getElementById("productNameEn"), category: document.getElementById("productCategory"), supplier: document.getElementById("productSupplier"), status: document.getElementById("productStatus"), statusField: document.getElementById("productStatusField"),
-    salePrice: document.getElementById("productSalePrice"), costCode: document.getElementById("productCostCode"), costCodeStatus: document.getElementById("productCostCodeStatus"), costPrice: document.getElementById("productCostPrice"), salesPercentage: document.getElementById("productSalesPercentage"), netProfitPercentage: document.getElementById("productNetProfitPercentage"), quantity: document.getElementById("productQuantity"), minimum: document.getElementById("productMinimum"), nameError: document.getElementById("productNameError"), saveButton: document.getElementById("saveProductBtn"),
+    salePrice: document.getElementById("productSalePrice"), costPrice: document.getElementById("productCostPrice"), salesPercentage: document.getElementById("productSalesPercentage"), netProfit: document.getElementById("productNetProfitPercentage"), quantity: document.getElementById("productQuantity"), minimum: document.getElementById("productMinimum"), nameError: document.getElementById("productNameError"), saveButton: document.getElementById("saveProductBtn"),
     successModal: document.getElementById("productSuccessModal"), successTitle: document.getElementById("productSuccessTitle"), successName: document.getElementById("successProductName"), successSku: document.getElementById("successProductSku"), successCategory: document.getElementById("successProductCategory"), successQuantity: document.getElementById("successProductQuantity"), toastStack: document.getElementById("productsToastStack")
   };
 }
@@ -107,63 +105,13 @@ function stockLabel(product) {
   return state === "empty" ? "نفد المخزون" : state === "low" ? `${product.quantity} منخفض` : `${product.quantity} متوفر`;
 }
 
-function calculateProfit(sale, cost, commission) {
-  return sale - cost - sale * (commission / 100);
-}
-
 function updateProfit(elements) {
-  const value = calculateProfit(Number(elements.salePrice.value) || 0, Number(elements.costPrice.value) || 0, Number(elements.salesPercentage.value) || 0);
-  elements.netProfitPercentage.value = value.toFixed(2);
-  elements.netProfitPercentage.classList.toggle("is-negative", value < 0);
-}
-
-async function lookupPurchaseCost(elements, rawCode) {
-  const code = String(rawCode || "").trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
-  const sequence = ++costCodeLookupSequence;
-  if (!/^[0-9]{4}$/.test(code)) {
-    elements.costPrice.value = "";
-    elements.costCodeStatus.textContent = "أدخل 4 أرقام صحيحة لعرض سعر الشراء.";
-    updateProfit(elements);
-    return;
-  }
-  if (elements.costCode.value !== code) elements.costCode.value = code;
-  if (code === "0000") {
-    elements.costPrice.value = "";
-    elements.costCodeStatus.textContent = "سعر الشراء غير معروف للكود 0000.";
-    updateProfit(elements);
-    return;
-  }
-  elements.costCodeStatus.textContent = "جاري البحث عن سعر الشراء...";
-  try {
-    const response = await api.get(`/api/v1/admin/products/cost-codes/${encodeURIComponent(code)}`);
-    if (sequence !== costCodeLookupSequence) return;
-    const result = response?.data || response, price = result?.purchase_price;
-    if (price === null || price === undefined || !Number.isFinite(Number(price))) {
-      elements.costPrice.value = "";
-      elements.costCodeStatus.textContent = `لا يوجد سعر شراء مسجل للكود ${code}.`;
-    } else {
-      elements.costPrice.value = String(Number(price));
-      elements.costCodeStatus.textContent = `سعر الشراء للكود ${code}: ${money(Number(price))} ج.م.`;
-    }
-    updateProfit(elements);
-  } catch (error) {
-    if (sequence !== costCodeLookupSequence) return;
-    elements.costPrice.value = "";
-    elements.costCodeStatus.textContent = error.message || "تعذّر البحث عن كود سعر الشراء.";
-    updateProfit(elements);
-  }
-}
-
-async function previewPricing(elements) {
-  const sequence = ++pricingPreviewSequence;
-  const purchasePrice = Math.max(0, Number(elements.costPrice.value) || 0), salePrice = Number(elements.salePrice.value) || 0, commissionRate = Math.min(100, Math.max(0, Number(elements.salesPercentage.value) || 0));
-  if (salePrice <= 0) return;
-  try {
-    const response = await api.post("/api/v1/admin/products/pricing-preview", { purchase_price: purchasePrice, sale_price: salePrice, commission_rate: commissionRate });
-    if (sequence !== pricingPreviewSequence) return;
-    const value = Number(response?.net_profit_amount ?? response?.profit_amount ?? response?.net_profit);
-    if (Number.isFinite(value)) { elements.netProfitPercentage.value = value.toFixed(2); elements.netProfitPercentage.classList.toggle("is-negative", value < 0); }
-  } catch { /* يبقى الحساب المحلي ظاهرًا عند تعذّر المعاينة. */ }
+  const sale = Number(elements.salePrice.value) || 0;
+  const cost = Number(elements.costPrice.value) || 0;
+  const commission = Math.min(100, Math.max(0, Number(elements.salesPercentage.value) || 0));
+  const profit = sale - cost - sale * (commission / 100);
+  elements.netProfit.value = profit.toFixed(2);
+  elements.netProfit.classList.toggle("is-negative", profit < 0);
 }
 
 function showToast(elements, message, isError = false) {
@@ -293,15 +241,14 @@ function selectCurrentReference(select, id, label) {
 }
 
 async function openProductModal(elements, product = null) {
-  costCodeLookupSequence += 1;
   elements.form.reset(); elements.nameError.hidden = true;
-  elements.id.value = product?.id || ""; elements.nameAr.value = product?.nameAr || ""; elements.nameEn.value = product?.nameEn || "";
+  elements.id.value = product?.id || ""; elements.nameAr.value = product?.nameAr || ""; if (elements.nameEn) elements.nameEn.value = product?.nameEn || "";
   selectCurrentReference(elements.category, product?.categoryId, product?.category);
   selectCurrentReference(elements.supplier, product?.supplierId, product?.supplierName);
-  elements.status.value = product?.status || "active"; elements.statusField.hidden = false;
-  elements.salePrice.value = product?.salePrice ?? ""; elements.costPrice.value = product?.costPrice ?? ""; elements.costCode.value = "0000"; elements.costCodeStatus.textContent = "أدخل آخر 4 أرقام لعرض سعر الشراء؛ 0000 يعني غير معروف."; elements.salesPercentage.value = product?.salesPercentage ?? 0; elements.quantity.value = product?.quantity ?? 0; elements.minimum.value = product?.minimum ?? 5;
+  if (elements.status) { elements.status.value = product?.status || "active"; if (elements.statusField) elements.statusField.hidden = false; }
+  elements.salePrice.value = product?.salePrice ?? ""; elements.costPrice.value = product?.costPrice ?? ""; elements.salesPercentage.value = product?.salesPercentage ?? 0; elements.quantity.value = product?.quantity ?? 0; elements.minimum.value = product?.minimum ?? 5; updateProfit(elements);
   elements.modal.dataset.variantId = ""; elements.modal.dataset.variantVersion = "";
-  setModalTitle(elements, product ? "تعديل المنتج" : "إضافة منتج جديد"); elements.modal.hidden = false; updateProfit(elements);
+  setModalTitle(elements, product ? "تعديل المنتج" : "إضافة منتج جديد"); elements.modal.hidden = false;
   let detailVariants = [];
   if (product) {
     try {
@@ -312,10 +259,7 @@ async function openProductModal(elements, product = null) {
       selectCurrentReference(elements.supplier, detailedProduct.supplierId || product.supplierId, detailedProduct.supplierName || product.supplierName);
       const apiVariants = detail.product_variants || detail.variants || [];
       const variant = apiVariants[0];
-      const costCode = String(variant?.barcode || "").match(/([0-9]{4})$/)?.[1] || "0000";
-      elements.costCode.value = costCode;
-      elements.costCodeStatus.textContent = costCode === "0000" ? "سعر الشراء غير معروف للكود 0000." : `كود الشراء الحالي ${costCode}؛ السعر المسجل ${money(detailedProduct.costPrice)} ج.م.`;
-      elements.costPrice.value = costCode === "0000" ? "" : (detailedProduct.costPrice ?? product.costPrice ?? "");
+      elements.costPrice.value = detailedProduct.costPrice ?? product.costPrice ?? ""; elements.salesPercentage.value = detailedProduct.salesPercentage ?? product.salesPercentage ?? 0; updateProfit(elements);
       detailVariants = apiVariants.map(item => ({ id: item.id, version: Number(item.version || 0), size: item.size, color: item.color, quantity: Number(item.stock_qty ?? item.stock_quantity ?? item.quantity ?? 0) }));
       product.variantId = variant?.id || ""; product.variantVersion = Number(variant?.version || 0); product.quantity = detailVariants.length ? detailVariants.reduce((sum, item) => sum + item.quantity, 0) : product.quantity;
       elements.quantity.value = product.quantity; elements.modal.dataset.variantId = product.variantId; elements.modal.dataset.variantVersion = String(product.variantVersion);
@@ -326,7 +270,7 @@ async function openProductModal(elements, product = null) {
   requestAnimationFrame(() => elements.nameAr.focus());
 }
 
-function closeProductModal(elements) { costCodeLookupSequence += 1; elements.modal.hidden = true; elements.form.reset(); elements.nameError.hidden = true; }
+function closeProductModal(elements) { elements.modal.hidden = true; elements.form.reset(); elements.nameError.hidden = true; }
 function closeSuccess(elements) { elements.successModal.hidden = true; elements.successModal.style.display = ""; }
 
 function confirmProductDeletion(product) {
@@ -430,18 +374,12 @@ async function saveProduct(elements) {
   const categoryId = elements.category.value;
   const supplierId = elements.supplier.value;
   const salePrice = Number(elements.salePrice.value);
-  const costCode = String(elements.costCode.value || "").trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+  const purchasePrice = Number(elements.costPrice.value);
   if (!nameAr) { elements.nameError.hidden = false; elements.nameAr.focus(); return; }
-  if (!categoryId || !supplierId || !Number.isFinite(salePrice) || salePrice <= 0) { showToast(elements, "اختر الفئة والمورد وأدخل سعر بيع أكبر من صفر.", true); return; }
-  if (!/^[0-9]{4}$/.test(costCode)) { showToast(elements, "أدخل كود سعر الشراء المكوّن من 4 أرقام؛ استخدم 0000 إذا كان غير معروف.", true); elements.costCode.focus(); return; }
+  if (!categoryId || !supplierId || !Number.isFinite(salePrice) || salePrice <= 0 || !Number.isFinite(purchasePrice) || purchasePrice < 0) { showToast(elements, "اختر الفئة والمورد وأدخل سعر الشراء وسعر البيع بشكل صحيح.", true); return; }
   if (!validateProductVariantTotal(elements)) return;
   elements.saveButton.disabled = true;
   try {
-    if (costCode !== "0000") {
-      await lookupPurchaseCost(elements, costCode);
-      if (!elements.costPrice.value) throw new Error("لم يتم العثور على سعر شراء لهذا الكود؛ راجع الكود قبل الحفظ.");
-    }
-    const purchasePrice = Math.max(0, Number(elements.costPrice.value) || 0);
     const existing = products.find(product => String(product.id) === id);
     const purchasePriceChanged = !existing || Number(existing.costPrice || 0) !== purchasePrice;
     const variants = readProductVariants(elements.form, elements.quantity);
@@ -459,19 +397,19 @@ async function saveProduct(elements) {
       }
       if (adjustments.some(({ current }) => !current.id || !current.version)) throw new Error("بيانات نسخة المنتج غير مكتملة. أعد تحميل المنتج وحاول مرة أخرى.");
       response = await api.patch(`/api/v1/admin/products/${encodeURIComponent(id)}`, {
-        name_ar: nameAr, name_internal: elements.nameEn.value.trim() || null, category_id: categoryId, supplier_id: supplierId, purchase_price: purchasePrice, sale_price: salePrice,
-        low_stock_threshold: Math.max(0, Number(elements.minimum.value) || 0), commission_rate: Math.min(100, Math.max(0, Number(elements.salesPercentage.value) || 0)), status: elements.status.value, version: existing.version
+        name_ar: nameAr, name_internal: elements.nameEn?.value.trim() || null, category_id: categoryId, supplier_id: supplierId, purchase_price: purchasePrice, sale_price: salePrice,
+        low_stock_threshold: Math.max(0, Number(elements.minimum.value) || 0), commission_rate: Math.min(100, Math.max(0, Number(elements.salesPercentage.value) || 0)), status: existing.status || "active", version: existing.version
       });
       await Promise.all(adjustments.map(({ current, delta }) => api.post(`/api/v1/admin/products/${encodeURIComponent(id)}/stock-adjustments`, { variant_id: current.id, qty_delta: delta, expected_version: current.version, reason: "تعديل يدوي من لوحة الإدارة" }, { headers: { "Idempotency-Key": idempotencyKey() } })));
     } else {
       response = await api.post("/api/v1/admin/products", {
-        name_ar: nameAr, name_internal: elements.nameEn.value.trim() || null, category_id: categoryId, supplier_id: supplierId,
+        name_ar: nameAr, name_internal: elements.nameEn?.value.trim() || null, category_id: categoryId, supplier_id: supplierId,
         purchase_price: purchasePrice, sale_price: salePrice, initial_stock: 0, variants,
-        low_stock_threshold: Math.max(0, Number(elements.minimum.value) || 0), commission_rate: Math.min(100, Math.max(0, Number(elements.salesPercentage.value) || 0)), status: elements.status.value
+        low_stock_threshold: Math.max(0, Number(elements.minimum.value) || 0), commission_rate: Math.min(100, Math.max(0, Number(elements.salesPercentage.value) || 0)), status: "active"
       }, { headers: { "Idempotency-Key": idempotencyKey() } });
     }
     let responseProduct = response?.product || response?.data?.product || response?.data || response;
-    if (purchasePriceChanged && responseProduct?.id) {
+    if (existing && purchasePriceChanged && responseProduct?.id) {
       try {
         const latest = await api.get(`/api/v1/products/${encodeURIComponent(responseProduct.id)}`);
         responseProduct = latest?.product || latest?.data?.product || latest?.data || latest;
@@ -556,18 +494,9 @@ export function initProducts() {
   document.getElementById("addAnotherProduct").addEventListener("click", () => { closeSuccess(elements); openProductModal(elements); }); document.getElementById("backToProducts").addEventListener("click", () => closeSuccess(elements));
   document.getElementById("printProductBarcode").addEventListener("click", event => printSavedProductBarcodes(elements, event.currentTarget));
   elements.form.addEventListener("submit", handleSubmit); elements.tableBody.addEventListener("click", handleTable); elements.pagination.addEventListener("click", handlePagination);
-  elements.costCode.addEventListener("input", () => lookupPurchaseCost(elements, elements.costCode.value));
   elements.search.addEventListener("input", refresh); elements.search.addEventListener("keydown", handleSearchScanner); elements.categoryFilter.addEventListener("change", refresh); elements.stockFilter.addEventListener("change", refresh);
-  const handlePricingChange = () => {
-    // Keep the form calculation authoritative: the pricing-preview endpoint may
-    // return a stale/default commission and overwrite the value the user sees.
-    pricingPreviewSequence += 1;
-    updateProfit(elements);
-  };
-  [elements.salePrice, elements.costPrice, elements.salesPercentage].forEach(input => {
-    input.addEventListener("input", handlePricingChange);
-    input.addEventListener("change", handlePricingChange);
-  });
+  const handlePricingChange = () => updateProfit(elements);
+  [elements.salePrice, elements.costPrice, elements.salesPercentage].forEach(input => { input.addEventListener("input", handlePricingChange); input.addEventListener("change", handlePricingChange); });
   elements.modal.addEventListener("click", event => { if (event.target === elements.modal) closeProductModal(elements); }); elements.successModal.addEventListener("click", event => { if (event.target === elements.successModal) closeSuccess(elements); }); document.addEventListener("keydown", handleEscape); document.addEventListener("keydown", handleGlobalScanner);
-  return () => { requestSequence += 1; pricingPreviewSequence += 1; refresh.cancel?.(); clearTimeout(scanResetTimer); elements.form.removeEventListener("submit", handleSubmit); elements.tableBody.removeEventListener("click", handleTable); elements.pagination.removeEventListener("click", handlePagination); elements.search.removeEventListener("keydown", handleSearchScanner); document.removeEventListener("keydown", handleEscape); document.removeEventListener("keydown", handleGlobalScanner); };
+  return () => { requestSequence += 1; refresh.cancel?.(); clearTimeout(scanResetTimer); elements.form.removeEventListener("submit", handleSubmit); elements.tableBody.removeEventListener("click", handleTable); elements.pagination.removeEventListener("click", handlePagination); elements.search.removeEventListener("keydown", handleSearchScanner); document.removeEventListener("keydown", handleEscape); document.removeEventListener("keydown", handleGlobalScanner); };
 }

@@ -36,7 +36,21 @@ async function loadReferenceData() {
 }
 
 function invoiceItems(invoice) {
-  return invoice.items || invoice.invoice_items || invoice.sale_items || invoice.lines || [];
+  const candidates = [invoice.items, invoice.invoice_items, invoice.sale_items, invoice.sales_invoice_items, invoice.invoice_lines, invoice.lines, invoice.details];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate) && candidate.length) return candidate;
+    if (candidate && Array.isArray(candidate.items) && candidate.items.length) return candidate.items;
+  }
+  return [];
+}
+
+function invoiceItemVariant(item) {
+  const related = item.product_variant || item.variant || item.product_variants || item.product?.product_variants || item.product?.variants;
+  if (Array.isArray(related)) {
+    const id = String(item.variant_id || item.product_variant_id || "");
+    return related.find(variant => String(variant.id || variant.variant_id) === id) || related[0] || {};
+  }
+  return related || {};
 }
 
 function unwrapInvoice(response) {
@@ -51,10 +65,19 @@ function invoiceItemCount(invoice) {
 
 function invoicePaymentMethod(invoice) {
   if (Array.isArray(invoice.payment_methods) && invoice.payment_methods.length) {
-    return invoice.payment_methods.map(method => PAYMENT_LABELS[method] || method).join(" + ");
+    return invoice.payment_methods.map(method => {
+      const key = typeof method === "object" ? method.method || method.payment_method || method.name : method;
+      return PAYMENT_LABELS[key] || key;
+    }).filter(Boolean).join(" + ");
   }
-  const payment = invoice.payment || invoice.payment_details || invoice.payments?.[0] || {};
-  const method = invoice.payment_method ?? invoice.method ?? payment.method ?? payment.payment_method;
+  const payments = invoice.payments || invoice.payment_breakdown || invoice.payment_details?.payments;
+  if (Array.isArray(payments) && payments.length > 1) {
+    const methods = payments.map(item => item.method || item.payment_method).filter(Boolean);
+    if (methods.length) return [...new Set(methods)].map(method => PAYMENT_LABELS[method] || method).join(" + ");
+  }
+  const payment = invoice.payment || invoice.payment_details || (Array.isArray(payments) ? payments[0] : payments) || {};
+  const rawMethod = invoice.payment_method ?? invoice.method ?? payment.method ?? payment.payment_method;
+  const method = rawMethod && typeof rawMethod === "object" ? rawMethod.method || rawMethod.payment_method || rawMethod.name : rawMethod;
   return PAYMENT_LABELS[method] || method || "—";
 }
 
@@ -71,9 +94,9 @@ function needsInvoiceDetails(invoice) {
 function enrichInvoice(invoice) {
   const customer = { ...(references.customers.get(String(invoice.customer_id || "")) || {}), ...(typeof invoice.customer === "object" && invoice.customer ? invoice.customer : {}) };
   if (!customer.name && typeof invoice.customer === "string") customer.name = invoice.customer;
-  const cashierId = invoice.cashier_id || invoice.created_by_id || invoice.cashier?.id || invoice.created_by?.id;
-  const salesId = invoice.sales_person_id || invoice.sales_user_id || invoice.sales_person?.id || invoice.sales_user?.id;
-  const items = invoiceItems(invoice).map(item => ({ ...references.variants.get(String(item.variant_id || item.product_variant_id || item.variant?.id || "")), ...item }));
+  const cashierId = invoice.cashier_id || invoice.cashier_user_id || invoice.created_by_id || invoice.cashier?.id || invoice.created_by?.id;
+  const salesId = invoice.sales_person_id || invoice.sales_user_id || invoice.sales_id || invoice.sales_person?.id || invoice.sales_user?.id;
+  const items = invoiceItems(invoice).map(item => ({ ...references.variants.get(String(item.variant_id || item.product_variant_id || invoiceItemVariant(item).id || invoiceItemVariant(item).variant_id || "")), ...item }));
   const discountRecord = typeof invoice.discount === "object" && invoice.discount ? invoice.discount : {};
   const discount = Number(invoice.discount_amount ?? discountRecord.amount ?? (typeof invoice.discount === "number" ? invoice.discount : 0));
   const customerType = customer.customer_type || references.customerTypes.get(String(customer.customer_type_id || invoice.customer_type_id || "")) || {};
@@ -116,15 +139,15 @@ function invoiceTotals(invoice) {
   const tax = Number(invoice.tax_amount ?? invoice.vat_amount ?? invoice.vat ?? 0);
   const discount = Number(invoice.discount_amount ?? invoice.total_discount ?? (typeof invoice.discount === "object" ? invoice.discount.amount : invoice.discount) ?? 0);
   const total = Number(invoice.net_total ?? invoice.total_amount ?? invoice.grand_total ?? invoice.total ?? subtotal + tax - discount);
-  const paid = Number(invoice.paid_amount ?? invoice.amount_paid ?? invoice.paid ?? 0);
-  return { subtotal, tax, total, paid, remaining: Number(invoice.remaining_amount ?? invoice.balance_due ?? Math.max(0, total - paid)), change: Number(invoice.change_amount ?? 0), discount };
+  const paid = Number(invoice.paid_amount ?? invoice.amount_paid ?? invoice.total_paid ?? invoice.paid ?? 0);
+  return { subtotal, tax, total, paid, remaining: Number(invoice.remaining_amount ?? invoice.balance_due ?? invoice.total_remaining ?? Math.max(0, total - paid)), change: Number(invoice.change_amount ?? invoice.change ?? 0), discount };
 }
 
 function salesInvoiceReceipt(invoice) {
   const totals = invoiceTotals(invoice);
   const customer = typeof invoice.customer === "object" && invoice.customer ? invoice.customer : {};
   const items = invoiceItems(invoice).map(item => {
-    const variant = item.product_variant || item.variant || {};
+    const variant = invoiceItemVariant(item);
     const quantity = Number(item.quantity ?? item.qty ?? 0);
     const price = Number(item.unit_price ?? item.price ?? item.sale_price ?? 0);
     return {
@@ -145,8 +168,8 @@ function salesInvoiceReceipt(invoice) {
     date: dateLabel(invoice.created_at || invoice.invoice_date),
     customer: customer.name || invoice.customer_name || (typeof invoice.customer === "string" ? invoice.customer : "عميل نقدي"),
     customer_phone: customer.phone || invoice.customer_phone || invoice.phone || "",
-    cashier: invoice.cashierName || personName(invoice.cashier || invoice.cashier_user || invoice.created_by) || invoice.cashier_name || "—",
-    sales: invoice.salesName || personName(invoice.sales_person || invoice.sales_user) || invoice.sales_person_name || "—",
+    cashier: invoice.cashierName || personName(invoice.cashier || invoice.cashier_user || invoice.created_by) || invoice.cashier_name || invoice.created_by_name || "—",
+    sales: invoice.salesName || personName(invoice.sales_person || invoice.sales_user || invoice.sales) || invoice.sales_person_name || invoice.sales_user_name || invoice.sales_name || "—",
     payment: method,
     meta: [
       { label: "الحالة", value: STATUS_LABELS[invoice.status] || invoice.status || "مكتملة" },
@@ -175,7 +198,7 @@ function renderInvoiceModal(invoice) {
   document.getElementById("invoiceTitle").textContent = `#${invoice.invoice_number || invoice.number || "—"}`;
   document.getElementById("invoiceInfo").innerHTML = `<div><span>العميل</span><strong>${escapeHtml(customer.name || invoice.customer_name || (typeof invoice.customer === "string" ? invoice.customer : "عميل نقدي"))}</strong><small>${escapeHtml(customer.phone || invoice.customer_phone || invoice.phone || "بدون هاتف")}</small></div><div><span>التاريخ والحالة</span><strong>${dateLabel(invoice.created_at || invoice.invoice_date)}</strong><small>${escapeHtml(STATUS_LABELS[invoice.status] || invoice.status || "—")}</small></div><div><span>الكاشير</span><strong>${escapeHtml(invoice.cashierName || personName(invoice.cashier || invoice.cashier_user || invoice.created_by) || invoice.cashier_name || "—")}</strong></div><div><span>موظف المبيعات</span><strong>${escapeHtml(invoice.salesName || personName(invoice.sales_person || invoice.sales_user) || invoice.sales_person_name || "—")}</strong></div><div><span>طريقة الدفع</span><strong>${escapeHtml(invoicePaymentMethod(invoice))}</strong></div>`;
   document.querySelector(".invoice-products").innerHTML = invoiceItems(invoice).map(item => {
-    const variant = item.product_variant || item.variant || {};
+    const variant = invoiceItemVariant(item);
     const product = item.product || variant.product || {};
     const quantity = Number(item.quantity ?? item.qty ?? 0), price = Number(item.unit_price ?? item.price ?? item.sale_price ?? 0);
     const lineTotal = Number(item.line_total ?? item.subtotal ?? quantity * price);
@@ -271,6 +294,7 @@ export function initSales() {
   document.getElementById("printInvoice").addEventListener("click", async () => {
     if (!activeInvoice) return;
     let printData = {};
+    await loadReferenceData();
     try {
       const response = await api.get(`/api/v1/admin/sales/${encodeURIComponent(activeInvoice.id)}/print`);
       printData = response?.print || response?.receipt || response?.data?.print || response?.data?.receipt || response?.data?.invoice || response?.data || response;

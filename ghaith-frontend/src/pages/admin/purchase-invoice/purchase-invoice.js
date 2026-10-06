@@ -99,36 +99,22 @@ export function initPurchaseInvoice() {
     $("#piProductSku")?.closest(".field")?.remove();
     $("#piModalOverlay").hidden = false;
     const quickForm = $("#piQuickProductForm");
+    $("#piProductNameEn").closest(".field").remove();
     const costPriceInput = quickForm.elements.purchase_price;
-    costPriceInput.readOnly = true;
-    costPriceInput.closest(".field")?.insertAdjacentHTML("beforebegin", '<div class="field"><label for="piProductCostCode">كود سعر الشراء (آخر 4 أرقام)</label><input class="input num" id="piProductCostCode" type="text" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" value="0000" autocomplete="off"><small id="piProductCostCodeStatus" aria-live="polite">أدخل آخر 4 أرقام لعرض سعر الشراء؛ 0000 يعني غير معروف.</small></div>');
-    const costCodeInput = quickForm.querySelector("#piProductCostCode"), costCodeStatus = quickForm.querySelector("#piProductCostCodeStatus");
-    let costCodeLookupSequence = 0;
-    const lookupCostCode = async () => {
-      const code = String(costCodeInput.value || "").trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
-      const sequence = ++costCodeLookupSequence;
-      if (!/^[0-9]{4}$/.test(code)) { costPriceInput.value = ""; costCodeStatus.textContent = "أدخل 4 أرقام صحيحة."; return; }
-      costCodeInput.value = code;
-      if (code === "0000") { costPriceInput.value = ""; costCodeStatus.textContent = "سعر الشراء غير معروف للكود 0000."; return; }
-      costCodeStatus.textContent = "جاري البحث عن سعر الشراء...";
-      let response;
-      try { response = await api.get(`/api/v1/admin/products/cost-codes/${encodeURIComponent(code)}`); }
-      catch (error) { if (sequence === costCodeLookupSequence) { costPriceInput.value = ""; costCodeStatus.textContent = error.message; } throw error; }
-      if (sequence !== costCodeLookupSequence) return;
-      const result = response?.data || response, price = result?.purchase_price;
-      if (price === null || price === undefined || !Number.isFinite(Number(price))) { costPriceInput.value = ""; costCodeStatus.textContent = `لا يوجد سعر شراء للكود ${code}.`; return; }
-      costPriceInput.value = String(Number(price)); costCodeStatus.textContent = `سعر الشراء للكود ${code}: ${money(Number(price))} ج.م.`;
-    };
-    costCodeInput.addEventListener("input", () => { lookupCostCode().catch(() => {}); });
+    quickForm.querySelector('label[for="piProductCostPrice"]').firstChild.textContent = "سعر الشراء ";
+    quickForm.querySelector('label[for="piProductQuantity"]').firstChild.textContent = "إجمالي كمية المخزون ";
+    $("#piProductNetProfitPercentage").nextElementSibling.textContent = "EGP";
+    $("#piProductNetProfitPercentage").closest(".field").querySelector("small").textContent = "سعر البيع ناقص سعر الشراء وعمولة السيلز.";
+    quickForm.querySelectorAll(".products-form-grid")[1].append(quickForm.querySelector("[data-variants-editor]"));
     const quantityInput = quickForm.elements.purchase_quantity;
     teardownProductVariants = setupProductVariants(quickForm, quantityInput);
-    const updateProfit = () => { const sale = Number(quickForm.elements.sale_price.value) || 0, cost = Number(quickForm.elements.purchase_price.value) || 0, commission = Number(quickForm.elements.commission_rate.value) || 0, profit = sale > 0 ? ((sale - cost - sale * commission / 100) / sale) * 100 : 0; const output = $("#piProductNetProfitPercentage"); output.value = profit.toFixed(2); output.classList.toggle("is-negative", profit < 0); };
+    const updateProfit = () => { const sale = Number(quickForm.elements.sale_price.value) || 0, cost = Number(quickForm.elements.purchase_price.value) || 0, commission = Number(quickForm.elements.commission_rate.value) || 0, profit = sale - cost - sale * commission / 100; const output = $("#piProductNetProfitPercentage"); output.value = profit.toFixed(2); output.classList.toggle("is-negative", profit < 0); };
     [quickForm.elements.sale_price, quickForm.elements.purchase_price, quickForm.elements.commission_rate].forEach(input => input.addEventListener("input", updateProfit));
     const categoryForm = quickForm.querySelector("[data-category-form]"), categoryName = $("#piNewCategoryName");
     quickForm.querySelector("[data-new-category]").addEventListener("click", () => { categoryForm.hidden = false; requestAnimationFrame(() => categoryName.focus()); });
     quickForm.querySelector("[data-cancel-category]").addEventListener("click", () => { categoryForm.hidden = true; categoryName.value = ""; $("#piNewCategoryDescription").value = ""; categoryForm.querySelector("[data-category-error]").textContent = ""; });
     quickForm.querySelector("[data-save-category]").addEventListener("click", async event => { const saveButton = event.currentTarget, name = categoryName.value.trim(), errorNode = categoryForm.querySelector("[data-category-error]"); if (!name) { errorNode.textContent = "يرجى إدخال اسم الفئة."; categoryName.focus(); return; } saveButton.disabled = true; errorNode.textContent = ""; try { const response = await api.post("/api/v1/admin/categories", { name, description: $("#piNewCategoryDescription").value.trim() || null, status: $("#piNewCategoryStatus").value }); const category = response?.category || response?.data || response; if (!category?.id) throw new Error("تم حفظ الفئة لكن لم يرجع الخادم بياناتها."); categories.push(category); const option = new Option(category.name || name, category.id, true, true); quickForm.elements.category_id.add(option); categoryForm.hidden = true; categoryName.value = ""; $("#piNewCategoryDescription").value = ""; } catch (error) { errorNode.textContent = error.message; } finally { saveButton.disabled = false; } });
-    quickForm.addEventListener("submit", async event => { event.preventDefault(); if (!validateQuickProductQuantities(quickForm)) return; const code = costCodeInput.value.trim(); if (!/^[0-9]{4}$/.test(code)) { $("#piQuickProductError").textContent = "أدخل كود سعر الشراء المكوّن من 4 أرقام؛ استخدم 0000 إذا كان غير معروف."; costCodeInput.focus(); return; } const button = quickForm.querySelector('[type="submit"]'); button.disabled = true; try { if (code !== "0000") { await lookupCostCode(); if (!costPriceInput.value) throw new Error("لم يتم العثور على سعر شراء لهذا الكود."); } await createProduct(quickForm); } catch (error) { $("#piQuickProductError").textContent = error.message; } finally { button.disabled = false; } });
+    quickForm.addEventListener("submit", async event => { event.preventDefault(); if (!validateQuickProductQuantities(quickForm)) return; const button = quickForm.querySelector('[type="submit"]'); button.disabled = true; try { await createProduct(quickForm); } catch (error) { $("#piQuickProductError").textContent = error.message; } finally { button.disabled = false; } });
     quickForm.querySelector("[data-close-product]").addEventListener("click", closeProductOverlay);
     requestAnimationFrame(() => quickForm.elements.name_ar.focus());
   };
@@ -136,7 +122,7 @@ export function initPurchaseInvoice() {
     const values = Object.fromEntries(new FormData(form)), supplierId = $("#piSupplier").value, cost = Number(values.purchase_price), price = Number(values.sale_price), requestedVariants = readProductVariants(form, form.elements.purchase_quantity);
     if (!supplierId) throw new Error("اختر المورد أولًا قبل إضافة منتج جديد.");
     if (!values.name_ar.trim() || !values.category_id || cost < 0 || price <= 0 || !requestedVariants.some(item => item.quantity > 0)) throw new Error("راجع اسم المنتج والتصنيف والأسعار، وأدخل كمية لصنف واحد على الأقل.");
-    const response = await api.post("/api/v1/admin/products", { name_ar: values.name_ar.trim(), name_internal: values.name_internal.trim() || null, category_id: values.category_id, supplier_id: supplierId, purchase_price: cost, sale_price: price, initial_stock: 0, low_stock_threshold: Math.max(0, Number(values.low_stock_threshold) || 0), commission_rate: Math.min(100, Math.max(0, Number(values.commission_rate) || 0)), variants: requestedVariants.map(item => ({ ...item, quantity: 0 })), status: values.status || "active" }, { headers: { "Idempotency-Key": idempotencyKey() } });
+    const response = await api.post("/api/v1/admin/products", { name_ar: values.name_ar.trim(), name_internal: values.name_internal?.trim() || null, category_id: values.category_id, supplier_id: supplierId, purchase_price: cost, sale_price: price, initial_stock: 0, low_stock_threshold: Math.max(0, Number(values.low_stock_threshold) || 0), commission_rate: Math.min(100, Math.max(0, Number(values.commission_rate) || 0)), variants: requestedVariants.map(item => ({ ...item, quantity: 0 })), status: values.status || "active" }, { headers: { "Idempotency-Key": idempotencyKey() } });
     let product = response?.product || response?.data || response;
     if (product.id && !(product.product_variants || product.variants)?.length) product = await api.get(`/api/v1/products/${encodeURIComponent(product.id)}`);
     const created = normalizeVariants([product]); if (!created.length) throw new Error("تم إنشاء المنتج لكن لم يرجع الباك نسخة المنتج.");

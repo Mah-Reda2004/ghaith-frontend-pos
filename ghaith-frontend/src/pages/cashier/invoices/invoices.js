@@ -193,7 +193,12 @@ import { debounce, formatMoney } from "../../../core/utils.js";
   const REFUND_LABELS = { cash: "نقدي", store_credit: "رصيد متجر", exchange_credit: "رصيد استبدال", exchange: "استبدال" };
 
   function invoiceItems(item) {
-    return item.items || item.invoice_items || item.sale_items || item.lines || [];
+    const candidates = [item.items, item.invoice_items, item.sale_items, item.sales_invoice_items, item.invoice_lines, item.lines, item.details];
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate) && candidate.length) return candidate;
+      if (candidate && Array.isArray(candidate.items) && candidate.items.length) return candidate.items;
+    }
+    return [];
   }
 
   function invoiceItemCount(item, items = invoiceItems(item)) {
@@ -377,9 +382,16 @@ import { debounce, formatMoney } from "../../../core/utils.js";
   }
 
   function invoicePaymentMethod(item) {
-    const payment = item.payment || item.payment_details || item.payments?.[0] || {};
-    const method = item.payment_methods ?? item.payment_method ?? item.method ?? payment.methods ?? payment.method ?? payment.payment_method;
-    return translatedEnum(method, PAYMENT_LABELS);
+    const payments = item.payments || item.payment_breakdown || item.payment_details?.payments;
+    if (Array.isArray(payments) && payments.length > 1) {
+      const methods = payments.map(entry => entry.method || entry.payment_method).filter(Boolean);
+      if (methods.length) return translatedEnum([...new Set(methods)], PAYMENT_LABELS);
+    }
+    const payment = item.payment || item.payment_details || (Array.isArray(payments) ? payments[0] : payments) || {};
+    const rawMethod = item.payment_methods ?? item.payment_method ?? item.method ?? payment.methods ?? payment.method ?? payment.payment_method;
+    const method = rawMethod && typeof rawMethod === "object" && !Array.isArray(rawMethod) ? rawMethod.method || rawMethod.payment_method || rawMethod.name : rawMethod;
+    const normalized = Array.isArray(method) ? method.map(entry => typeof entry === "object" ? entry.method || entry.payment_method || entry.name : entry) : method;
+    return translatedEnum(normalized, PAYMENT_LABELS);
   }
 
   function invoiceFromResponse(response) {
@@ -500,9 +512,9 @@ import { debounce, formatMoney } from "../../../core/utils.js";
       customerData: customer,
       phone: customer.phone || item.customer_phone || item.phone || "",
       date: item.created_at || item.invoice_date || new Date().toISOString(),
-      cashier: state.usersById.get(String(item.cashier_id || item.created_by_id || cashier?.id || "")) || personName(cashier, item.cashier_name, item.created_by_name),
-      cashierId: cashier?.id || item.cashier_id || item.created_by_id || "",
-      sales: state.usersById.get(String(item.sales_person_id || item.sales_user_id || sales?.id || "")) || personName(sales, item.sales_person_name, item.sales_user_name, item.sales_name),
+      cashier: state.usersById.get(String(item.cashier_id || item.cashier_user_id || item.created_by_id || cashier?.id || "")) || personName(cashier, item.cashier_name, item.created_by_name),
+      cashierId: cashier?.id || item.cashier_id || item.cashier_user_id || item.created_by_id || "",
+      sales: state.usersById.get(String(item.sales_person_id || item.sales_user_id || item.sales_id || sales?.id || "")) || personName(sales, item.sales_person_name, item.sales_user_name, item.sales_name),
       items_count: invoiceItemCount(item, items),
       payment_method: invoicePaymentMethod(item),
       status: translatedEnum(item.status, STATUS_LABELS, "مكتملة"),
@@ -511,9 +523,9 @@ import { debounce, formatMoney } from "../../../core/utils.js";
       discount: discountValue,
       discountLabel,
       tax: taxValue,
-      paid: Number(item.paid_amount ?? 0),
-      remaining: Number(item.remaining_amount ?? 0),
-      change: Number(item.change_amount ?? 0),
+      paid: Number(item.paid_amount ?? item.amount_paid ?? item.total_paid ?? 0),
+      remaining: Number(item.remaining_amount ?? item.balance_due ?? item.total_remaining ?? 0),
+      change: Number(item.change_amount ?? item.change ?? 0),
       currency: item.currency || "EGP",
       notes: item.notes || "",
       items
@@ -791,18 +803,24 @@ import { debounce, formatMoney } from "../../../core/utils.js";
     const returnContextPromise = btn?.dataset.action === "return-flow"
       ? Promise.all([loadReferenceData(), loadCatalogDirectory()])
       : Promise.resolve();
+    let invoiceDetails = {};
 
     if (!btn || ["view", "print", "return-flow"].includes(btn.dataset.action)) {
       try {
         const response = await api.get(`/api/v1/sales-invoices/${encodeURIComponent(id)}`);
-        const details = invoiceFromResponse(response);
-        inv = normalizeInvoice({ ...inv, ...details });
+        invoiceDetails = invoiceFromResponse(response) || {};
+        inv = normalizeInvoice({ ...inv, ...invoiceDetails });
         state.allData = state.allData.map(item => item.id === id ? inv : item);
       } catch (error) { showToast(error.message, "error"); return; }
     }
 
     if (!btn || btn.dataset.action === "view") openDetailModal(inv);
-    if (btn && btn.dataset.action === "print") { await loadInvoiceOperations(inv.id); printSingleInvoice(inv); }
+    if (btn && btn.dataset.action === "print") {
+      await Promise.all([loadReferenceData(), loadCatalogDirectory(), loadInvoiceOperations(inv.id)]);
+      inv = normalizeInvoice({ ...inv, ...invoiceDetails });
+      state.allData = state.allData.map(item => item.id === id ? inv : item);
+      printSingleInvoice(inv);
+    }
     if (btn && btn.dataset.action === "return-flow") { await returnContextPromise; openReturnFlow(inv); }
   });
 
@@ -832,8 +850,8 @@ import { debounce, formatMoney } from "../../../core/utils.js";
       const nestedVariant = Array.isArray(nestedVariants) ? nestedVariants.find(entry => String(entry.id || entry.variant_id) === variantId) || nestedVariants[0] || {} : nestedVariants;
       const variant = item.product_variant || item.variant || nestedVariant || {};
       return {
-        id: String(item.id || item.invoice_item_id), name: item.product_name || item.name || item.product?.name || "منتج",
-        sku: item.sku || item.variant?.sku || "—",
+        id: String(item.id || item.invoice_item_id), name: item.product_name || item.name || item.product?.name_ar || item.product?.name || item.product_variant?.product?.name_ar || item.product_variant?.product?.name || item.variant?.product?.name_ar || item.variant?.product?.name || "منتج",
+        sku: item.sku || item.variant?.sku || item.product_variant?.sku || "—",
         barcode: item.barcode || item.variant?.barcode || item.product_variant?.barcode || item.product?.barcode || item.sku || item.variant?.sku || "—", purchasedQty,
         size: item.size || item.variant_size || item.product_size || item.size_name || variant.size || variant.size_name || "",
         color: item.color || item.variant_color || item.product_color || item.color_name || variant.color || variant.color_name || "",
