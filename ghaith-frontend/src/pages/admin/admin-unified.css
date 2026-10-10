@@ -167,4 +167,22 @@ html, body { width: 100%; height: 100%; overflow: hidden; }
   .admin-account__trigger { padding: var(--space-1); }
   .admin-account__trigger > svg { display: none; }
   #view-root > [class$="-page"] { padding: var(--space-4) var(--admin-page-gutter) var(--space-6); }
+  /* Keep long admin forms and their action buttons reachable on phone screens. */
+  .admin-content :is(.modal-overlay, .sales-modal) {
+    align-items: flex-start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-content :is(.modal, [role="dialog"], [class$="-dialog"], .sales-modal__panel) {
+    min-height: 0;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-content :is(.modal, [role="dialog"], [class$="-dialog"]) form {
+    min-height: 0;
+  }
 }
