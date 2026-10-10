@@ -18,8 +18,8 @@ class AgentSettings(BaseModel):
     barcode_printer_names: list[str] = Field(default_factory=list)
     receipt_all_printers: bool = True
     preview_when_no_printer: bool = True
-    barcode_width_mm: int = Field(default=40, ge=20, le=100)
-    barcode_height_mm: int = Field(default=23, ge=10, le=80)
+    barcode_width_mm: int = Field(default=38, ge=20, le=100)
+    barcode_height_mm: int = Field(default=24, ge=10, le=80)
 
 
 @asynccontextmanager

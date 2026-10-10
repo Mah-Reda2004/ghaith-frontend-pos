@@ -5,8 +5,8 @@
   "barcode_printer_names": [],
   "receipt_width_mm": 80,
   "receipt_print_width_dots": 576,
-  "barcode_width_mm": 40,
-  "barcode_height_mm": 23,
+  "barcode_width_mm": 38,
+  "barcode_height_mm": 24,
   "dpi": 203,
   "preview_when_no_printer": true
 }

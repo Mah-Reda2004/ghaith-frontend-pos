@@ -1,4 +1,7 @@
-.reports-page { min-width: 0; max-width: 100%; min-height: 100dvh; padding: var(--space-4) var(--space-6) var(--space-7); overflow-x: hidden; overflow-y: auto; }
+.reports-page { min-width: 0; max-width: 100%; min-height: 100dvh; padding: var(--space-4) var(--space-6) var(--space-7); overflow-x: hidden; overflow-y: auto; scrollbar-color: var(--color-primary) var(--color-surface-hover); }
+.reports-page::-webkit-scrollbar { width: 12px; }
+.reports-page::-webkit-scrollbar-track { background: var(--color-surface-hover); }
+.reports-page::-webkit-scrollbar-thumb { border: 3px solid var(--color-surface-hover); border-radius: var(--radius-pill); background: var(--color-primary); }
 .reports-header { min-height: auto; display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); margin-block-end: var(--space-5); }
 .reports-header h1 { color: color-mix(in srgb, var(--color-primary) 55%, var(--color-text)); }
 .reports-tabs { display: flex; gap: var(--space-2); margin-block-end: var(--space-6); padding-block-end: var(--space-2); overflow-x: auto; scrollbar-width: thin; }
@@ -73,11 +76,11 @@
   min-height: 210px;
   overflow: scroll;
   scrollbar-width: auto;
-  scrollbar-color: color-mix(in srgb, var(--color-primary) 70%, var(--color-text-muted)) var(--color-surface-hover);
+  scrollbar-color: var(--color-primary) var(--color-surface-hover);
 }
 .reports-table-wrap::-webkit-scrollbar { width: 12px; height: 12px; }
 .reports-table-wrap::-webkit-scrollbar-track { background: var(--color-surface-hover); }
-.reports-table-wrap::-webkit-scrollbar-thumb { border: 3px solid var(--color-surface-hover); border-radius: var(--radius-pill); background: color-mix(in srgb, var(--color-primary) 70%, var(--color-text-muted)); }
+.reports-table-wrap::-webkit-scrollbar-thumb { border: 3px solid var(--color-surface-hover); border-radius: var(--radius-pill); background: var(--color-primary); }
 .reports-table-wrap::-webkit-scrollbar-corner { background: var(--color-surface-hover); }
 .reports-table { min-width: calc(var(--space-7) * 15); }
 .reports-table thead { position: sticky; inset-block-start: 0; z-index: 2; background: var(--color-surface-hover); }

@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $AgentDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SourceExe = Join-Path (Split-Path -Parent $AgentDir) "dist\GhaithPrintAgent.exe"
+$SourceExe = Join-Path (Split-Path -Parent $AgentDir) "dist\latest\GhaithPrintAgent.exe"
 if (-not (Test-Path -LiteralPath $SourceExe)) { throw "Build the EXE with build-exe.ps1 first." }
 $StartupDir = [Environment]::GetFolderPath("Startup")
 $UserProfileDir = $StartupDir -replace '\\AppData\\Roaming\\.*$', ''

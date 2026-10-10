@@ -179,7 +179,9 @@ async function fetchAllProducts(query) {
 }
 
 async function fetchProductsByScannedBarcode(scannedBarcode, categoryId) {
-  for (const barcode of [scannedBarcode, `PRD${scannedBarcode}`]) {
+  const code = normalizeProductSearch(scannedBarcode);
+  const candidates = [...new Set([code, `PRD${code}`, code.replace(/^PRD/i, "")])];
+  for (const barcode of candidates) {
     const response = await api.get("/api/v1/products/search", { query: { barcode, category_id: categoryId, in_stock: false, page: 1, page_size: 20 } });
     const items = listFrom(response);
     if (items.length) return items.map(item => {
@@ -191,16 +193,29 @@ async function fetchProductsByScannedBarcode(scannedBarcode, categoryId) {
   return [];
 }
 
+function normalizeProductSearch(value) {
+  const arabicKeyboardToEnglish = {
+    "ض":"q", "ص":"w", "ث":"e", "ق":"r", "ف":"t", "غ":"y", "ع":"u", "ه":"i", "خ":"o", "ح":"p",
+    "ج":"[", "د":"]", "ش":"a", "س":"s", "ي":"d", "ب":"f", "ل":"g", "ا":"h", "ت":"j", "ن":"k",
+    "م":"l", "ك":";", "ط":"'", "ئ":"z", "ء":"x", "ؤ":"c", "ر":"v", "ى":"n", "ة":"m", "و":",", "ز":".", "ظ":"/"
+  };
+  return String(value || "").replace(/[\r\n\t]/g, "").trim()
+    .replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+    .replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+    .replace(/[ضصثقفغعهخحجدشسيبلاتنمكطئءؤرىةوزظ]/g, character => arabicKeyboardToEnglish[character] || character);
+}
+
 async function loadProducts(elements) {
   const sequence = ++requestSequence;
   elements.tableBody.setAttribute("aria-busy", "true");
   elements.paginationInfo.textContent = "جاري تحميل المنتجات...";
   try {
     const stockMap = { low: "limited", empty: "out_of_stock" };
-    const scannedSearch = elements.search.value.trim().replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit))).replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+    const scannedSearch = normalizeProductSearch(elements.search.value);
     const categoryId = elements.categoryFilter.value === "all" ? undefined : elements.categoryFilter.value;
     const query = { search: scannedSearch, category_id: categoryId, stock_status: elements.stockFilter.value === "all" ? undefined : stockMap[elements.stockFilter.value] || elements.stockFilter.value };
-    const productRequest = /^\d+$/.test(scannedSearch) ? fetchProductsByScannedBarcode(scannedSearch, categoryId) : fetchAllProducts(query);
+    const barcodeQuery = /^(?:PRD)?\d+$/i.test(scannedSearch);
+    const productRequest = barcodeQuery ? fetchProductsByScannedBarcode(scannedSearch, categoryId) : fetchAllProducts(query);
     const [items, summaryResponse] = await Promise.all([productRequest, api.get("/api/v1/admin/products/summary")]);
     if (sequence !== requestSequence) return;
     products = items.flatMap(normalizeProductRows);

@@ -27,8 +27,8 @@ DEFAULTS = {
     # 80 mm mechanisms normally expose a 72 mm / 576-dot printable area.
     # Keeping this explicit prevents raster rows from wrapping on the printer.
     "receipt_print_width_dots": 576,
-    "barcode_width_mm": 40,
-    "barcode_height_mm": 23,
+    "barcode_width_mm": 38,
+    "barcode_height_mm": 24,
     "dpi": 203,
     "preview_when_no_printer": True,
 }
@@ -47,8 +47,8 @@ class PrintAgentConfig:
                 self._data = value if isinstance(value, dict) else {}
             except (OSError, json.JSONDecodeError):
                 self._data = {}
-            # Move earlier built-in label sizes to the confirmed 40×23 mm stock.
-            if (self._data.get("barcode_width_mm"), self._data.get("barcode_height_mm")) in {(37, 23), (50, 30)}:
+            # Migrate the previous built-in label size to the confirmed 38×24 mm stock.
+            if (self._data.get("barcode_width_mm"), self._data.get("barcode_height_mm")) == (40, 23):
                 self._data["barcode_width_mm"] = DEFAULTS["barcode_width_mm"]
                 self._data["barcode_height_mm"] = DEFAULTS["barcode_height_mm"]
                 self.save()
